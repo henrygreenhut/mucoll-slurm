@@ -17,37 +17,42 @@ import os
 import subprocess
 import sys
 
-# --- Configuration ---
-WORK_DIR              = "/users/mleblan6/work/bib"
-MUCOLL_BENCHMARKS_PATH = os.path.join(WORK_DIR, "mucoll-benchmarks")
-GRIDPACK_DIR          = "/oscar/data/mleblan6/mucoll/gridpacks"
-APPTAINER_IMAGE       = "/oscar/data/mleblan6/mucoll/mucoll-sim-ubuntu24:main.sif"
-DATA_DIR_TO_BIND      = "/oscar/data/mleblan6/mucoll"
-LOG_DIR               = os.path.join(GRIDPACK_DIR, "logs")
+import slurm_common as sc
 
+# --- Configuration (paths come from config.sh) ---
+_cfg                   = sc.load_config()
+WORK_DIR               = _cfg["WORK_DIR"]
+MUCOLL_BENCHMARKS_PATH = _cfg["MUCOLL_BENCHMARKS_PATH"]
+GRIDPACK_DIR           = os.path.join(_cfg["DATA_GROUP_DIR"], "gridpacks")
+# Whizard is not in the v3.0 sim image, so gridpack generation uses WHIZARD_IMAGE.
+APPTAINER_IMAGE        = _cfg["WHIZARD_IMAGE"]
+DATA_DIR_TO_BIND       = _cfg["DATA_BIND"]
+LOG_DIR                = os.path.join(GRIDPACK_DIR, "logs")
+
+# Prefer the image's official setup script; fall back to a glob for old images.
 SPACK_SETUP = (
-    "source /opt/spack/opt/spack/__spack_path_placeholder__/__spack_path_placeholder__"
-    "/__spack_path_placeholder__/__spack_path_placeholder__"
-    "/linux-x86_64/mucoll-stack-2026-01-29-gox6efzvyhus5szcxoq3wscjpt5uxvl7/setup.sh"
+    'if [ -f /opt/setup_mucoll.sh ]; then source /opt/setup_mucoll.sh; '
+    'else source $(ls /opt/spack/opt/spack/*/*/*/*/linux-x86_64/'
+    'mucoll-stack-*/setup.sh 2>/dev/null | sort | tail -n1); fi'
 )
 WHIZARD_LIB = (
-    "/opt/spack/opt/spack/__spack_path_placeholder__/__spack_path_placeholder__"
-    "/__spack_path_placeholder__/__spack_path_placeholder__"
-    "/linux-x86_64/whizard-3.1.5-2wpmahrsf5vaircj7tmf5hdo5fwz2hhw/lib"
+    '$(ls -d /opt/spack/opt/spack/*/*/*/*/linux-x86_64/'
+    'whizard-*/lib 2>/dev/null | sort | tail -n1)'
 )
+
+# Whizard .sin templates are kept in this repo (mucoll-slurm/whizard/).
+WHIZARD_SIN_DIR = os.path.join(WORK_DIR, "mucoll-slurm", "whizard")
 
 PROCESSES = {
     "WWZ": {
         "sin_template": os.path.join(
-            MUCOLL_BENCHMARKS_PATH,
-            "generation/signal/whizard/mumu_WWZ_hadrons_10TeV_gridpack.sin"
+            WHIZARD_SIN_DIR, "mumu_WWZ_hadrons_10TeV_gridpack.sin"
         ),
         "workdir":  os.path.join(GRIDPACK_DIR, "grid_mumu_WWZ_hadrons"),
     },
     "ZZZ": {
         "sin_template": os.path.join(
-            MUCOLL_BENCHMARKS_PATH,
-            "generation/signal/whizard/mumu_ZZZ_hadrons_10TeV_gridpack.sin"
+            WHIZARD_SIN_DIR, "mumu_ZZZ_hadrons_10TeV_gridpack.sin"
         ),
         "workdir":  os.path.join(GRIDPACK_DIR, "grid_mumu_ZZZ_hadrons"),
     },

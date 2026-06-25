@@ -1,142 +1,151 @@
-## Setup
+# mucoll-slurm
 
-### OSCAR
+Run the Muon Collider simulation chain (**GEN → SIM → DIGI → RECO**) on Oscar,
+both interactively and as SLURM batch jobs, using the **mucoll-spack v3.0**
+container image. Particle-gun studies can be run **with or without BIB**
 
-Let's set up a workspace to get started, then check out this repository:
+---
 
-```
-cd work/
-mkdir bib
-cd bib/
-git@github.com:leblanc-lab/mucoll-slurm.git
-cp mucoll-slurm/scripts/* .
-```
+## 1. First-time setup
 
-On OSCAR, the first thing you're going to want to do is to enter a worker node to do the setup. You can run the `interact.sh` script, which does the following:
+Check out both repositories side-by-side (they must be siblings). The
+benchmarks repo is the **official MuonColliderSoft** one and pulls its
+detector configs in as submodules, so clone it with `--recurse-submodules`:
 
-```
-interact -n 64 -m 32g -t 8:00:00
-```
-
-This will give you 64 CPUs and 32g of RAM for 8 hours. You likely *do not* need this many resources for day-to-day running, but it is helpful when setting up the apptainer shell for the first time. Edit the script accordingly to decrease the number of cores you request in the future.
-
-You'll need to check out the mucoll-benchmarks repository, and checkout the k4MuC branch:
-
-```
-git clone git@github.com:samf25/mucoll-benchmarks.git && cd mucoll-benchmarks/ && git checkout k4MuC && cd ../
+```bash
+cd ~/work                     # or wherever you keep code
+git clone https://github.com/leblanc-lab/mucoll-slurm.git
+git clone --recurse-submodules https://github.com/MuonColliderSoft/mucoll-benchmarks.git
 ```
 
-You'll need to download and unpack the µC apptainer image. This can take a minute and requires some space, so you may want to use a scratch disk to do so:
+Your tree should look like:
 
 ```
-# Set the temporary directory to your scratch space: adjust as appropriate for your system
+<your work dir>/
+├── mucoll-slurm/        <- this repo
+└── mucoll-benchmarks/   <- MuonColliderSoft main, with configs/MAIAConfig etc.
+```
+
+The v3.0 image has already been pulled and is cached in the shared group data directory:
+
+```
+/oscar/data/mleblan6/mucoll/mucoll-sim-ubuntu24:v3.0.sif
+```
+
+If you ever need to re-pull it e.g. on another cluster or with an updated image, you can do so with:
+
+```bash
 export APPTAINER_TMPDIR=/oscar/scratch/$USER/apptainer_tmp
 export APPTAINER_CACHEDIR=/oscar/scratch/$USER/apptainer_cache
-
-# Create these directories if they don't exist
-mkdir -p $APPTAINER_TMPDIR
-mkdir -p $APPTAINER_CACHEDIR
-
-# This one can take a while ...
-apptainer shell --cleanenv docker://ghcr.io/muoncollidersoft/mucoll-sim-ubuntu24:main
+mkdir -p $APPTAINER_TMPDIR $APPTAINER_CACHEDIR
+apptainer pull mucoll-sim-ubuntu24:v3.0.sif \
+    docker://ghcr.io/muoncollidersoft/mucoll-sim-ubuntu24:v3.0
 ```
 
-Once you're in the image, run the setup script:
+Finally, open [`config.sh`](config.sh) and skim it. Most values auto-detect; the
+first one you may want to change is `OUTPUT_BASE_DIR` (defaults to your own
+`$USER` folder inside the shared group area). The image path, benchmarks path,
+geometry, and BIB sample locations are already set.
 
-```
-source /opt/spack/opt/spack/__spack_path_placeholder__/__spack_path_placeholder__/__spack_path_placeholder__/__spack_path_placeholder__/linux-x86_64/mucoll-stack-2026-01-29-gox6efzvyhus5szcxoq3wscjpt5uxvl7/setup.sh
+`config.sh` is read by the Python submitters via
+`slurm_common.load_config()` and the shell chains `source` it directly, so
+there is exactly one place to edit paths. Per-job physics settings (particle, pT,
+θ, event/job counts, BIB on/off) and SLURM resources (`TIME`, `MEM`, `CPUS`)
+live at the top of each `submit_*.py`.
 
-# Optional: I like to run the following to have my prompt and terminal colours again
-# export PS1="[\u@\h \w]\$ "
-# alias ls='ls --color=auto'
-```
+---
 
-### NERSC (Ignore on OSCAR)
+## 2. Run the chain interactively (for debugging)
 
-At NERSC, you don't have apptainer and so need to use podman instead. This is why there is a separate `shell_nersc.sh` script:
-
-```
-#!/bin/bash
-
-podman-hpc run -it --rm -u 0 \
-  -v $HOME:$HOME \
-  -v $PWD:$PWD \
-  -w $PWD \
-  ghcr.io/muoncollidersoft/mucoll-sim-ubuntu24:main /bin/bash
+```bash
+source scripts/interact.sh     # grab a worker node (don't run on the login nodes!)
+source scripts/shell.sh        # enter the v3.0 container
+source scripts/setup.sh        # set up the spack environment
 ```
 
-## Running GEN/SIM/DIGI/RECO
+Then you can run the same chain a job uses, by hand:
 
-To recap the above: in subsequent shells, you should always do the following to get set up for running by
-  * Entering a worker node, no one wants you to run production tests on the login node.
-  * Entering the apptainer image
-  * Running the setup script inside of the apptainer image
-
-```
-source interact.sh
-source shell.sh
-source setup.sh
+```bash
+bash chains/run_chain_pgun.sh --job-id 0 --nevents 1 --outdir /tmp/test \
+     --pdg 13 --pt 100 --theta-min 10 --theta-max 170        # add --bib for BIB
 ```
 
-I have provided these instructions to be run *from the bib directory we made above*, and so they differ from the instructions in `mucoll-playground`.
+Or step through the GEN/SIM/DIGI/RECO stages individually — see the per-stage
+READMEs in `mucoll-benchmarks/`.
 
-To run GEN/SIM/DIGI/RECO, first we need to set the detector geometry to either MAIA or MUSIC:
+## 3. Submit particle-gun jobs to slurm batch system
 
-```
-cp -r mucoll-benchmarks/reconstruction/PandoraSettings/ ./
-source mucoll-benchmarks/k4MuCPlayground/setup_digireco.sh mucoll-benchmarks/ MAIA_v0
+Edit the settings at the top of [`submit_pgun.py`](submit_pgun.py) — particle, pT,
+theta range, number of jobs/events, and the **`BIB`** switch — then:
 
-# you should see the following output
-   ╭──────────────────────────────────────────────╮
-   │      Setting All Environment Variables:      │
-   │             MUCOLL_GEO from k4geo            │
-   │          Others from k4actstracking          │
-   ├──────────────────────────────────────────────┤
-   │   MUCOLL_GEOM_NAME = MAIA_v0                 │
-   │   MUCOLL_GEO       = MAIA_v0.xml             │
-   │   MUCOLL_TGEO      = MAIA_v0.root            │
-   │   MUCOLL_MATMAP    = MAIA_v0_material.json   │
-   │   MUCOLL_TGEO_DESC = MAIA_v0.json            │
-   ╰──────────────────────────────────────────────╯
+```bash
+python submit_pgun.py          # run on a login node: it only calls sbatch;
+                               # the heavy work runs in the container on the nodes
 ```
 
-To run GEN/SIM/DIGI/RECO for a particle gun event, you can do e.g.:
+* **Without BIB:** leave `BIB = False`.
+* **With BIB:** set `BIB = True`. `run_chain_pgun.sh` then appends to the
+  digitization step:
 
-### GEN
+  ```
+  --doOverlayFull \
+  --OverlayFullPathToMuPlus  $BIB_MUPLUS \
+  --OverlayFullPathToMuMinus $BIB_MUMINUS \
+  --OverlayFullNumberBackground $BIB_NUMBER
+  ```
 
-```
-python mucoll-benchmarks/generation/pgun/pgun_edm4hep.py \
-    -p 1 -e 1 --pdg 11 --pt 100 --theta 10 170 -- gen_output.edm4hep.root
-```
+  The BIB sample directories (`MUPLUS/`, `MUMINUS/` of `.edm4hep.root` files)
+  and the overlay count are set in `config.sh`. `BIB_NUMBER` is the number of
+  BIB files overlaid per signal event per polarity (default 812; tune per study).
 
-### SIM
-
-```
-ddsim --steeringFile mucoll-benchmarks/simulation/steer_baseline.py --numberOfEvents 1
-```
-
-### DIGI
-
-```
-k4run mucoll-benchmarks/digitization/digi_steer.py
-```
-
-### RECO
+Output layout:
 
 ```
-k4run mucoll-benchmarks/reconstruction/reco_steer.py
+$OUTPUT_BASE_DIR/<study>/
+├── logs/job_N.{out,err}
+└── job_N/{gen,sim,digi,reco}_output_N.edm4hep.root
 ```
 
-If you made it through these commands, you should have some output to analyse! Try to open it up, make a plot, and then try running more events with the particle gun.
+`<study>` auto-names from the particle/pT/θ and BIB state, e.g.
+`pgun_pdg13_pt100_theta10-170_nobib`.
+
+### Quick test
+
+Before launching a big batch, sanity-check with one short job: set
+`NUM_JOBS = 1`, `NEVENTS_PER_JOB = 1` in `submit_pgun.py` and submit. Confirm the
+job finishes and produces a `reco_output_0.edm4hep.root`.
+
+### Parameter scan
+
+To scan over several particles / momenta / angles at once, edit
+`PDG_LIST` / `PT_LIST` / `THETA_LIST` (and `BIB`) in
+[`submit_pgun_scan.py`](submit_pgun_scan.py), then:
+
+```bash
+python submit_pgun_scan.py
+```
+
+This creates `$OUTPUT_BASE_DIR/scan[_bib]/pdg{P}_pt{T}_theta{lo}-{hi}/job_N/`.
 
 
-## Batch scripts
+---
 
-There are scripts to submit jobs at production scale in `mucoll-slurm/`. Please handle these with care, and don't try running them until you've successfully tested the workflow above. Instructions for how to use those scripts are found in the `README_BATCH.md` file.
+## 4. Whizard signal production (advanced)
 
+[`submit_whizard.py`](submit_whizard.py) drives the Whizard WWZ/ZZZ hadronic
+chains (steering `.sin` files live in [`whizard/`](whizard/)):
 
-## Instructions for generating BIB events from FLUKA inputs
+1. **(Once)** build the integration grids: `python make_gridpack.py` — writes
+   `.vg` grids under `$DATA_GROUP_DIR/gridpacks/`.
+2. In `submit_whizard.py`, pick the process(es) in `PROCESSES`, optionally set
+   `GRIDPACK_DIR` to the grids from step 1 (leave `""` to integrate in-job),
+   then `python submit_whizard.py`.
 
-Coming later ...
+> **Known limitation (signal only):** the v3.0 *sim* image has no Whizard, while
+> the digi/reco configs now target v3.0. So the single-container WWZ/ZZZ chains
+> can't yet run generation (needs a Whizard image, `WHIZARD_IMAGE` in
+> `config.sh`) and v3.0 digi/reco in one job — that needs a gen→reco image split.
+> The chains are wired to the new layout and guard loudly on a missing Whizard.
+> **Particle-gun studies (the intern workflow) are fully working on v3.0.**
 
-`mucoll-benchmarks/generation/bib/fluka_to_edm4hep.py`
+---
