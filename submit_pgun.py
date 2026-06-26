@@ -14,8 +14,8 @@ import os
 import slurm_common as sc
 
 # =============================== EDIT ME ====================================
-NUM_JOBS = 5           # how many jobs to submit
-NEVENTS_PER_JOB = 100    # events per job
+NUM_JOBS = 3           # how many jobs to submit
+NEVENTS_PER_JOB = 3    # events per job
 
 PDG = 13                 # particle: 11=e, 13=mu, 22=gamma, 211=pi+, 2112=n ...
 PT = 100                 # transverse momentum [GeV]
