@@ -14,7 +14,7 @@ import os
 import slurm_common as sc
 
 # =============================== EDIT ME ====================================
-NUM_JOBS = 10            # how many jobs to submit
+NUM_JOBS = 5           # how many jobs to submit
 NEVENTS_PER_JOB = 100    # events per job
 
 PDG = 13                 # particle: 11=e, 13=mu, 22=gamma, 211=pi+, 2112=n ...
@@ -22,7 +22,7 @@ PT = 100                 # transverse momentum [GeV]
 THETA_MIN = 10           # min polar angle [deg]
 THETA_MAX = 170          # max polar angle [deg]
 
-BIB = False              # <-- flip to True to overlay Beam-Induced Background
+BIB = TRUE              # <-- flip to True to overlay Beam-Induced Background
 
 STUDY_NAME = ""          # optional label for the output subfolder; "" = auto
 
