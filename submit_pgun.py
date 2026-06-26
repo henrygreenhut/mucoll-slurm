@@ -22,7 +22,7 @@ PT = 100                 # transverse momentum [GeV]
 THETA_MIN = 10           # min polar angle [deg]
 THETA_MAX = 170          # max polar angle [deg]
 
-BIB = TRUE              # <-- flip to True to overlay Beam-Induced Background
+BIB = True              # <-- flip to True to overlay Beam-Induced Background
 
 STUDY_NAME = ""          # optional label for the output subfolder; "" = auto
 
