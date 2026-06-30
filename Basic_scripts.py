@@ -8,8 +8,7 @@ import matplotlib.pyplot as plt
 import uproot
 
 #Getting your Root File (replace with the actual name)
-file = uproot.open(f"XXXXX.root")
-#Getting the main tree needed
+file = uproot.open("/oscar/data/mleblan6/mucoll/hgreenhu/output/pgun_pdg13_pt100_theta10-170_bib/job_0/reco_output_0.edm4hep.root")
 events = file["events"]
 
 '''
