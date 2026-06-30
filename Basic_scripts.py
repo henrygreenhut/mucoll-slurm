@@ -160,7 +160,10 @@ plt.close()
 
 
 ## Clusters ##
-phi_clusters = clusters["PandoraClusters.phi"].array()
+#phi_clusters = clusters["PandoraClusters.phi"].array() ## PandoraClusters.phi doesn't exist for me
+cluster_x = clusters["PandoraClusters.position.x"].array()
+cluster_y = clusters["PandoraClusters.position.y"].array()
+phi_clusters = np.arctan2(cluster_y, cluster_x)
 
 ## PFOS ##
 #PFOS don't directly have phi, so we're going to build it from momentum
