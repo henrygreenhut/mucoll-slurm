@@ -127,9 +127,6 @@ python submit_pgun_scan.py
 
 This creates `$OUTPUT_BASE_DIR/scan[_bib]/pdg{P}_pt{T}_theta{lo}-{hi}/job_N/`.
 
-
----
-
 ## 4. Whizard signal production (advanced)
 
 [`submit_whizard.py`](submit_whizard.py) drives the Whizard WWZ/ZZZ hadronic
