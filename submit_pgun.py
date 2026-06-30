@@ -9,6 +9,7 @@ All paths (image, benchmarks, output, BIB samples) come from config.sh.
 For a parameter scan over several PDGs / pTs / angles, use submit_pgun_scan.py.
 """
 
+import argparse
 import os
 
 import slurm_common as sc
@@ -33,7 +34,21 @@ CPUS = 4
 # ============================================================================
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Submit particle-gun jobs to SLURM."
+    )
+    parser.add_argument(
+        "--study-name",
+        "--study",
+        default=None,
+        help="Optional output subfolder name. Defaults to STUDY_NAME, then auto.",
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
     cfg = sc.load_config()
     sc.validate_paths(cfg)
 
@@ -41,7 +56,8 @@ def main():
     os.chmod(chain, 0o755)
 
     bib_tag = "bib" if BIB else "nobib"
-    study = STUDY_NAME or f"pgun_pdg{PDG}_pt{PT}_theta{THETA_MIN}-{THETA_MAX}_{bib_tag}"
+    study_name = args.study_name if args.study_name is not None else STUDY_NAME
+    study = study_name or f"pgun_pdg{PDG}_pt{PT}_theta{THETA_MIN}-{THETA_MAX}_{bib_tag}"
     out_dir = os.path.join(cfg["OUTPUT_BASE_DIR"], study)
     log_dir = os.path.join(out_dir, "logs")
     os.makedirs(log_dir, exist_ok=True)
