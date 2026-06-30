@@ -68,7 +68,11 @@ cp -r "$MUCOLL_CONFIG/$MUCOLL_CONFIG_NAME/PandoraSettings/" ./
 
 # --- 1. Generation -----------------------------------------------------------
 echo "--- Generation ---"
+GEN_SEED=$((12345 + JOB_ID))
+DIGI_SEED=$((42 + JOB_ID))
+
 python "$MUCOLL_BENCHMARKS_PATH/generation/pgun/pgun_edm4hep.py" \
+    -s "$GEN_SEED" \
     -p 1 -e "$NEVENTS" --pdg "$PDG" --pt "$PT" --theta "$THETA_MIN" "$THETA_MAX" \
     -- gen_output.edm4hep.root
 
@@ -91,8 +95,8 @@ fi
 k4run "$MUCOLL_CONFIG/$MUCOLL_CONFIG_NAME/digi_steer.py" \
     --inputFiles sim_output.edm4hep.root \
     --outputFile digi_output.edm4hep.root \
+    --RandSeed "$DIGI_SEED" \
     "${DIGI_BIB_ARGS[@]}"
-
 # --- 4. Reconstruction -------------------------------------------------------
 echo "--- Reconstruction ---"
 k4run "$MUCOLL_CONFIG/$MUCOLL_CONFIG_NAME/reco_steer.py" \
