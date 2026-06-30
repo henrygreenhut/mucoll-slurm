@@ -185,8 +185,8 @@ for i in range((events.num_entries)):
         phi = np.arctan2(momy_pfos[i][j], momx_pfos[i][j])
         total_pfophi.append(phi)
     if (len(index_deduped[i]) !=0 ):
-        indices = index_deduped[i][0] 
-        our_tphi = phi_tracks[indices]
+        #indices = index_deduped[i] 
+        our_tphi = phi_tracks[i]
         total_trackphi.extend(our_tphi) #because multiple points at once, extend not append
 
 #We need to flatten total_trackphi
