@@ -29,6 +29,7 @@ def find_files(inputs, pattern):
         for match in matches:
             path = Path(match)
             if path.is_dir():
+                files.extend(path.glob(pattern))
                 files.extend(path.glob(f"job_*/{pattern}"))
             elif path.is_file() and path.name.startswith(pattern.split("*")[0]):
                 files.append(path)
