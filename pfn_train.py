@@ -13,12 +13,12 @@ from sklearn.metrics import roc_auc_score, roc_curve
 from ml_common import fit_slots, load_h5, split_by_class, write_rows
 
 
-PHI_SIZES = (100, 100, 128)
-F_SIZES = (100, 100, 100)
-EPOCHS = 30
-BATCH_SIZE = 128
-PATIENCE = 6
-MIN_DELTA = 0.001
+PHI_SIZES = (200, 200, 256)
+F_SIZES = (200, 200, 200)
+EPOCHS = 150
+BATCH_SIZE = 16
+PATIENCE = 25
+MIN_DELTA = 0.0001
 
 
 def parse_args():
