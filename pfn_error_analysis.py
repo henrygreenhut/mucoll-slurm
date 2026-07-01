@@ -160,6 +160,10 @@ def selected_fields(rows):
     return fields + [name for name in FEATURES if name in rows[0]]
 
 
+def keep_fields(rows, fields):
+    return [{field: row.get(field, "") for field in fields} for row in rows]
+
+
 def save_plots(path, rows, label):
     plt.rcParams["figure.figsize"] = (5, 4)
     plt.rcParams["font.family"] = "serif"
@@ -250,8 +254,8 @@ def main():
             list(feature_summary[0]),
             feature_summary,
         )
-    write_rows(os.path.join(outdir, f"wrong_events_{args.label}.csv"), fields, wrong)
-    write_rows(os.path.join(outdir, f"right_events_{args.label}.csv"), fields, right)
+    write_rows(os.path.join(outdir, f"wrong_events_{args.label}.csv"), fields, keep_fields(wrong, fields))
+    write_rows(os.path.join(outdir, f"right_events_{args.label}.csv"), fields, keep_fields(right, fields))
     save_plots(os.path.join(outdir, f"right_wrong_plots_{args.label}.pdf"), rows, args.label)
 
     test = [row for row in rows if row["split"] == "test"]
