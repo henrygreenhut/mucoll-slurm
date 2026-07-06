@@ -21,41 +21,49 @@ WORK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 export WORK_DIR
 export MUCOLL_BENCHMARKS_PATH="$WORK_DIR/mucoll-benchmarks"
 
-# --- Shared group storage on Oscar -------------------------------------------
-# All members of the ccv-mleblan6 allocation share this directory; each user
-# writes to their own $USER subdirectory inside it.
-export DATA_GROUP_DIR="/oscar/data/mleblan6/mucoll"
+# --- Shared group storage -----------------------------------------------------
+# Perlmutter trial setup.
+export DATA_GROUP_DIR="/global/cfs/cdirs/m5197/mleblanc/MuonCollider/data"
+
+# Previous Oscar setup:
+# export DATA_GROUP_DIR="/oscar/data/mleblan6/mucoll"
 
 # --- Container image (mucoll-spack v3.0, sim layer, ubuntu24) -----------------
-# One-time pull (see README.md):
-#   apptainer pull "$DATA_GROUP_DIR/mucoll-sim-ubuntu24:v3.0.sif" \
-#       docker://ghcr.io/muoncollidersoft/mucoll-sim-ubuntu24:v3.0
-export IMAGE="$DATA_GROUP_DIR/mucoll-sim-ubuntu24:v3.0.sif"
+# Perlmutter trial setup. This image string is meant for Shifter-based jobs.
+export IMAGE="docker:ghcr.io/muoncollidersoft/mucoll-sim-ubuntu24:v3.0"
+export WHIZARD_IMAGE="$IMAGE"
 
-# TEMPORARY FOR WHIZARD RUNNING
-# Image used for the Whizard *signal* chains (submit_whizard.py, make_gridpack.py).
-# NOTE: the v3.0 sim image does NOT bundle Whizard, so signal production needs a
-# Whizard-capable image here (e.g. the previous main SIF). Particle-gun studies
-# (submit_pgun.py / submit_pgun_scan.py) are unaffected and use $IMAGE above.
-export WHIZARD_IMAGE="$DATA_GROUP_DIR/mucoll-sim-ubuntu24:main.sif"
+# Previous Oscar setup:
+# export IMAGE="$DATA_GROUP_DIR/mucoll-sim-ubuntu24:v3.0.sif"
+# export WHIZARD_IMAGE="$DATA_GROUP_DIR/mucoll-sim-ubuntu24:main.sif"
 
 # --- Detector geometry -------------------------------------------------------
 export GEOM_NAME="MAIA_v0"
 
 # --- Output ------------------------------------------------------------------
-# Per-user output area inside the shared group directory.
-export OUTPUT_BASE_DIR="$DATA_GROUP_DIR/$USER/output"
+# Perlmutter trial setup.
+export OUTPUT_BASE_DIR="${PSCRATCH:-$SCRATCH}/mucoll/output"
 
-# --- Apptainer bind mounts ---------------------------------------------------
-# Bind the shared group dir (image + BIB + output) and the code checkout.
-export DATA_BIND="$DATA_GROUP_DIR"
+# Previous Oscar setup:
+# export OUTPUT_BASE_DIR="$DATA_GROUP_DIR/$USER/output"
+
+# --- Container bind mounts ----------------------------------------------------
+# Perlmutter trial setup.
+export DATA_BIND="/global/cfs/cdirs/m5197,${PSCRATCH:-$SCRATCH},$HOME"
+
+# Previous Oscar setup:
+# export DATA_BIND="$DATA_GROUP_DIR"
 
 # --- Beam-Induced Background (BIB) overlay samples ---------------------------
 # Used only when a job is launched "with BIB". Each path is a DIRECTORY of
 # *.edm4hep.root files (trailing slash matters); the overlay enumerates them.
-export BIB_DIR="$DATA_GROUP_DIR/bib/Feb12/10TeV_MAIA_edm4hep"
+export BIB_DIR="$DATA_GROUP_DIR/bib-v3p0-benchmark/SIM"
 export BIB_MUPLUS="$BIB_DIR/MUPLUS/"
 export BIB_MUMINUS="$BIB_DIR/MUMINUS/"
-# Number of BIB files overlaid per signal event (per polarity). 812 = the digi
-# default (assumes 45 phi clones). Tune per study; the README example uses 60.
 export BIB_NUMBER=812
+
+# Previous Oscar setup:
+# export BIB_DIR="$DATA_GROUP_DIR/bib/Feb12/10TeV_MAIA_edm4hep"
+# export BIB_MUPLUS="$BIB_DIR/MUPLUS/"
+# export BIB_MUMINUS="$BIB_DIR/MUMINUS/"
+# export BIB_NUMBER=812
