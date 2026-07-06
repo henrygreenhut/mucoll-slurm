@@ -57,10 +57,16 @@ export DATA_BIND="/global/cfs/cdirs/m5197,${PSCRATCH:-$SCRATCH},$HOME"
 # --- Beam-Induced Background (BIB) overlay samples ---------------------------
 # Used only when a job is launched "with BIB". Each path is a DIRECTORY of
 # *.edm4hep.root files (trailing slash matters); the overlay enumerates them.
-export BIB_DIR="$DATA_GROUP_DIR/bib-v3p0-benchmark/SIM"
+export BIB_DIR="$DATA_GROUP_DIR/bib-v3p0-fmt2-norm1"
 export BIB_MUPLUS="$BIB_DIR/MUPLUS/"
 export BIB_MUMINUS="$BIB_DIR/MUMINUS/"
 export BIB_NUMBER=812
+
+# Broken Perlmutter benchmark setup:
+# export BIB_DIR="$DATA_GROUP_DIR/bib-v3p0-benchmark/SIM"
+# export BIB_MUPLUS="$BIB_DIR/MUPLUS/"
+# export BIB_MUMINUS="$BIB_DIR/MUMINUS/"
+# export BIB_NUMBER=812
 
 # Previous Oscar setup:
 # export BIB_DIR="$DATA_GROUP_DIR/bib/Feb12/10TeV_MAIA_edm4hep"
