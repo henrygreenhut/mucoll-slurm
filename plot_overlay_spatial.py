@@ -193,6 +193,33 @@ def axis_limits(a, b):
     return lo - pad, hi + pad
 
 
+def set_equal_3d(ax, x, y, z):
+    finite_x = x[np.isfinite(x)]
+    finite_y = y[np.isfinite(y)]
+    finite_z = z[np.isfinite(z)]
+    if not len(finite_x) or not len(finite_y) or not len(finite_z):
+        return
+
+    centers = [
+        0.5 * (float(np.min(finite_x)) + float(np.max(finite_x))),
+        0.5 * (float(np.min(finite_y)) + float(np.max(finite_y))),
+        0.5 * (float(np.min(finite_z)) + float(np.max(finite_z))),
+    ]
+    spans = [
+        float(np.max(finite_x)) - float(np.min(finite_x)),
+        float(np.max(finite_y)) - float(np.min(finite_y)),
+        float(np.max(finite_z)) - float(np.min(finite_z)),
+    ]
+    radius = 0.5 * max(max(spans), 1.0)
+    ax.set_xlim(centers[0] - radius, centers[0] + radius)
+    ax.set_ylim(centers[1] - radius, centers[1] + radius)
+    ax.set_zlim(centers[2] - radius, centers[2] + radius)
+    try:
+        ax.set_box_aspect((1, 1, 1))
+    except AttributeError:
+        pass
+
+
 def draw_projection(points, x_key, y_key, xlabel, ylabel, title, outpath):
     selected = [item for item in points if item["plotted_hits"]]
     if not selected:
@@ -241,6 +268,55 @@ def draw_projection(points, x_key, y_key, xlabel, ylabel, title, outpath):
     return True
 
 
+def draw_xyz(points, title, outpath):
+    selected = [item for item in points if item["plotted_hits"]]
+    if not selected:
+        return False
+
+    fig = plt.figure(figsize=(8, 7))
+    ax = fig.add_subplot(111, projection="3d")
+    all_x = []
+    all_y = []
+    all_z = []
+    total_hits = 0
+    plotted_hits = 0
+
+    for item in selected:
+        x = item["x"]
+        y = item["y"]
+        z = item["z"]
+        all_x.append(x)
+        all_y.append(y)
+        all_z.append(z)
+        total_hits += item["n_hits"]
+        plotted_hits += item["plotted_hits"]
+        ax.scatter(
+            x,
+            y,
+            z,
+            s=3,
+            alpha=0.35,
+            linewidths=0,
+            color=COLORS[item["collection"]],
+            label=f"{item['collection'].replace('Overlay', '')} ({item['n_hits']})",
+        )
+
+    all_x = np.concatenate(all_x)
+    all_y = np.concatenate(all_y)
+    all_z = np.concatenate(all_z)
+    set_equal_3d(ax, all_x, all_y, all_z)
+    ax.view_init(elev=22, azim=-55)
+    ax.set_xlabel("x [cm]")
+    ax.set_ylabel("y [cm]")
+    ax.set_zlabel("z [cm]")
+    ax.set_title(f"{title} xyz\nplotted {plotted_hits:,} of {total_hits:,} hits")
+    ax.legend(loc="upper left", fontsize=7, frameon=False)
+    plt.tight_layout()
+    plt.savefig(outpath)
+    plt.close(fig)
+    return True
+
+
 def draw_group(points_by_collection, group, prefix, outdir):
     group_points = [
         points_by_collection[name]
@@ -261,6 +337,9 @@ def draw_group(points_by_collection, group, prefix, outdir):
         outpath = os.path.join(outdir, f"{prefix}__overlay_{group}_{suffix}.pdf")
         if draw_projection(group_points, x_key, y_key, xlabel, ylabel, title, outpath):
             n_written += 1
+    outpath = os.path.join(outdir, f"{prefix}__overlay_{group}_xyz.pdf")
+    if draw_xyz(group_points, title, outpath):
+        n_written += 1
     return n_written
 
 
