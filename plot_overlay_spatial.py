@@ -3,6 +3,7 @@
 import argparse
 import csv
 import glob
+import json
 import os
 from pathlib import Path
 
@@ -317,6 +318,233 @@ def draw_xyz(points, title, outpath):
     return True
 
 
+def clean_xyz(item):
+    x = np.asarray(item["x"], dtype=np.float64)
+    y = np.asarray(item["y"], dtype=np.float64)
+    z = np.asarray(item["z"], dtype=np.float64)
+    mask = np.isfinite(x) & np.isfinite(y) & np.isfinite(z)
+    return (
+        np.round(x[mask], 3).tolist(),
+        np.round(y[mask], 3).tolist(),
+        np.round(z[mask], 3).tolist(),
+    )
+
+
+def interactive_html(payload):
+    data = json.dumps(payload, separators=(",", ":"))
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{payload["title"]}</title>
+<style>
+html, body {{ margin: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f7f7f7; color: #222; }}
+#toolbar {{ position: fixed; left: 12px; top: 10px; z-index: 2; display: flex; align-items: center; gap: 12px; padding: 8px 10px; background: rgba(255,255,255,0.9); border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 1px 8px rgba(0,0,0,0.08); }}
+#title {{ font-weight: 600; }}
+#help {{ font-size: 12px; color: #555; }}
+button {{ border: 1px solid #bbb; background: white; border-radius: 4px; padding: 4px 8px; cursor: pointer; }}
+#legend {{ position: fixed; left: 12px; bottom: 12px; z-index: 2; max-width: 390px; padding: 9px 10px; background: rgba(255,255,255,0.9); border: 1px solid #ddd; border-radius: 6px; font-size: 12px; line-height: 1.45; }}
+.row {{ display: flex; align-items: center; gap: 7px; }}
+.swatch {{ width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }}
+canvas {{ width: 100vw; height: 100vh; display: block; cursor: grab; }}
+canvas.dragging {{ cursor: grabbing; }}
+</style>
+</head>
+<body>
+<div id="toolbar">
+  <span id="title"></span>
+  <button id="reset">Reset</button>
+  <span id="help">Drag rotate · wheel zoom · shift/right-drag pan · double-click reset</span>
+</div>
+<canvas id="view"></canvas>
+<div id="legend"></div>
+<script>
+const data = {data};
+const canvas = document.getElementById("view");
+const ctx = canvas.getContext("2d");
+const title = document.getElementById("title");
+const legend = document.getElementById("legend");
+const state = {{ yaw: -0.65, pitch: -0.35, zoom: 1.0, panX: 0, panY: 0, drag: false, mode: "rotate", lastX: 0, lastY: 0 }};
+let width = 0;
+let height = 0;
+let baseScale = 1;
+let radius = 1;
+let framePending = false;
+title.textContent = data.title;
+legend.innerHTML = data.traces.map(t => `<div class="row"><span class="swatch" style="background:${{t.color}}"></span><span>${{t.name}} (${{t.total.toLocaleString()}} hits, ${{t.x.length.toLocaleString()}} plotted)</span></div>`).join("");
+
+function resize() {{
+  const dpr = window.devicePixelRatio || 1;
+  width = window.innerWidth;
+  height = window.innerHeight;
+  canvas.width = Math.floor(width * dpr);
+  canvas.height = Math.floor(height * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  computeScale();
+  scheduleRender();
+}}
+
+function computeScale() {{
+  let maxAbs = 1;
+  for (const t of data.traces) {{
+    for (let i = 0; i < t.x.length; i++) {{
+      maxAbs = Math.max(maxAbs, Math.abs(t.x[i]), Math.abs(t.y[i]), Math.abs(t.z[i]));
+    }}
+  }}
+  radius = maxAbs;
+  baseScale = 0.42 * Math.min(width, height) / radius;
+}}
+
+function rotatePoint(x, y, z) {{
+  const cy = Math.cos(state.yaw);
+  const sy = Math.sin(state.yaw);
+  const cp = Math.cos(state.pitch);
+  const sp = Math.sin(state.pitch);
+  const x1 = cy * x - sy * y;
+  const y1 = sy * x + cy * y;
+  const y2 = cp * y1 - sp * z;
+  const z2 = sp * y1 + cp * z;
+  return [x1, y2, z2];
+}}
+
+function project(x, y, z) {{
+  const p = rotatePoint(x, y, z);
+  const scale = baseScale * state.zoom;
+  return {{
+    x: width / 2 + state.panX + p[0] * scale,
+    y: height / 2 + state.panY - p[1] * scale,
+    d: p[2]
+  }};
+}}
+
+function drawAxes() {{
+  const axes = [
+    ["x", radius, 0, 0, "#444"],
+    ["y", 0, radius, 0, "#444"],
+    ["z", 0, 0, radius, "#444"]
+  ];
+  ctx.save();
+  ctx.lineWidth = 1;
+  ctx.font = "12px sans-serif";
+  ctx.fillStyle = "#333";
+  for (const [label, x, y, z, color] of axes) {{
+    const a = project(0, 0, 0);
+    const b = project(x, y, z);
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    ctx.fillText(label, b.x + 5, b.y - 5);
+  }}
+  ctx.restore();
+}}
+
+function render() {{
+  framePending = false;
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "#f7f7f7";
+  ctx.fillRect(0, 0, width, height);
+  drawAxes();
+  const points = [];
+  for (const t of data.traces) {{
+    for (let i = 0; i < t.x.length; i++) {{
+      const p = project(t.x[i], t.y[i], t.z[i]);
+      points.push([p.d, p.x, p.y, t.color]);
+    }}
+  }}
+  points.sort((a, b) => a[0] - b[0]);
+  ctx.globalAlpha = 0.5;
+  for (const p of points) {{
+    ctx.fillStyle = p[3];
+    ctx.fillRect(p[1], p[2], 2, 2);
+  }}
+  ctx.globalAlpha = 1;
+}}
+
+function scheduleRender() {{
+  if (framePending) return;
+  framePending = true;
+  window.requestAnimationFrame(render);
+}}
+
+function resetView() {{
+  state.yaw = -0.65;
+  state.pitch = -0.35;
+  state.zoom = 1.0;
+  state.panX = 0;
+  state.panY = 0;
+  scheduleRender();
+}}
+
+canvas.addEventListener("mousedown", event => {{
+  state.drag = true;
+  state.mode = event.shiftKey || event.button === 2 ? "pan" : "rotate";
+  state.lastX = event.clientX;
+  state.lastY = event.clientY;
+  canvas.classList.add("dragging");
+}});
+window.addEventListener("mouseup", () => {{
+  state.drag = false;
+  canvas.classList.remove("dragging");
+}});
+window.addEventListener("mousemove", event => {{
+  if (!state.drag) return;
+  const dx = event.clientX - state.lastX;
+  const dy = event.clientY - state.lastY;
+  state.lastX = event.clientX;
+  state.lastY = event.clientY;
+  if (state.mode === "pan") {{
+    state.panX += dx;
+    state.panY += dy;
+  }} else {{
+    state.yaw += dx * 0.006;
+    state.pitch += dy * 0.006;
+    state.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, state.pitch));
+  }}
+  scheduleRender();
+}});
+canvas.addEventListener("wheel", event => {{
+  event.preventDefault();
+  state.zoom *= Math.exp(-event.deltaY * 0.001);
+  state.zoom = Math.max(0.05, Math.min(40, state.zoom));
+  scheduleRender();
+}}, {{ passive: false }});
+canvas.addEventListener("dblclick", resetView);
+canvas.addEventListener("contextmenu", event => event.preventDefault());
+document.getElementById("reset").addEventListener("click", resetView);
+window.addEventListener("resize", resize);
+resize();
+</script>
+</body>
+</html>
+"""
+
+
+def write_interactive_xyz(points, title, outpath):
+    selected = [item for item in points if item["plotted_hits"]]
+    if not selected:
+        return False
+
+    traces = []
+    for item in selected:
+        x, y, z = clean_xyz(item)
+        traces.append({
+            "name": item["collection"].replace("Overlay", ""),
+            "color": COLORS[item["collection"]],
+            "total": item["n_hits"],
+            "x": x,
+            "y": y,
+            "z": z,
+        })
+
+    payload = {"title": f"{title} interactive xyz", "traces": traces}
+    with open(outpath, "w", encoding="utf-8") as handle:
+        handle.write(interactive_html(payload))
+    return True
+
+
 def draw_group(points_by_collection, group, prefix, outdir):
     group_points = [
         points_by_collection[name]
@@ -339,6 +567,9 @@ def draw_group(points_by_collection, group, prefix, outdir):
             n_written += 1
     outpath = os.path.join(outdir, f"{prefix}__overlay_{group}_xyz.pdf")
     if draw_xyz(group_points, title, outpath):
+        n_written += 1
+    outpath = os.path.join(outdir, f"{prefix}__overlay_{group}_xyz.html")
+    if write_interactive_xyz(group_points, title, outpath):
         n_written += 1
     return n_written
 
@@ -393,7 +624,7 @@ def main():
     write_rows(outpath, rows)
 
     print(f"DIGI files: {len(files)}")
-    print(f"Plots written: {n_plots}")
+    print(f"Artifacts written: {n_plots}")
     print(f"Summary -> {outpath}")
     for group in GROUPS:
         n_hits = sum(row["n_hits"] for row in rows if row["collection"] in GROUPS[group])
