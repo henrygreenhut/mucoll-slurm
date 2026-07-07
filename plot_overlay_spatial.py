@@ -31,16 +31,16 @@ GROUPS = {
 }
 
 COLORS = {
-    "OverlayVertexBarrelCollection": "#1f77b4",
-    "OverlayVertexEndcapCollection": "#17becf",
-    "OverlayInnerTrackerBarrelCollection": "#2ca02c",
-    "OverlayInnerTrackerEndcapCollection": "#98df8a",
-    "OverlayOuterTrackerBarrelCollection": "#9467bd",
-    "OverlayOuterTrackerEndcapCollection": "#c5b0d5",
-    "OverlayECalBarrelCollection": "#ff7f0e",
-    "OverlayECalEndcapCollection": "#ffbb78",
-    "OverlayHCalBarrelCollection": "#d62728",
-    "OverlayHCalEndcapCollection": "#ff9896",
+    "OverlayVertexBarrelCollection": "#0066cc",
+    "OverlayVertexEndcapCollection": "#00a6d6",
+    "OverlayInnerTrackerBarrelCollection": "#008f5a",
+    "OverlayInnerTrackerEndcapCollection": "#9a8700",
+    "OverlayOuterTrackerBarrelCollection": "#6f3fb5",
+    "OverlayOuterTrackerEndcapCollection": "#8f4b2e",
+    "OverlayECalBarrelCollection": "#f26b00",
+    "OverlayECalEndcapCollection": "#d81b60",
+    "OverlayHCalBarrelCollection": "#d00000",
+    "OverlayHCalEndcapCollection": "#111111",
 }
 
 
@@ -89,10 +89,13 @@ def find_digi_files(inputs):
 
 
 def branch_name(events, collection, field):
-    candidates = [
+    return first_branch(events, [
         f"{collection}/{collection}.{field}",
         f"{collection}.{field}",
-    ]
+    ])
+
+
+def first_branch(events, candidates):
     keys = set(events.keys())
     for candidate in candidates:
         if candidate in keys:
@@ -103,7 +106,58 @@ def branch_name(events, collection, field):
 def values(events, branch, event):
     if branch is None:
         return np.asarray([], dtype=np.float64)
-    return ak.to_numpy(events[branch].array(entry_start=event, entry_stop=event + 1)[0])
+    try:
+        return ak.to_numpy(events[branch].array(entry_start=event, entry_stop=event + 1)[0])
+    except Exception:
+        return np.asarray([], dtype=np.float64)
+
+
+def time_values(events, collection, event, n_hits):
+    direct_branch = branch_name(events, collection, "time")
+    if direct_branch is not None:
+        direct = values(events, direct_branch, event)
+        if len(direct) >= n_hits:
+            return direct[:n_hits], "hit.time"
+        if len(direct):
+            time = np.full(n_hits, np.nan, dtype=np.float64)
+            time[:min(n_hits, len(direct))] = direct[:n_hits]
+            return time, "hit.time_partial"
+
+    contribution_collection = f"{collection}Contributions"
+    contribution_time_branch = branch_name(events, contribution_collection, "time")
+    contribution_times = values(events, contribution_time_branch, event)
+    if len(contribution_times) == n_hits:
+        return contribution_times[:n_hits], "contribution.time"
+
+    begin_branch = first_branch(events, [
+        f"{collection}/{collection}.contributions_begin",
+        f"{collection}.contributions_begin",
+        f"_{collection}_contributions_begin",
+        f"_{collection}_contributions.begin",
+    ])
+    end_branch = first_branch(events, [
+        f"{collection}/{collection}.contributions_end",
+        f"{collection}.contributions_end",
+        f"_{collection}_contributions_end",
+        f"_{collection}_contributions.end",
+    ])
+    try:
+        begins = values(events, begin_branch, event).astype(np.int64, copy=False)
+        ends = values(events, end_branch, event).astype(np.int64, copy=False)
+    except Exception:
+        begins = np.asarray([], dtype=np.int64)
+        ends = np.asarray([], dtype=np.int64)
+    if len(contribution_times) and len(begins) >= n_hits and len(ends) >= n_hits:
+        time = np.full(n_hits, np.nan, dtype=np.float64)
+        for i, (begin, end) in enumerate(zip(begins[:n_hits], ends[:n_hits])):
+            if 0 <= begin < end <= len(contribution_times):
+                time[i] = float(np.nanmin(contribution_times[begin:end]))
+        return time, "contribution.time_min"
+
+    if len(contribution_times):
+        return np.full(n_hits, np.nan, dtype=np.float64), "contribution.time_unmapped"
+
+    return np.full(n_hits, np.nan, dtype=np.float64), "missing"
 
 
 def plot_prefix(path):
@@ -128,17 +182,28 @@ def collection_payload(events, path, event, collection, value_field, max_points)
     x = x[:n]
     y = y[:n]
     z = z[:n]
-    plotted_x, plotted_y, plotted_z = downsample(x, y, z, max_points=max_points)
+    time, time_source = time_values(events, collection, event, n)
+    plotted_x, plotted_y, plotted_z, plotted_time = downsample(
+        x,
+        y,
+        z,
+        time,
+        max_points=max_points,
+    )
     r = np.sqrt(plotted_x * plotted_x + plotted_y * plotted_y)
+    finite_time = time[np.isfinite(time)]
 
     row = {
         "file": str(path),
         "event": event,
         "collection": collection,
         "value_field": value_field,
+        "time_source": time_source,
         "n_hits": int(n),
         "plotted_hits": int(len(plotted_x)),
         "sum_value": float(np.sum(val)) if len(val) else 0.0,
+        "time_min": float(np.min(finite_time)) if len(finite_time) else "",
+        "time_max": float(np.max(finite_time)) if len(finite_time) else "",
         "x_min_cm": float(np.min(x)) if n else "",
         "x_max_cm": float(np.max(x)) if n else "",
         "y_min_cm": float(np.min(y)) if n else "",
@@ -151,9 +216,11 @@ def collection_payload(events, path, event, collection, value_field, max_points)
         "x": plotted_x,
         "y": plotted_y,
         "z": plotted_z,
+        "time": plotted_time,
         "r": r,
         "n_hits": n,
         "plotted_hits": len(plotted_x),
+        "time_source": time_source,
     }
     return row, points
 
@@ -165,9 +232,12 @@ def write_rows(path, rows):
         "event",
         "collection",
         "value_field",
+        "time_source",
         "n_hits",
         "plotted_hits",
         "sum_value",
+        "time_min",
+        "time_max",
         "x_min_cm",
         "x_max_cm",
         "y_min_cm",
@@ -318,15 +388,29 @@ def draw_xyz(points, title, outpath):
     return True
 
 
-def clean_xyz(item):
+def clean_number_list(values, digits=3):
+    out = []
+    for value in values:
+        if np.isfinite(value):
+            out.append(round(float(value), digits))
+        else:
+            out.append(None)
+    return out
+
+
+def clean_xyzt(item):
     x = np.asarray(item["x"], dtype=np.float64)
     y = np.asarray(item["y"], dtype=np.float64)
     z = np.asarray(item["z"], dtype=np.float64)
+    time = np.asarray(item["time"], dtype=np.float64)
+    if len(time) != len(x):
+        time = np.full(len(x), np.nan, dtype=np.float64)
     mask = np.isfinite(x) & np.isfinite(y) & np.isfinite(z)
     return (
         np.round(x[mask], 3).tolist(),
         np.round(y[mask], 3).tolist(),
         np.round(z[mask], 3).tolist(),
+        clean_number_list(time[mask], digits=4),
     )
 
 
@@ -344,9 +428,17 @@ html, body {{ margin: 0; height: 100%; font-family: -apple-system, BlinkMacSyste
 #title {{ font-weight: 600; }}
 #help {{ font-size: 12px; color: #555; }}
 button {{ border: 1px solid #bbb; background: white; border-radius: 4px; padding: 4px 8px; cursor: pointer; }}
+button:disabled {{ color: #999; cursor: default; }}
+.toggle {{ display: flex; align-items: center; gap: 4px; font-size: 12px; color: #333; user-select: none; }}
+.time-control {{ display: flex; align-items: center; gap: 6px; font-size: 12px; color: #333; }}
+#time-slider {{ width: 170px; }}
+#time-label {{ min-width: 110px; color: #444; }}
 #legend {{ position: fixed; left: 12px; bottom: 12px; z-index: 2; max-width: 390px; padding: 9px 10px; background: rgba(255,255,255,0.9); border: 1px solid #ddd; border-radius: 6px; font-size: 12px; line-height: 1.45; }}
-.row {{ display: flex; align-items: center; gap: 7px; }}
-.swatch {{ width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }}
+#legend-help {{ margin-bottom: 5px; color: #555; }}
+.legend-row {{ display: flex; align-items: center; gap: 7px; padding: 2px 3px; border-radius: 4px; cursor: pointer; user-select: none; }}
+.legend-row:hover {{ background: rgba(0,0,0,0.06); }}
+.legend-row.off {{ opacity: 0.35; text-decoration: line-through; }}
+.swatch {{ width: 11px; height: 11px; border-radius: 50%; flex: 0 0 auto; box-shadow: 0 0 0 1px rgba(0,0,0,0.25); }}
 canvas {{ width: 100vw; height: 100vh; display: block; cursor: grab; }}
 canvas.dragging {{ cursor: grabbing; }}
 </style>
@@ -355,7 +447,13 @@ canvas.dragging {{ cursor: grabbing; }}
 <div id="toolbar">
   <span id="title"></span>
   <button id="reset">Reset</button>
-  <span id="help">Drag rotate · wheel zoom · shift/right-drag pan · double-click reset</span>
+  <label class="toggle"><input id="frame-toggle" type="checkbox" checked> Box axes</label>
+  <span class="time-control">
+    <button id="time-play" type="button">Play</button>
+    <input id="time-slider" type="range" min="0" max="1000" value="1000" disabled>
+    <span id="time-label">time unavailable</span>
+  </span>
+  <span id="help">Drag rotate · wheel zoom · shift/right-drag pan · click legend hide/show</span>
 </div>
 <canvas id="view"></canvas>
 <div id="legend"></div>
@@ -365,14 +463,148 @@ const canvas = document.getElementById("view");
 const ctx = canvas.getContext("2d");
 const title = document.getElementById("title");
 const legend = document.getElementById("legend");
-const state = {{ yaw: -0.65, pitch: -0.35, zoom: 1.0, panX: 0, panY: 0, drag: false, mode: "rotate", lastX: 0, lastY: 0 }};
+const frameToggle = document.getElementById("frame-toggle");
+const playButton = document.getElementById("time-play");
+const timeSlider = document.getElementById("time-slider");
+const timeLabel = document.getElementById("time-label");
+const defaultBasis = {{
+  right: [0, 0, 1],
+  up: [0, 1, 0],
+  forward: [-1, 0, 0]
+}};
+const state = {{
+  basis: cloneBasis(defaultBasis),
+  zoom: 1.0,
+  panX: 0,
+  panY: 0,
+  showFrame: true,
+  timeAvailable: false,
+  timeMin: 0,
+  timeMax: 0,
+  timeCut: 0,
+  playing: false,
+  playStart: null,
+  playFrom: 0,
+  drag: false,
+  mode: "rotate",
+  lastX: 0,
+  lastY: 0
+}};
 let width = 0;
 let height = 0;
 let baseScale = 1;
 let radius = 1;
+let bounds = {{ x: [-1, 1], y: [-1, 1], z: [-1, 1] }};
 let framePending = false;
 title.textContent = data.title;
-legend.innerHTML = data.traces.map(t => `<div class="row"><span class="swatch" style="background:${{t.color}}"></span><span>${{t.name}} (${{t.total.toLocaleString()}} hits, ${{t.x.length.toLocaleString()}} plotted)</span></div>`).join("");
+data.traces.forEach(t => {{
+  t.hidden = false;
+  if (!Array.isArray(t.time)) t.time = [];
+}});
+computeTimeRange();
+updateTimeControls();
+buildLegend();
+
+function buildLegend() {{
+  legend.innerHTML = `<div id="legend-help">Click detector part to hide/show</div>` + data.traces.map((t, i) => `<div class="legend-row" data-index="${{i}}" title="time: ${{t.time_source || "missing"}}"><span class="swatch" style="background:${{t.color}}"></span><span>${{t.name}} (${{t.total.toLocaleString()}} hits, ${{t.x.length.toLocaleString()}} plotted)</span></div>`).join("");
+  for (const row of legend.querySelectorAll(".legend-row")) {{
+    row.addEventListener("click", () => {{
+      const trace = data.traces[Number(row.dataset.index)];
+      trace.hidden = !trace.hidden;
+      row.classList.toggle("off", trace.hidden);
+      scheduleRender();
+    }});
+  }}
+}}
+
+function finiteTime(value) {{
+  return typeof value === "number" && Number.isFinite(value);
+}}
+
+function computeTimeRange() {{
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const t of data.traces) {{
+    for (const time of t.time) {{
+      if (!finiteTime(time)) continue;
+      lo = Math.min(lo, time);
+      hi = Math.max(hi, time);
+    }}
+  }}
+  state.timeAvailable = lo !== Infinity && hi !== -Infinity;
+  if (state.timeAvailable) {{
+    state.timeMin = lo;
+    state.timeMax = hi;
+    state.timeCut = hi;
+    state.playFrom = lo;
+  }}
+}}
+
+function formatTime(value) {{
+  const abs = Math.abs(value);
+  if (abs >= 100) return value.toFixed(0);
+  if (abs >= 10) return value.toFixed(1);
+  return value.toFixed(2);
+}}
+
+function sliderToTime() {{
+  const frac = Number(timeSlider.value) / 1000;
+  return state.timeMin + frac * (state.timeMax - state.timeMin);
+}}
+
+function syncTimeSlider() {{
+  const span = state.timeMax - state.timeMin || 1;
+  timeSlider.value = Math.round(1000 * (state.timeCut - state.timeMin) / span);
+}}
+
+function updateTimeControls() {{
+  if (!state.timeAvailable) {{
+    playButton.disabled = true;
+    timeSlider.disabled = true;
+    timeLabel.textContent = "time unavailable";
+    return;
+  }}
+  playButton.disabled = false;
+  timeSlider.disabled = false;
+  syncTimeSlider();
+  timeLabel.textContent = `t <= ${{formatTime(state.timeCut)}} ns`;
+}}
+
+function setPlaying(playing) {{
+  state.playing = playing;
+  state.playStart = null;
+  state.playFrom = state.timeCut;
+  playButton.textContent = playing ? "Pause" : "Play";
+}}
+
+function playbackStep(timestamp) {{
+  if (!state.playing) return;
+  if (state.playStart === null) state.playStart = timestamp;
+  const duration = 6000;
+  const progress = Math.min((timestamp - state.playStart) / duration, 1);
+  state.timeCut = state.playFrom + progress * (state.timeMax - state.playFrom);
+  updateTimeControls();
+  scheduleRender();
+  if (progress < 1) {{
+    window.requestAnimationFrame(playbackStep);
+  }} else {{
+    setPlaying(false);
+    updateTimeControls();
+  }}
+}}
+
+function togglePlayback() {{
+  if (!state.timeAvailable) return;
+  if (state.playing) {{
+    setPlaying(false);
+    return;
+  }}
+  if (state.timeCut >= state.timeMax) state.timeCut = state.timeMin;
+  setPlaying(true);
+  updateTimeControls();
+  scheduleRender();
+  window.requestAnimationFrame(playbackStep);
+}}
 
 function resize() {{
   const dpr = window.devicePixelRatio || 1;
@@ -387,38 +619,153 @@ function resize() {{
 
 function computeScale() {{
   let maxAbs = 1;
+  const mins = {{ x: 0, y: 0, z: 0 }};
+  const maxes = {{ x: 0, y: 0, z: 0 }};
+  let found = false;
   for (const t of data.traces) {{
     for (let i = 0; i < t.x.length; i++) {{
-      maxAbs = Math.max(maxAbs, Math.abs(t.x[i]), Math.abs(t.y[i]), Math.abs(t.z[i]));
+      const x = t.x[i];
+      const y = t.y[i];
+      const z = t.z[i];
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) continue;
+      maxAbs = Math.max(maxAbs, Math.abs(x), Math.abs(y), Math.abs(z));
+      if (!found) {{
+        mins.x = maxes.x = x;
+        mins.y = maxes.y = y;
+        mins.z = maxes.z = z;
+        found = true;
+      }} else {{
+        mins.x = Math.min(mins.x, x);
+        mins.y = Math.min(mins.y, y);
+        mins.z = Math.min(mins.z, z);
+        maxes.x = Math.max(maxes.x, x);
+        maxes.y = Math.max(maxes.y, y);
+        maxes.z = Math.max(maxes.z, z);
+      }}
     }}
+  }}
+  if (!found) {{
+    mins.x = mins.y = mins.z = -1;
+    maxes.x = maxes.y = maxes.z = 1;
+  }}
+  for (const axis of ["x", "y", "z"]) {{
+    mins[axis] = Math.min(mins[axis], 0);
+    maxes[axis] = Math.max(maxes[axis], 0);
+    const span = maxes[axis] - mins[axis] || 1;
+    const pad = span * 0.04;
+    bounds[axis] = [mins[axis] - pad, maxes[axis] + pad];
   }}
   radius = maxAbs;
   baseScale = 0.42 * Math.min(width, height) / radius;
 }}
 
-function rotatePoint(x, y, z) {{
-  const cy = Math.cos(state.yaw);
-  const sy = Math.sin(state.yaw);
-  const cp = Math.cos(state.pitch);
-  const sp = Math.sin(state.pitch);
-  const x1 = cy * x - sy * y;
-  const y1 = sy * x + cy * y;
-  const y2 = cp * y1 - sp * z;
-  const z2 = sp * y1 + cp * z;
-  return [x1, y2, z2];
+function niceStep(rawStep) {{
+  const exponent = Math.floor(Math.log10(rawStep || 1));
+  const scale = Math.pow(10, exponent);
+  const fraction = rawStep / scale;
+  if (fraction <= 1) return scale;
+  if (fraction <= 2) return 2 * scale;
+  if (fraction <= 5) return 5 * scale;
+  return 10 * scale;
+}}
+
+function ticksFor(lo, hi, target = 6) {{
+  const step = niceStep((hi - lo) / target);
+  const start = Math.ceil(lo / step) * step;
+  const ticks = [];
+  for (let value = start; value <= hi + step * 0.5; value += step) {{
+    if (value >= lo - step * 0.5) ticks.push(Math.abs(value) < step * 1e-6 ? 0 : value);
+  }}
+  return ticks;
+}}
+
+function formatTick(value) {{
+  const abs = Math.abs(value);
+  if (abs >= 100) return value.toFixed(0);
+  if (abs >= 10) return value.toFixed(0);
+  if (abs >= 1) return value.toFixed(1).replace(/\\.0$/, "");
+  return value.toFixed(2).replace(/0+$/, "").replace(/\\.$/, "");
+}}
+
+function cloneBasis(basis) {{
+  return {{
+    right: basis.right.slice(),
+    up: basis.up.slice(),
+    forward: basis.forward.slice()
+  }};
+}}
+
+function dot(a, b) {{
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}}
+
+function dotPoint(axis, x, y, z) {{
+  return axis[0] * x + axis[1] * y + axis[2] * z;
+}}
+
+function cross(a, b) {{
+  return [
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0]
+  ];
+}}
+
+function normalize(v) {{
+  const n = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / n, v[1] / n, v[2] / n];
+}}
+
+function subtractProjection(v, axis) {{
+  const d = dot(v, axis);
+  return [v[0] - d * axis[0], v[1] - d * axis[1], v[2] - d * axis[2]];
+}}
+
+function rotateVector(v, axis, angle) {{
+  const a = normalize(axis);
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  const d = dot(a, v);
+  const axv = cross(a, v);
+  return [
+    v[0] * c + axv[0] * s + a[0] * d * (1 - c),
+    v[1] * c + axv[1] * s + a[1] * d * (1 - c),
+    v[2] * c + axv[2] * s + a[2] * d * (1 - c)
+  ];
+}}
+
+function orthonormalizeBasis() {{
+  const right = normalize(state.basis.right);
+  const up = normalize(subtractProjection(state.basis.up, right));
+  state.basis.right = right;
+  state.basis.up = up;
+  state.basis.forward = normalize(cross(right, up));
+}}
+
+function rotateBasis(axis, angle) {{
+  state.basis.right = rotateVector(state.basis.right, axis, angle);
+  state.basis.up = rotateVector(state.basis.up, axis, angle);
+  state.basis.forward = rotateVector(state.basis.forward, axis, angle);
+  orthonormalizeBasis();
 }}
 
 function project(x, y, z) {{
-  const p = rotatePoint(x, y, z);
   const scale = baseScale * state.zoom;
+  const sx = dotPoint(state.basis.right, x, y, z);
+  const sy = dotPoint(state.basis.up, x, y, z);
+  const depth = dotPoint(state.basis.forward, x, y, z);
   return {{
-    x: width / 2 + state.panX + p[0] * scale,
-    y: height / 2 + state.panY - p[1] * scale,
-    d: p[2]
+    x: width / 2 + state.panX + sx * scale,
+    y: height / 2 + state.panY - sy * scale,
+    d: depth
   }};
 }}
 
 function drawAxes() {{
+  if (state.showFrame) {{
+    drawFrameAxes();
+    return;
+  }}
   const axes = [
     ["x", radius, 0, 0, "#444"],
     ["y", 0, radius, 0, "#444"],
@@ -441,6 +788,87 @@ function drawAxes() {{
   ctx.restore();
 }}
 
+function point3(x, y, z) {{
+  return {{ x, y, z }};
+}}
+
+function drawLine3(a, b, color, width = 1, alpha = 1) {{
+  const pa = project(a.x, a.y, a.z);
+  const pb = project(b.x, b.y, b.z);
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.beginPath();
+  ctx.moveTo(pa.x, pa.y);
+  ctx.lineTo(pb.x, pb.y);
+  ctx.stroke();
+  ctx.restore();
+}}
+
+function drawText3(text, p, dx = 0, dy = 0, color = "#555", align = "center") {{
+  const q = project(p.x, p.y, p.z);
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.font = "12px sans-serif";
+  ctx.textAlign = align;
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, q.x + dx, q.y + dy);
+  ctx.restore();
+}}
+
+function drawLine2(x0, y0, x1, y1, color = "#666", width = 1) {{
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  ctx.lineTo(x1, y1);
+  ctx.stroke();
+  ctx.restore();
+}}
+
+function drawTickAt(p, dx, dy) {{
+  const q = project(p.x, p.y, p.z);
+  drawLine2(q.x, q.y, q.x + dx, q.y + dy, "#666", 1);
+}}
+
+function drawFrameAxes() {{
+  const x0 = bounds.x[0], x1 = bounds.x[1];
+  const y0 = bounds.y[0], y1 = bounds.y[1];
+  const z0 = bounds.z[0], z1 = bounds.z[1];
+  const corners = [
+    point3(x0, y0, z0), point3(x1, y0, z0), point3(x1, y1, z0), point3(x0, y1, z0),
+    point3(x0, y0, z1), point3(x1, y0, z1), point3(x1, y1, z1), point3(x0, y1, z1)
+  ];
+  const edges = [[0,1], [1,2], [2,3], [3,0], [4,5], [5,6], [6,7], [7,4], [0,4], [1,5], [2,6], [3,7]];
+  for (const [a, b] of edges) drawLine3(corners[a], corners[b], "#c9c9c9", 1, 0.65);
+
+  drawLine3(point3(x0, y0, z0), point3(x1, y0, z0), "#666", 1.5, 1);
+  drawLine3(point3(x1, y0, z0), point3(x1, y1, z0), "#666", 1.5, 1);
+  drawLine3(point3(x1, y1, z0), point3(x1, y1, z1), "#666", 1.5, 1);
+
+  for (const x of ticksFor(x0, x1)) {{
+    const p = point3(x, y0, z0);
+    drawTickAt(p, 0, 6);
+    drawText3(formatTick(x), p, 0, 17, "#666");
+  }}
+  for (const y of ticksFor(y0, y1)) {{
+    const p = point3(x1, y, z0);
+    drawTickAt(p, 6, 0);
+    drawText3(formatTick(y), p, 14, 0, "#666", "left");
+  }}
+  for (const z of ticksFor(z0, z1)) {{
+    const p = point3(x1, y1, z);
+    drawTickAt(p, 6, 0);
+    drawText3(formatTick(z), p, 14, 0, "#666", "left");
+  }}
+
+  drawText3("x [cm]", point3((x0 + x1) / 2, y0, z0), 0, 34, "#333");
+  drawText3("y [cm]", point3(x1, (y0 + y1) / 2, z0), 34, 0, "#333", "left");
+  drawText3("z [cm]", point3(x1, y1, (z0 + z1) / 2), 34, 0, "#333", "left");
+}}
+
 function render() {{
   framePending = false;
   ctx.clearRect(0, 0, width, height);
@@ -448,8 +876,15 @@ function render() {{
   ctx.fillRect(0, 0, width, height);
   drawAxes();
   const points = [];
+  const timeFiltering = state.timeAvailable && state.timeCut < state.timeMax;
   for (const t of data.traces) {{
+    if (t.hidden) continue;
     for (let i = 0; i < t.x.length; i++) {{
+      const hitTime = t.time[i];
+      if (state.timeAvailable) {{
+        if (finiteTime(hitTime) && hitTime > state.timeCut) continue;
+        if (!finiteTime(hitTime) && timeFiltering) continue;
+      }}
       const p = project(t.x[i], t.y[i], t.z[i]);
       points.push([p.d, p.x, p.y, t.color]);
     }}
@@ -470,8 +905,7 @@ function scheduleRender() {{
 }}
 
 function resetView() {{
-  state.yaw = -0.65;
-  state.pitch = -0.35;
+  state.basis = cloneBasis(defaultBasis);
   state.zoom = 1.0;
   state.panX = 0;
   state.panY = 0;
@@ -499,9 +933,10 @@ window.addEventListener("mousemove", event => {{
     state.panX += dx;
     state.panY += dy;
   }} else {{
-    state.yaw += dx * 0.006;
-    state.pitch += dy * 0.006;
-    state.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, state.pitch));
+    const rightAxis = state.basis.right.slice();
+    const upAxis = state.basis.up.slice();
+    rotateBasis(upAxis, dx * 0.006);
+    rotateBasis(rightAxis, -dy * 0.006);
   }}
   scheduleRender();
 }});
@@ -514,6 +949,17 @@ canvas.addEventListener("wheel", event => {{
 canvas.addEventListener("dblclick", resetView);
 canvas.addEventListener("contextmenu", event => event.preventDefault());
 document.getElementById("reset").addEventListener("click", resetView);
+frameToggle.addEventListener("change", () => {{
+  state.showFrame = frameToggle.checked;
+  scheduleRender();
+}});
+playButton.addEventListener("click", togglePlayback);
+timeSlider.addEventListener("input", () => {{
+  setPlaying(false);
+  state.timeCut = sliderToTime();
+  updateTimeControls();
+  scheduleRender();
+}});
 window.addEventListener("resize", resize);
 resize();
 </script>
@@ -529,14 +975,16 @@ def write_interactive_xyz(points, title, outpath):
 
     traces = []
     for item in selected:
-        x, y, z = clean_xyz(item)
+        x, y, z, time = clean_xyzt(item)
         traces.append({
             "name": item["collection"].replace("Overlay", ""),
             "color": COLORS[item["collection"]],
             "total": item["n_hits"],
+            "time_source": item["time_source"],
             "x": x,
             "y": y,
             "z": z,
+            "time": time,
         })
 
     payload = {"title": f"{title} interactive xyz", "traces": traces}
