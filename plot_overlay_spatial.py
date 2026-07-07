@@ -43,6 +43,21 @@ COLORS = {
     "OverlayHCalEndcapCollection": "#111111",
 }
 
+ENVELOPE_OVERRIDES = {
+    "OverlayVertexBarrelCollection": {"type": "barrel", "rin": 3.0, "rout": 11.5, "zmax": 6.5, "segments": 64},
+    "OverlayVertexEndcapCollection": {"type": "endcap", "rin": 3.0, "rout": 11.5, "zin": 8.0, "zout": 28.5, "segments": 64},
+    "OverlayInnerTrackerBarrelCollection": {"type": "barrel", "rin": 12.0, "rout": 58.0, "zmax": 70.0, "segments": 64},
+    "OverlayInnerTrackerEndcapCollection": {"type": "endcap", "rin": 6.0, "rout": 58.0, "zin": 80.0, "zout": 230.6, "segments": 64},
+    "OverlayOuterTrackerBarrelCollection": {"type": "barrel", "rin": 58.0, "rout": 150.0, "zmax": 130.0, "segments": 64},
+    "OverlayOuterTrackerEndcapCollection": {"type": "endcap", "rin": 6.0, "rout": 150.0, "zin": 131.0, "zout": 230.6, "segments": 64},
+    "OverlayECalBarrelCollection": {"type": "barrel", "rin": 185.7, "rout": 212.45, "zmax": 230.7, "segments": 12},
+    "OverlayECalEndcapCollection": {"type": "endcap", "rin": 31.0, "rout": 212.45, "zin": 230.7, "zout": 257.45, "segments": 12},
+    "OverlayHCalBarrelCollection": {"type": "barrel", "rin": 212.6, "rout": 411.35, "zmax": 257.45, "segments": 12},
+    "OverlayHCalEndcapCollection": {"type": "endcap", "rin": 31.0, "rout": 411.35, "zin": 257.55, "zout": 460.0, "segments": 12},
+}
+
+NOZZLE = {"angle_deg": 10.0, "zin": 6.0, "zout": 600.0}
+
 
 ak = None
 np = None
@@ -56,6 +71,7 @@ def parse_args():
     parser.add_argument("--label", required=True)
     parser.add_argument("--outdir", default="plots")
     parser.add_argument("--max-points-per-collection", type=int, default=5000)
+    parser.add_argument("--geometry", choices=["envelope", "off"], default="envelope")
     return parser.parse_args()
 
 
@@ -172,6 +188,55 @@ def downsample(*arrays, max_points):
     return tuple(array[indices] for array in arrays)
 
 
+def finite_values(*arrays):
+    mask = None
+    for array in arrays:
+        current = np.isfinite(array)
+        mask = current if mask is None else mask & current
+    if mask is None:
+        return ()
+    return tuple(array[mask] for array in arrays)
+
+
+def percentile_bounds(values, lo=0.5, hi=99.5):
+    finite = values[np.isfinite(values)]
+    if not len(finite):
+        return None
+    return float(np.percentile(finite, lo)), float(np.percentile(finite, hi))
+
+
+def collection_envelope(name, x, y, z):
+    if name in ENVELOPE_OVERRIDES:
+        return dict(ENVELOPE_OVERRIDES[name])
+
+    x, y, z = finite_values(x, y, z)
+    if not len(x):
+        return None
+
+    r = np.sqrt(x * x + y * y)
+    rbounds = percentile_bounds(r)
+    zbounds = percentile_bounds(np.abs(z))
+    if rbounds is None or zbounds is None:
+        return None
+
+    if "Barrel" in name:
+        return {
+            "type": "barrel",
+            "rin": rbounds[0],
+            "rout": rbounds[1],
+            "zmax": zbounds[1],
+            "segments": 64,
+        }
+    return {
+        "type": "endcap",
+        "rin": rbounds[0],
+        "rout": rbounds[1],
+        "zin": zbounds[0],
+        "zout": zbounds[1],
+        "segments": 64,
+    }
+
+
 def collection_payload(events, path, event, collection, value_field, max_points):
     x = values(events, branch_name(events, collection, "position.x"), event) / 10.0
     y = values(events, branch_name(events, collection, "position.y"), event) / 10.0
@@ -182,15 +247,17 @@ def collection_payload(events, path, event, collection, value_field, max_points)
     x = x[:n]
     y = y[:n]
     z = z[:n]
+    r_full = np.sqrt(x * x + y * y)
+    envelope = collection_envelope(collection, x, y, z)
     time, time_source = time_values(events, collection, event, n)
-    plotted_x, plotted_y, plotted_z, plotted_time = downsample(
+    plotted_x, plotted_y, plotted_z, plotted_r, plotted_time = downsample(
         x,
         y,
         z,
+        r_full,
         time,
         max_points=max_points,
     )
-    r = np.sqrt(plotted_x * plotted_x + plotted_y * plotted_y)
     finite_time = time[np.isfinite(time)]
 
     row = {
@@ -210,6 +277,8 @@ def collection_payload(events, path, event, collection, value_field, max_points)
         "y_max_cm": float(np.max(y)) if n else "",
         "z_min_cm": float(np.min(z)) if n else "",
         "z_max_cm": float(np.max(z)) if n else "",
+        "r_min_cm": float(np.min(r_full)) if n else "",
+        "r_max_cm": float(np.max(r_full)) if n else "",
     }
     points = {
         "collection": collection,
@@ -217,10 +286,11 @@ def collection_payload(events, path, event, collection, value_field, max_points)
         "y": plotted_y,
         "z": plotted_z,
         "time": plotted_time,
-        "r": r,
+        "r": plotted_r,
         "n_hits": n,
         "plotted_hits": len(plotted_x),
         "time_source": time_source,
+        "envelope": envelope,
     }
     return row, points
 
@@ -244,6 +314,8 @@ def write_rows(path, rows):
         "y_max_cm",
         "z_min_cm",
         "z_max_cm",
+        "r_min_cm",
+        "r_max_cm",
     ]
     with open(path, "w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
@@ -291,7 +363,65 @@ def set_equal_3d(ax, x, y, z):
         pass
 
 
-def draw_projection(points, x_key, y_key, xlabel, ylabel, title, outpath):
+def envelope_projection_points(envelope, x_key, y_key):
+    if envelope is None:
+        return None
+    rout = envelope["rout"]
+    if {x_key, y_key} == {"x", "y"}:
+        return np.asarray([-rout, rout]), np.asarray([-rout, rout])
+    if x_key == "z" and y_key == "r":
+        if envelope["type"] == "barrel":
+            return np.asarray([-envelope["zmax"], envelope["zmax"]]), np.asarray([envelope["rin"], rout])
+        return np.asarray([-envelope["zout"], envelope["zout"]]), np.asarray([envelope["rin"], rout])
+    return None
+
+
+def draw_ring_xy(ax, radius, segments, color, alpha):
+    if segments <= 16:
+        from matplotlib.patches import Polygon
+        phi = np.linspace(0, 2 * np.pi, segments, endpoint=False) + np.pi / segments
+        xy = np.column_stack([radius * np.cos(phi), radius * np.sin(phi)])
+        ax.add_patch(Polygon(xy, closed=True, fill=False, edgecolor=color, linewidth=1.0, alpha=alpha))
+    else:
+        from matplotlib.patches import Circle
+        ax.add_patch(Circle((0, 0), radius, fill=False, edgecolor=color, linewidth=1.0, alpha=alpha))
+
+
+def draw_envelope_projection(ax, envelope, color, x_key, y_key):
+    if envelope is None:
+        return
+    alpha = 0.28
+    if {x_key, y_key} == {"x", "y"}:
+        draw_ring_xy(ax, envelope["rin"], envelope["segments"], color, alpha)
+        draw_ring_xy(ax, envelope["rout"], envelope["segments"], color, alpha)
+    elif x_key == "z" and y_key == "r":
+        from matplotlib.patches import Rectangle
+        if envelope["type"] == "barrel":
+            ax.add_patch(Rectangle(
+                (-envelope["zmax"], envelope["rin"]),
+                2 * envelope["zmax"],
+                envelope["rout"] - envelope["rin"],
+                fill=False,
+                edgecolor=color,
+                linewidth=1.0,
+                alpha=alpha,
+            ))
+        else:
+            for sign in (-1, 1):
+                x0 = sign * envelope["zin"] if sign > 0 else -envelope["zout"]
+                width = envelope["zout"] - envelope["zin"]
+                ax.add_patch(Rectangle(
+                    (x0, envelope["rin"]),
+                    width,
+                    envelope["rout"] - envelope["rin"],
+                    fill=False,
+                    edgecolor=color,
+                    linewidth=1.0,
+                    alpha=alpha,
+                ))
+
+
+def draw_projection(points, x_key, y_key, xlabel, ylabel, title, outpath, geometry=True):
     selected = [item for item in points if item["plotted_hits"]]
     if not selected:
         return False
@@ -303,6 +433,19 @@ def draw_projection(points, x_key, y_key, xlabel, ylabel, title, outpath):
     plotted_hits = 0
 
     for item in selected:
+        if geometry:
+            draw_envelope_projection(
+                ax,
+                item.get("envelope"),
+                COLORS[item["collection"]],
+                x_key,
+                y_key,
+            )
+            extents = envelope_projection_points(item.get("envelope"), x_key, y_key)
+            if extents is not None:
+                all_x.append(extents[0])
+                all_y.append(extents[1])
+
         x = item[x_key]
         y = item[y_key]
         all_x.append(x)
@@ -448,6 +591,7 @@ canvas.dragging {{ cursor: grabbing; }}
   <span id="title"></span>
   <button id="reset">Reset</button>
   <label class="toggle"><input id="frame-toggle" type="checkbox" checked> Box axes</label>
+  <label class="toggle"><input id="geom-toggle" type="checkbox" checked> Geometry</label>
   <span class="time-control">
     <button id="time-play" type="button">Play</button>
     <input id="time-slider" type="range" min="0" max="1000" value="1000" disabled>
@@ -464,6 +608,7 @@ const ctx = canvas.getContext("2d");
 const title = document.getElementById("title");
 const legend = document.getElementById("legend");
 const frameToggle = document.getElementById("frame-toggle");
+const geomToggle = document.getElementById("geom-toggle");
 const playButton = document.getElementById("time-play");
 const timeSlider = document.getElementById("time-slider");
 const timeLabel = document.getElementById("time-label");
@@ -478,6 +623,7 @@ const state = {{
   panX: 0,
   panY: 0,
   showFrame: true,
+  showGeometry: true,
   timeAvailable: false,
   timeMin: 0,
   timeMax: 0,
@@ -501,6 +647,7 @@ data.traces.forEach(t => {{
   t.hidden = false;
   if (!Array.isArray(t.time)) t.time = [];
 }});
+if (!Array.isArray(data.geometry)) data.geometry = [];
 computeTimeRange();
 updateTimeControls();
 buildLegend();
@@ -806,6 +953,23 @@ function drawLine3(a, b, color, width = 1, alpha = 1) {{
   ctx.restore();
 }}
 
+function drawPoly3(points, color, alpha = 0.22, width = 1) {{
+  if (points.length < 2) return;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.beginPath();
+  const first = project(points[0].x, points[0].y, points[0].z);
+  ctx.moveTo(first.x, first.y);
+  for (let i = 1; i < points.length; i++) {{
+    const p = project(points[i].x, points[i].y, points[i].z);
+    ctx.lineTo(p.x, p.y);
+  }}
+  ctx.stroke();
+  ctx.restore();
+}}
+
 function drawText3(text, p, dx = 0, dy = 0, color = "#555", align = "center") {{
   const q = project(p.x, p.y, p.z);
   ctx.save();
@@ -869,12 +1033,91 @@ function drawFrameAxes() {{
   drawText3("z [cm]", point3(x1, y1, (z0 + z1) / 2), 34, 0, "#333", "left");
 }}
 
+function ringPoints(radius, z, segments) {{
+  const points = [];
+  const offset = segments <= 16 ? Math.PI / segments : 0;
+  for (let i = 0; i <= segments; i++) {{
+    const phi = offset + 2 * Math.PI * i / segments;
+    points.push(point3(radius * Math.cos(phi), radius * Math.sin(phi), z));
+  }}
+  return points;
+}}
+
+function drawGeometryRing(radius, z, segments, color, alpha) {{
+  drawPoly3(ringPoints(radius, z, segments), color, alpha, 1);
+}}
+
+function drawBarrelGeometry(g) {{
+  const segments = g.segments || 64;
+  const alpha = 0.22;
+  for (const radius of [g.rin, g.rout]) {{
+    drawGeometryRing(radius, -g.zmax, segments, g.color, alpha);
+    drawGeometryRing(radius, g.zmax, segments, g.color, alpha);
+  }}
+  for (let i = 0; i < 6; i++) {{
+    const phi = 2 * Math.PI * i / 6;
+    const x = g.rout * Math.cos(phi);
+    const y = g.rout * Math.sin(phi);
+    drawLine3(point3(x, y, -g.zmax), point3(x, y, g.zmax), g.color, 1, alpha);
+  }}
+}}
+
+function drawEndcapGeometry(g) {{
+  const segments = g.segments || 64;
+  const alpha = 0.22;
+  for (const sign of [-1, 1]) {{
+    for (const z of [sign * g.zin, sign * g.zout]) {{
+      drawGeometryRing(g.rin, z, segments, g.color, alpha);
+      drawGeometryRing(g.rout, z, segments, g.color, alpha);
+    }}
+    for (let i = 0; i < 4; i++) {{
+      const phi = 2 * Math.PI * i / 4;
+      const c = Math.cos(phi);
+      const s = Math.sin(phi);
+      for (const z of [sign * g.zin, sign * g.zout]) {{
+        drawLine3(point3(g.rin * c, g.rin * s, z), point3(g.rout * c, g.rout * s, z), g.color, 1, alpha);
+      }}
+    }}
+  }}
+}}
+
+function drawNozzleGeometry(g) {{
+  const segments = g.segments || 64;
+  const alpha = 0.18;
+  const tanAngle = Math.tan((g.angle_deg || 10) * Math.PI / 180);
+  const zLimit = Math.min(Math.abs(bounds.z[0]), Math.abs(bounds.z[1]), g.zout);
+  if (zLimit <= g.zin) return;
+  const zs = [g.zin, g.zin + 0.33 * (zLimit - g.zin), g.zin + 0.66 * (zLimit - g.zin), zLimit];
+  for (const sign of [-1, 1]) {{
+    for (const zabs of zs) drawGeometryRing(zabs * tanAngle, sign * zabs, segments, g.color, alpha);
+    for (let i = 0; i < 4; i++) {{
+      const phi = 2 * Math.PI * i / 4;
+      const c = Math.cos(phi);
+      const s = Math.sin(phi);
+      const a = zs[0] * tanAngle;
+      const b = zs[zs.length - 1] * tanAngle;
+      drawLine3(point3(a * c, a * s, sign * zs[0]), point3(b * c, b * s, sign * zs[zs.length - 1]), g.color, 1, alpha);
+    }}
+  }}
+}}
+
+function drawGeometry() {{
+  if (!state.showGeometry) return;
+  for (const g of data.geometry) {{
+    if (g.trace >= 0 && data.traces[g.trace]?.hidden) continue;
+    if (g.type === "barrel") drawBarrelGeometry(g);
+    else if (g.type === "endcap") drawEndcapGeometry(g);
+    else if (g.type === "nozzle") drawNozzleGeometry(g);
+  }}
+}}
+
 function render() {{
   framePending = false;
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = "#f7f7f7";
   ctx.fillRect(0, 0, width, height);
   drawAxes();
+  drawGeometry();
   const points = [];
   const timeFiltering = state.timeAvailable && state.timeCut < state.timeMax;
   for (const t of data.traces) {{
@@ -953,6 +1196,10 @@ frameToggle.addEventListener("change", () => {{
   state.showFrame = frameToggle.checked;
   scheduleRender();
 }});
+geomToggle.addEventListener("change", () => {{
+  state.showGeometry = geomToggle.checked;
+  scheduleRender();
+}});
 playButton.addEventListener("click", togglePlayback);
 timeSlider.addEventListener("input", () => {{
   setPlaying(false);
@@ -968,14 +1215,16 @@ resize();
 """
 
 
-def write_interactive_xyz(points, title, outpath):
+def write_interactive_xyz(points, title, outpath, geometry=True):
     selected = [item for item in points if item["plotted_hits"]]
     if not selected:
         return False
 
     traces = []
+    geometry_entries = []
     for item in selected:
         x, y, z, time = clean_xyzt(item)
+        trace_index = len(traces)
         traces.append({
             "name": item["collection"].replace("Overlay", ""),
             "color": COLORS[item["collection"]],
@@ -986,14 +1235,33 @@ def write_interactive_xyz(points, title, outpath):
             "z": z,
             "time": time,
         })
+        if geometry and item.get("envelope") is not None:
+            geometry_entries.append({
+                "trace": trace_index,
+                "color": COLORS[item["collection"]],
+                **item["envelope"],
+            })
 
-    payload = {"title": f"{title} interactive xyz", "traces": traces}
+    if geometry:
+        geometry_entries.append({
+            "trace": -1,
+            "type": "nozzle",
+            "color": "#666666",
+            "segments": 64,
+            **NOZZLE,
+        })
+
+    payload = {
+        "title": f"{title} interactive xyz",
+        "traces": traces,
+        "geometry": geometry_entries,
+    }
     with open(outpath, "w", encoding="utf-8") as handle:
         handle.write(interactive_html(payload))
     return True
 
 
-def draw_group(points_by_collection, group, prefix, outdir):
+def draw_group(points_by_collection, group, prefix, outdir, geometry=True):
     group_points = [
         points_by_collection[name]
         for name in GROUPS[group]
@@ -1011,18 +1279,18 @@ def draw_group(points_by_collection, group, prefix, outdir):
     n_written = 0
     for suffix, x_key, y_key, xlabel, ylabel in outputs:
         outpath = os.path.join(outdir, f"{prefix}__overlay_{group}_{suffix}.pdf")
-        if draw_projection(group_points, x_key, y_key, xlabel, ylabel, title, outpath):
+        if draw_projection(group_points, x_key, y_key, xlabel, ylabel, title, outpath, geometry=geometry):
             n_written += 1
     outpath = os.path.join(outdir, f"{prefix}__overlay_{group}_xyz.pdf")
     if draw_xyz(group_points, title, outpath):
         n_written += 1
     outpath = os.path.join(outdir, f"{prefix}__overlay_{group}_xyz.html")
-    if write_interactive_xyz(group_points, title, outpath):
+    if write_interactive_xyz(group_points, title, outpath, geometry=geometry):
         n_written += 1
     return n_written
 
 
-def inspect_file(path, outdir, max_points):
+def inspect_file(path, outdir, max_points, geometry=True):
     rows = []
     n_plots = 0
     with uproot.open(path) as root_file:
@@ -1043,7 +1311,13 @@ def inspect_file(path, outdir, max_points):
                 rows.append(row)
                 points_by_collection[collection] = points
             for group in GROUPS:
-                n_plots += draw_group(points_by_collection, group, event_prefix, outdir)
+                n_plots += draw_group(
+                    points_by_collection,
+                    group,
+                    event_prefix,
+                    outdir,
+                    geometry=geometry,
+                )
     return rows, n_plots
 
 
@@ -1064,6 +1338,7 @@ def main():
             path,
             outdir,
             args.max_points_per_collection,
+            geometry=args.geometry == "envelope",
         )
         rows.extend(file_rows)
         n_plots += file_plots
