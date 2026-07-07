@@ -128,6 +128,33 @@ def values(events, branch, event):
         return np.asarray([], dtype=np.float64)
 
 
+def contribution_collection_names(collection):
+    names = []
+    if collection.endswith("Collection"):
+        names.append(collection[:-len("Collection")] + "ContributionCollection")
+    names.extend([
+        f"{collection}Contributions",
+        f"{collection}ContributionCollection",
+    ])
+    return list(dict.fromkeys(names))
+
+
+def int_values(events, branch, event):
+    try:
+        return np.asarray(values(events, branch, event), dtype=np.int64).reshape(-1)
+    except Exception:
+        return np.asarray([], dtype=np.int64)
+
+
+def contribution_link_indices(events, collection, event):
+    link_collection = f"_{collection}_contributions"
+    branch = first_branch(events, [
+        f"{link_collection}/{link_collection}.index",
+        f"{link_collection}.index",
+    ])
+    return int_values(events, branch, event)
+
+
 def time_values(events, collection, event, n_hits):
     direct_branch = branch_name(events, collection, "time")
     if direct_branch is not None:
@@ -139,9 +166,15 @@ def time_values(events, collection, event, n_hits):
             time[:min(n_hits, len(direct))] = direct[:n_hits]
             return time, "hit.time_partial"
 
-    contribution_collection = f"{collection}Contributions"
-    contribution_time_branch = branch_name(events, contribution_collection, "time")
-    contribution_times = values(events, contribution_time_branch, event)
+    contribution_times = np.asarray([], dtype=np.float64)
+    contribution_source = None
+    for contribution_collection in contribution_collection_names(collection):
+        contribution_time_branch = branch_name(events, contribution_collection, "time")
+        contribution_times = values(events, contribution_time_branch, event)
+        if len(contribution_times):
+            contribution_source = contribution_collection
+            break
+
     if len(contribution_times) == n_hits:
         return contribution_times[:n_hits], "contribution.time"
 
@@ -164,14 +197,26 @@ def time_values(events, collection, event, n_hits):
         begins = np.asarray([], dtype=np.int64)
         ends = np.asarray([], dtype=np.int64)
     if len(contribution_times) and len(begins) >= n_hits and len(ends) >= n_hits:
+        link_indices = contribution_link_indices(events, collection, event)
         time = np.full(n_hits, np.nan, dtype=np.float64)
         for i, (begin, end) in enumerate(zip(begins[:n_hits], ends[:n_hits])):
-            if 0 <= begin < end <= len(contribution_times):
+            if len(link_indices) and 0 <= begin < end <= len(link_indices):
+                indices = link_indices[begin:end]
+                indices = indices[(0 <= indices) & (indices < len(contribution_times))]
+                if len(indices):
+                    time[i] = float(np.nanmin(contribution_times[indices]))
+            elif 0 <= begin < end <= len(contribution_times):
                 time[i] = float(np.nanmin(contribution_times[begin:end]))
-        return time, "contribution.time_min"
+        source = "contribution_link.time_min" if len(link_indices) else "contribution.time_min"
+        if contribution_source:
+            source = f"{source}:{contribution_source}"
+        return time, source
 
     if len(contribution_times):
-        return np.full(n_hits, np.nan, dtype=np.float64), "contribution.time_unmapped"
+        source = "contribution.time_unmapped"
+        if contribution_source:
+            source = f"{source}:{contribution_source}"
+        return np.full(n_hits, np.nan, dtype=np.float64), source
 
     return np.full(n_hits, np.nan, dtype=np.float64), "missing"
 
@@ -379,6 +424,7 @@ def envelope_projection_points(envelope, x_key, y_key):
 def draw_ring_xy(ax, radius, segments, color, alpha):
     if segments <= 16:
         from matplotlib.patches import Polygon
+        radius = radius / np.cos(np.pi / segments)
         phi = np.linspace(0, 2 * np.pi, segments, endpoint=False) + np.pi / segments
         xy = np.column_stack([radius * np.cos(phi), radius * np.sin(phi)])
         ax.add_patch(Polygon(xy, closed=True, fill=False, edgecolor=color, linewidth=1.0, alpha=alpha))
@@ -1036,9 +1082,10 @@ function drawFrameAxes() {{
 function ringPoints(radius, z, segments) {{
   const points = [];
   const offset = segments <= 16 ? Math.PI / segments : 0;
+  const drawRadius = segments <= 16 ? radius / Math.cos(Math.PI / segments) : radius;
   for (let i = 0; i <= segments; i++) {{
     const phi = offset + 2 * Math.PI * i / segments;
-    points.push(point3(radius * Math.cos(phi), radius * Math.sin(phi), z));
+    points.push(point3(drawRadius * Math.cos(phi), drawRadius * Math.sin(phi), z));
   }}
   return points;
 }}
@@ -1124,17 +1171,18 @@ function render() {{
     if (t.hidden) continue;
     for (let i = 0; i < t.x.length; i++) {{
       const hitTime = t.time[i];
+      let alpha = 0.5;
       if (state.timeAvailable) {{
         if (finiteTime(hitTime) && hitTime > state.timeCut) continue;
-        if (!finiteTime(hitTime) && timeFiltering) continue;
+        if (!finiteTime(hitTime) && timeFiltering) alpha = 0.12;
       }}
       const p = project(t.x[i], t.y[i], t.z[i]);
-      points.push([p.d, p.x, p.y, t.color]);
+      points.push([p.d, p.x, p.y, t.color, alpha]);
     }}
   }}
   points.sort((a, b) => a[0] - b[0]);
-  ctx.globalAlpha = 0.5;
   for (const p of points) {{
+    ctx.globalAlpha = p[4];
     ctx.fillStyle = p[3];
     ctx.fillRect(p[1], p[2], 2, 2);
   }}
