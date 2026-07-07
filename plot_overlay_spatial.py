@@ -24,11 +24,34 @@ CALO_COLLECTIONS = {
     "OverlayHCalEndcapCollection": "energy",
 }
 
-GROUPS = {
-    "all": list(TRACKER_COLLECTIONS) + list(CALO_COLLECTIONS),
-    "tracker": list(TRACKER_COLLECTIONS),
-    "calo": list(CALO_COLLECTIONS),
+SIGNAL_TRACKER_COLLECTIONS = {
+    "VertexBarrelCollection": "eDep",
+    "VertexEndcapCollection": "eDep",
+    "InnerTrackerBarrelCollection": "eDep",
+    "InnerTrackerEndcapCollection": "eDep",
+    "OuterTrackerBarrelCollection": "eDep",
+    "OuterTrackerEndcapCollection": "eDep",
 }
+
+SIGNAL_CALO_COLLECTIONS = {
+    "ECalBarrelCollection": "energy",
+    "ECalEndcapCollection": "energy",
+    "HCalBarrelCollection": "energy",
+    "HCalEndcapCollection": "energy",
+}
+
+SIGNAL_COLLECTIONS = {
+    **SIGNAL_TRACKER_COLLECTIONS,
+    **SIGNAL_CALO_COLLECTIONS,
+}
+
+GROUPS = {
+    "all": list(TRACKER_COLLECTIONS) + list(CALO_COLLECTIONS) + list(SIGNAL_COLLECTIONS),
+    "tracker": list(TRACKER_COLLECTIONS) + list(SIGNAL_TRACKER_COLLECTIONS),
+    "calo": list(CALO_COLLECTIONS) + list(SIGNAL_CALO_COLLECTIONS),
+}
+
+SIGNAL_COLOR = "#00ff66"
 
 COLORS = {
     "OverlayVertexBarrelCollection": "#0066cc",
@@ -41,6 +64,7 @@ COLORS = {
     "OverlayECalEndcapCollection": "#d81b60",
     "OverlayHCalBarrelCollection": "#d00000",
     "OverlayHCalEndcapCollection": "#111111",
+    **{name: SIGNAL_COLOR for name in SIGNAL_COLLECTIONS},
 }
 
 ENVELOPE_OVERRIDES = {
@@ -57,6 +81,7 @@ ENVELOPE_OVERRIDES = {
 }
 
 NOZZLE = {"angle_deg": 10.0, "zin": 6.0, "zout": 600.0}
+HTML_SAMPLE_PERCENT = 10.0
 
 
 ak = None
@@ -71,8 +96,12 @@ def parse_args():
     parser.add_argument("--label", required=True)
     parser.add_argument("--outdir", default="plots")
     parser.add_argument("--max-points-per-collection", type=int, default=5000)
+    parser.add_argument("--plot-percent", type=float, default=None)
     parser.add_argument("--geometry", choices=["envelope", "off"], default="envelope")
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.plot_percent is not None and not (0 < args.plot_percent <= 100):
+        parser.error("--plot-percent must be greater than 0 and at most 100")
+    return args
 
 
 def load_libraries():
@@ -105,10 +134,16 @@ def find_digi_files(inputs):
 
 
 def branch_name(events, collection, field):
-    return first_branch(events, [
+    candidates = [
         f"{collection}/{collection}.{field}",
         f"{collection}.{field}",
-    ])
+    ]
+    if field == "eDep":
+        candidates.extend([
+            f"{collection}/{collection}.EDep",
+            f"{collection}.EDep",
+        ])
+    return first_branch(events, candidates)
 
 
 def first_branch(events, candidates):
@@ -225,11 +260,19 @@ def plot_prefix(path):
     return "__".join(path.parts[-3:]).replace(".edm4hep.root", "").replace(".root", "")
 
 
-def downsample(*arrays, max_points):
+def plotted_count(n, max_points, plot_percent):
+    if n == 0:
+        return 0
+    if plot_percent is not None:
+        return max(1, min(n, int(np.ceil(n * plot_percent / 100.0))))
+    return min(n, max_points)
+
+
+def downsample(*arrays, n_points):
     n = len(arrays[0]) if arrays else 0
-    if n <= max_points:
+    if n <= n_points:
         return arrays
-    indices = np.linspace(0, n - 1, max_points, dtype=np.int64)
+    indices = np.linspace(0, n - 1, n_points, dtype=np.int64)
     return tuple(array[indices] for array in arrays)
 
 
@@ -282,7 +325,13 @@ def collection_envelope(name, x, y, z):
     }
 
 
-def collection_payload(events, path, event, collection, value_field, max_points):
+def display_name(collection, role):
+    if role == "signal":
+        return f"Signal {collection}"
+    return collection.replace("Overlay", "")
+
+
+def collection_payload(events, path, event, collection, value_field, max_points, plot_percent, role):
     x = values(events, branch_name(events, collection, "position.x"), event) / 10.0
     y = values(events, branch_name(events, collection, "position.y"), event) / 10.0
     z = values(events, branch_name(events, collection, "position.z"), event) / 10.0
@@ -293,21 +342,37 @@ def collection_payload(events, path, event, collection, value_field, max_points)
     y = y[:n]
     z = z[:n]
     r_full = np.sqrt(x * x + y * y)
-    envelope = collection_envelope(collection, x, y, z)
+    envelope = collection_envelope(collection, x, y, z) if role == "bib" else None
     time, time_source = time_values(events, collection, event, n)
+    n_plot = plotted_count(n, max_points, plot_percent)
     plotted_x, plotted_y, plotted_z, plotted_r, plotted_time = downsample(
         x,
         y,
         z,
         r_full,
         time,
-        max_points=max_points,
+        n_points=n_plot,
+    )
+    cap_x, cap_y, cap_z, cap_time = downsample(
+        x,
+        y,
+        z,
+        time,
+        n_points=plotted_count(n, max_points, None),
+    )
+    percent_x, percent_y, percent_z, percent_time = downsample(
+        x,
+        y,
+        z,
+        time,
+        n_points=plotted_count(n, max_points, HTML_SAMPLE_PERCENT),
     )
     finite_time = time[np.isfinite(time)]
 
     row = {
         "file": str(path),
         "event": event,
+        "role": role,
         "collection": collection,
         "value_field": value_field,
         "time_source": time_source,
@@ -327,6 +392,9 @@ def collection_payload(events, path, event, collection, value_field, max_points)
     }
     points = {
         "collection": collection,
+        "name": display_name(collection, role),
+        "role": role,
+        "color": COLORS[collection],
         "x": plotted_x,
         "y": plotted_y,
         "z": plotted_z,
@@ -336,6 +404,10 @@ def collection_payload(events, path, event, collection, value_field, max_points)
         "plotted_hits": len(plotted_x),
         "time_source": time_source,
         "envelope": envelope,
+        "html_samples": {
+            "cap": {"x": cap_x, "y": cap_y, "z": cap_z, "time": cap_time},
+            "percent": {"x": percent_x, "y": percent_y, "z": percent_z, "time": percent_time},
+        },
     }
     return row, points
 
@@ -345,6 +417,7 @@ def write_rows(path, rows):
     fields = [
         "file",
         "event",
+        "role",
         "collection",
         "value_field",
         "time_source",
@@ -479,11 +552,13 @@ def draw_projection(points, x_key, y_key, xlabel, ylabel, title, outpath, geomet
     plotted_hits = 0
 
     for item in selected:
-        if geometry:
+        color = item["color"]
+        is_signal = item["role"] == "signal"
+        if geometry and not is_signal:
             draw_envelope_projection(
                 ax,
                 item.get("envelope"),
-                COLORS[item["collection"]],
+                color,
                 x_key,
                 y_key,
             )
@@ -501,11 +576,13 @@ def draw_projection(points, x_key, y_key, xlabel, ylabel, title, outpath, geomet
         ax.scatter(
             x,
             y,
-            s=4,
-            alpha=0.45,
-            linewidths=0,
-            color=COLORS[item["collection"]],
-            label=f"{item['collection'].replace('Overlay', '')} ({item['n_hits']})",
+            s=18 if is_signal else 4,
+            alpha=0.95 if is_signal else 0.45,
+            linewidths=0.35 if is_signal else 0,
+            edgecolors="#111111" if is_signal else "none",
+            color=color,
+            zorder=4 if is_signal else 2,
+            label=f"{item['name']} ({item['n_hits']})",
         )
 
     ax.set_xlabel(xlabel)
@@ -542,6 +619,7 @@ def draw_xyz(points, title, outpath):
     plotted_hits = 0
 
     for item in selected:
+        is_signal = item["role"] == "signal"
         x = item["x"]
         y = item["y"]
         z = item["z"]
@@ -554,11 +632,14 @@ def draw_xyz(points, title, outpath):
             x,
             y,
             z,
-            s=3,
-            alpha=0.35,
-            linewidths=0,
-            color=COLORS[item["collection"]],
-            label=f"{item['collection'].replace('Overlay', '')} ({item['n_hits']})",
+            s=18 if is_signal else 3,
+            alpha=0.95 if is_signal else 0.35,
+            linewidths=0.25 if is_signal else 0,
+            edgecolors="#111111" if is_signal else "none",
+            color=item["color"],
+            label=f"{item['name']} ({item['n_hits']})",
+            depthshade=not is_signal,
+            rasterized=True,
         )
 
     all_x = np.concatenate(all_x)
@@ -572,7 +653,7 @@ def draw_xyz(points, title, outpath):
     ax.set_title(f"{title} xyz\nplotted {plotted_hits:,} of {total_hits:,} hits")
     ax.legend(loc="upper left", fontsize=7, frameon=False)
     plt.tight_layout()
-    plt.savefig(outpath)
+    plt.savefig(outpath, dpi=130)
     plt.close(fig)
     return True
 
@@ -587,11 +668,11 @@ def clean_number_list(values, digits=3):
     return out
 
 
-def clean_xyzt(item):
-    x = np.asarray(item["x"], dtype=np.float64)
-    y = np.asarray(item["y"], dtype=np.float64)
-    z = np.asarray(item["z"], dtype=np.float64)
-    time = np.asarray(item["time"], dtype=np.float64)
+def clean_xyzt_arrays(x, y, z, time):
+    x = np.asarray(x, dtype=np.float64)
+    y = np.asarray(y, dtype=np.float64)
+    z = np.asarray(z, dtype=np.float64)
+    time = np.asarray(time, dtype=np.float64)
     if len(time) != len(x):
         time = np.full(len(x), np.nan, dtype=np.float64)
     mask = np.isfinite(x) & np.isfinite(y) & np.isfinite(z)
@@ -601,6 +682,21 @@ def clean_xyzt(item):
         np.round(z[mask], 3).tolist(),
         clean_number_list(time[mask], digits=4),
     )
+
+
+def clean_xyzt(item):
+    return clean_xyzt_arrays(item["x"], item["y"], item["z"], item["time"])
+
+
+def clean_html_sample(sample):
+    x, y, z, time = clean_xyzt_arrays(sample["x"], sample["y"], sample["z"], sample["time"])
+    return {
+        "x": x,
+        "y": y,
+        "z": z,
+        "time": time,
+        "count": len(x),
+    }
 
 
 def interactive_html(payload):
@@ -619,6 +715,8 @@ html, body {{ margin: 0; height: 100%; font-family: -apple-system, BlinkMacSyste
 button {{ border: 1px solid #bbb; background: white; border-radius: 4px; padding: 4px 8px; cursor: pointer; }}
 button:disabled {{ color: #999; cursor: default; }}
 .toggle {{ display: flex; align-items: center; gap: 4px; font-size: 12px; color: #333; user-select: none; }}
+.sample-control {{ display: flex; align-items: center; gap: 5px; font-size: 12px; color: #333; }}
+.sample-control select {{ font-size: 12px; }}
 .time-control {{ display: flex; align-items: center; gap: 6px; font-size: 12px; color: #333; }}
 #time-slider {{ width: 170px; }}
 #time-label {{ min-width: 110px; color: #444; }}
@@ -638,6 +736,12 @@ canvas.dragging {{ cursor: grabbing; }}
   <button id="reset">Reset</button>
   <label class="toggle"><input id="frame-toggle" type="checkbox" checked> Box axes</label>
   <label class="toggle"><input id="geom-toggle" type="checkbox" checked> Geometry</label>
+  <label class="sample-control">Points
+    <select id="sample-mode">
+      <option value="cap">5k each</option>
+      <option value="percent">10% each</option>
+    </select>
+  </label>
   <span class="time-control">
     <button id="time-play" type="button">Play</button>
     <input id="time-slider" type="range" min="0" max="1000" value="1000" disabled>
@@ -655,6 +759,7 @@ const title = document.getElementById("title");
 const legend = document.getElementById("legend");
 const frameToggle = document.getElementById("frame-toggle");
 const geomToggle = document.getElementById("geom-toggle");
+const sampleModeSelect = document.getElementById("sample-mode");
 const playButton = document.getElementById("time-play");
 const timeSlider = document.getElementById("time-slider");
 const timeLabel = document.getElementById("time-label");
@@ -670,6 +775,7 @@ const state = {{
   panY: 0,
   showFrame: true,
   showGeometry: true,
+  sampleMode: "cap",
   timeAvailable: false,
   timeMin: 0,
   timeMax: 0,
@@ -691,6 +797,8 @@ let framePending = false;
 title.textContent = data.title;
 data.traces.forEach(t => {{
   t.hidden = false;
+  if (!t.samples) t.samples = {{ cap: {{ x: t.x || [], y: t.y || [], z: t.z || [], time: t.time || [], count: (t.x || []).length }} }};
+  if (!t.samples.percent) t.samples.percent = t.samples.cap;
   if (!Array.isArray(t.time)) t.time = [];
 }});
 if (!Array.isArray(data.geometry)) data.geometry = [];
@@ -699,7 +807,10 @@ updateTimeControls();
 buildLegend();
 
 function buildLegend() {{
-  legend.innerHTML = `<div id="legend-help">Click detector part to hide/show</div>` + data.traces.map((t, i) => `<div class="legend-row" data-index="${{i}}" title="time: ${{t.time_source || "missing"}}"><span class="swatch" style="background:${{t.color}}"></span><span>${{t.name}} (${{t.total.toLocaleString()}} hits, ${{t.x.length.toLocaleString()}} plotted)</span></div>`).join("");
+  legend.innerHTML = `<div id="legend-help">Click detector part to hide/show</div>` + data.traces.map((t, i) => {{
+    const sample = activeSample(t);
+    return `<div class="legend-row ${{t.hidden ? "off" : ""}}" data-index="${{i}}" title="time: ${{t.time_source || "missing"}}"><span class="swatch" style="background:${{t.color}}"></span><span>${{t.name}} (${{t.total.toLocaleString()}} hits, ${{sample.x.length.toLocaleString()}} plotted)</span></div>`;
+  }}).join("");
   for (const row of legend.querySelectorAll(".legend-row")) {{
     row.addEventListener("click", () => {{
       const trace = data.traces[Number(row.dataset.index)];
@@ -710,6 +821,10 @@ function buildLegend() {{
   }}
 }}
 
+function activeSample(trace) {{
+  return trace.samples[state.sampleMode] || trace.samples.cap || trace;
+}}
+
 function finiteTime(value) {{
   return typeof value === "number" && Number.isFinite(value);
 }}
@@ -718,7 +833,8 @@ function computeTimeRange() {{
   let lo = Infinity;
   let hi = -Infinity;
   for (const t of data.traces) {{
-    for (const time of t.time) {{
+    const sample = activeSample(t);
+    for (const time of sample.time) {{
       if (!finiteTime(time)) continue;
       lo = Math.min(lo, time);
       hi = Math.max(hi, time);
@@ -816,10 +932,11 @@ function computeScale() {{
   const maxes = {{ x: 0, y: 0, z: 0 }};
   let found = false;
   for (const t of data.traces) {{
-    for (let i = 0; i < t.x.length; i++) {{
-      const x = t.x[i];
-      const y = t.y[i];
-      const z = t.z[i];
+    const sample = activeSample(t);
+    for (let i = 0; i < sample.x.length; i++) {{
+      const x = sample.x[i];
+      const y = sample.y[i];
+      const z = sample.z[i];
       if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) continue;
       maxAbs = Math.max(maxAbs, Math.abs(x), Math.abs(y), Math.abs(z));
       if (!found) {{
@@ -1169,22 +1286,27 @@ function render() {{
   const timeFiltering = state.timeAvailable && state.timeCut < state.timeMax;
   for (const t of data.traces) {{
     if (t.hidden) continue;
-    for (let i = 0; i < t.x.length; i++) {{
-      const hitTime = t.time[i];
-      let alpha = 0.5;
+    const sample = activeSample(t);
+    for (let i = 0; i < sample.x.length; i++) {{
+      const hitTime = sample.time[i];
+      let alpha = t.role === "signal" ? 0.95 : 0.5;
       if (state.timeAvailable) {{
         if (finiteTime(hitTime) && hitTime > state.timeCut) continue;
-        if (!finiteTime(hitTime) && timeFiltering) alpha = 0.12;
+        if (!finiteTime(hitTime) && timeFiltering) alpha = t.role === "signal" ? 0.85 : 0.12;
       }}
-      const p = project(t.x[i], t.y[i], t.z[i]);
-      points.push([p.d, p.x, p.y, t.color, alpha]);
+      const p = project(sample.x[i], sample.y[i], sample.z[i]);
+      points.push([p.d, p.x, p.y, t.color, alpha, t.size || 2, t.role || "bib"]);
     }}
   }}
-  points.sort((a, b) => a[0] - b[0]);
-  for (const p of points) {{
+  const bibPoints = points.filter(p => p[6] !== "signal");
+  const signalPoints = points.filter(p => p[6] === "signal");
+  if (!state.playing && !timeFiltering) bibPoints.sort((a, b) => a[0] - b[0]);
+  if (!state.playing && !timeFiltering) signalPoints.sort((a, b) => a[0] - b[0]);
+  for (const p of [...bibPoints, ...signalPoints]) {{
     ctx.globalAlpha = p[4];
     ctx.fillStyle = p[3];
-    ctx.fillRect(p[1], p[2], 2, 2);
+    const size = p[5];
+    ctx.fillRect(p[1] - size / 2, p[2] - size / 2, size, size);
   }}
   ctx.globalAlpha = 1;
 }}
@@ -1248,6 +1370,15 @@ geomToggle.addEventListener("change", () => {{
   state.showGeometry = geomToggle.checked;
   scheduleRender();
 }});
+sampleModeSelect.addEventListener("change", () => {{
+  state.sampleMode = sampleModeSelect.value;
+  setPlaying(false);
+  computeTimeRange();
+  updateTimeControls();
+  buildLegend();
+  computeScale();
+  scheduleRender();
+}});
 playButton.addEventListener("click", togglePlayback);
 timeSlider.addEventListener("input", () => {{
   setPlaying(false);
@@ -1272,21 +1403,28 @@ def write_interactive_xyz(points, title, outpath, geometry=True):
     geometry_entries = []
     for item in selected:
         x, y, z, time = clean_xyzt(item)
+        samples = {
+            "cap": clean_html_sample(item["html_samples"]["cap"]),
+            "percent": clean_html_sample(item["html_samples"]["percent"]),
+        }
         trace_index = len(traces)
         traces.append({
-            "name": item["collection"].replace("Overlay", ""),
-            "color": COLORS[item["collection"]],
+            "name": item["name"],
+            "role": item["role"],
+            "color": item["color"],
+            "size": 5 if item["role"] == "signal" else 2,
             "total": item["n_hits"],
             "time_source": item["time_source"],
             "x": x,
             "y": y,
             "z": z,
             "time": time,
+            "samples": samples,
         })
         if geometry and item.get("envelope") is not None:
             geometry_entries.append({
                 "trace": trace_index,
-                "color": COLORS[item["collection"]],
+                "color": item["color"],
                 **item["envelope"],
             })
 
@@ -1338,7 +1476,7 @@ def draw_group(points_by_collection, group, prefix, outdir, geometry=True):
     return n_written
 
 
-def inspect_file(path, outdir, max_points, geometry=True):
+def inspect_file(path, outdir, max_points, plot_percent, geometry=True):
     rows = []
     n_plots = 0
     with uproot.open(path) as root_file:
@@ -1347,17 +1485,24 @@ def inspect_file(path, outdir, max_points, geometry=True):
         for event in range(events.num_entries):
             points_by_collection = {}
             event_prefix = prefix if events.num_entries == 1 else f"{prefix}__event_{event}"
-            for collection, value_field in {**TRACKER_COLLECTIONS, **CALO_COLLECTIONS}.items():
-                row, points = collection_payload(
-                    events,
-                    path,
-                    event,
-                    collection,
-                    value_field,
-                    max_points,
-                )
-                rows.append(row)
-                points_by_collection[collection] = points
+            collection_sets = [
+                ("bib", {**TRACKER_COLLECTIONS, **CALO_COLLECTIONS}),
+                ("signal", SIGNAL_COLLECTIONS),
+            ]
+            for role, collections in collection_sets:
+                for collection, value_field in collections.items():
+                    row, points = collection_payload(
+                        events,
+                        path,
+                        event,
+                        collection,
+                        value_field,
+                        max_points,
+                        plot_percent,
+                        role,
+                    )
+                    rows.append(row)
+                    points_by_collection[collection] = points
             for group in GROUPS:
                 n_plots += draw_group(
                     points_by_collection,
@@ -1386,6 +1531,7 @@ def main():
             path,
             outdir,
             args.max_points_per_collection,
+            args.plot_percent,
             geometry=args.geometry == "envelope",
         )
         rows.extend(file_rows)
@@ -1401,6 +1547,9 @@ def main():
         n_hits = sum(row["n_hits"] for row in rows if row["collection"] in GROUPS[group])
         plotted = sum(row["plotted_hits"] for row in rows if row["collection"] in GROUPS[group])
         print(f"{group}: n={n_hits}, plotted={plotted}")
+    signal_hits = sum(row["n_hits"] for row in rows if row["role"] == "signal")
+    signal_plotted = sum(row["plotted_hits"] for row in rows if row["role"] == "signal")
+    print(f"signal: n={signal_hits}, plotted={signal_plotted}")
 
 
 if __name__ == "__main__":
