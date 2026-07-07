@@ -128,141 +128,8 @@ def values(events, branch, event):
         return np.asarray([], dtype=np.float64)
 
 
-def normalized_name(text):
-    return "".join(char for char in text.lower() if char.isalnum())
-
-
-def collection_stem(collection):
-    name = collection[:-10] if collection.endswith("Collection") else collection
-    return normalized_name(name)
-
-
-def branch_collection(branch):
-    if branch is None:
-        return None
-    if "/" in branch:
-        return branch.split("/", 1)[0]
-    if "." in branch:
-        return branch.rsplit(".", 1)[0]
-    return branch
-
-
-def fuzzy_field_branch(events, collection, field, required=(), forbidden=()):
-    branch = branch_name(events, collection, field)
-    if branch is not None:
-        return branch
-
-    stem = collection_stem(collection)
-    for key in events.keys():
-        if not key.endswith(f".{field}"):
-            continue
-        normalized = normalized_name(key)
-        if (
-            stem in normalized
-            and all(word in normalized for word in required)
-            and not any(word in normalized for word in forbidden)
-        ):
-            return key
-    return None
-
-
-def contribution_collections(collection):
-    stem = collection[:-10] if collection.endswith("Collection") else collection
-    return [
-        f"{collection}Contributions",
-        f"{collection}ContributionCollection",
-        f"{collection}ContributionsCollection",
-        f"{stem}Contributions",
-        f"{stem}ContributionCollection",
-        f"{stem}ContributionsCollection",
-    ]
-
-
-def contribution_time_branch(events, collection):
-    for candidate in contribution_collections(collection):
-        branch = branch_name(events, candidate, "time")
-        if branch is not None:
-            return branch
-    return fuzzy_field_branch(events, collection, "time", required=("contribution",))
-
-
-def relation_collections(collection):
-    stem = collection[:-10] if collection.endswith("Collection") else collection
-    return [
-        f"_{collection}_contributions",
-        f"_{collection}_Contributions",
-        f"_{stem}_contributions",
-        f"_{stem}_Contributions",
-        f"{collection}_contributions",
-        f"{stem}_contributions",
-    ]
-
-
-def relation_index_branch(events, collection):
-    for candidate in relation_collections(collection):
-        branch = branch_name(events, candidate, "index")
-        if branch is not None:
-            return branch
-    return fuzzy_field_branch(events, collection, "index", required=("contribution",))
-
-
-def relation_range_branches(events, collection):
-    names = ["contributions", "contribution", "contrib"]
-    begin_candidates = []
-    end_candidates = []
-    for name in names:
-        begin_candidates.extend([
-            f"{collection}/{collection}.{name}_begin",
-            f"{collection}.{name}_begin",
-            f"{collection}/{collection}.{name}.begin",
-            f"{collection}.{name}.begin",
-            f"_{collection}_{name}_begin",
-            f"_{collection}_{name}.begin",
-        ])
-        end_candidates.extend([
-            f"{collection}/{collection}.{name}_end",
-            f"{collection}.{name}_end",
-            f"{collection}/{collection}.{name}.end",
-            f"{collection}.{name}.end",
-            f"_{collection}_{name}_end",
-            f"_{collection}_{name}.end",
-        ])
-
-    begin_branch = first_branch(events, begin_candidates)
-    end_branch = first_branch(events, end_candidates)
-    if begin_branch is not None and end_branch is not None:
-        return begin_branch, end_branch
-
-    stem = collection_stem(collection)
-    for key in events.keys():
-        normalized = normalized_name(key)
-        if stem in normalized and "contribution" in normalized and normalized.endswith("begin"):
-            begin_branch = key
-        elif stem in normalized and "contribution" in normalized and normalized.endswith("end"):
-            end_branch = key
-    return begin_branch, end_branch
-
-
-def nested_index_groups(events, branch, event):
-    if branch is None:
-        return []
-    try:
-        raw = events[branch].array(entry_start=event, entry_stop=event + 1)[0]
-        data = ak.to_list(raw)
-    except Exception:
-        return []
-    if not data or not isinstance(data[0], (list, tuple)):
-        return []
-    return [np.asarray(group, dtype=np.int64) for group in data]
-
-
 def time_values(events, collection, event, n_hits):
-    direct_branch = fuzzy_field_branch(
-        events,
-        collection,
-        "time",
-        forbidden=("contribution",),
-    )
+    direct_branch = branch_name(events, collection, "time")
     if direct_branch is not None:
         direct = values(events, direct_branch, event)
         if len(direct) >= n_hits:
@@ -272,22 +139,24 @@ def time_values(events, collection, event, n_hits):
             time[:min(n_hits, len(direct))] = direct[:n_hits]
             return time, "hit.time_partial"
 
-    contribution_branch = contribution_time_branch(events, collection)
-    contribution_times = values(events, contribution_branch, event)
+    contribution_collection = f"{collection}Contributions"
+    contribution_time_branch = branch_name(events, contribution_collection, "time")
+    contribution_times = values(events, contribution_time_branch, event)
     if len(contribution_times) == n_hits:
         return contribution_times[:n_hits], "contribution.time"
 
-    relation_branch = relation_index_branch(events, collection)
-    groups = nested_index_groups(events, relation_branch, event)
-    if len(contribution_times) and len(groups) >= n_hits:
-        time = np.full(n_hits, np.nan, dtype=np.float64)
-        for i, indices in enumerate(groups[:n_hits]):
-            indices = indices[(indices >= 0) & (indices < len(contribution_times))]
-            if len(indices):
-                time[i] = float(np.nanmin(contribution_times[indices]))
-        return time, "contribution.time_min"
-
-    begin_branch, end_branch = relation_range_branches(events, collection)
+    begin_branch = first_branch(events, [
+        f"{collection}/{collection}.contributions_begin",
+        f"{collection}.contributions_begin",
+        f"_{collection}_contributions_begin",
+        f"_{collection}_contributions.begin",
+    ])
+    end_branch = first_branch(events, [
+        f"{collection}/{collection}.contributions_end",
+        f"{collection}.contributions_end",
+        f"_{collection}_contributions_end",
+        f"_{collection}_contributions.end",
+    ])
     try:
         begins = values(events, begin_branch, event).astype(np.int64, copy=False)
         ends = values(events, end_branch, event).astype(np.int64, copy=False)
@@ -301,17 +170,8 @@ def time_values(events, collection, event, n_hits):
                 time[i] = float(np.nanmin(contribution_times[begin:end]))
         return time, "contribution.time_min"
 
-    indices = values(events, relation_branch, event).astype(np.int64, copy=False)
-    if len(contribution_times) and len(indices) >= n_hits:
-        time = np.full(n_hits, np.nan, dtype=np.float64)
-        for i, index in enumerate(indices[:n_hits]):
-            if 0 <= index < len(contribution_times):
-                time[i] = float(contribution_times[index])
-        return time, "contribution.time_index"
-
     if len(contribution_times):
-        source = branch_collection(contribution_branch) or "contribution"
-        return np.full(n_hits, np.nan, dtype=np.float64), f"{source}.time_unmapped"
+        return np.full(n_hits, np.nan, dtype=np.float64), "contribution.time_unmapped"
 
     return np.full(n_hits, np.nan, dtype=np.float64), "missing"
 
