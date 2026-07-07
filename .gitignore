@@ -2,6 +2,9 @@ plots/
 pfn_data/
 pfn_results/
 bdt_results/
+feature_diagnostics/
+overlay_diagnostics/
+root_sanity_checks/
 __pycache__/
 *.pyc
 HANDOFF.md
