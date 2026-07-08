@@ -7,7 +7,6 @@
 #SBATCH -c 4
 #SBATCH --mem=16G
 #SBATCH -t 00:30:00
-#SBATCH --array=0-19
 #SBATCH --output=pgun_perlmutter_%A_%a.out
 #SBATCH --error=pgun_perlmutter_%A_%a.err
 
