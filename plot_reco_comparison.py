@@ -17,6 +17,18 @@ import uproot
 
 MAX_SCATTER_POINTS = 20000
 
+SAMPLE_LABELS = {
+    "nu14_bib": "Neutrino gun + BIB",
+    "mu_barrel_bib": "Barrel muon + BIB",
+    "mu_endcap_bib": "Endcap muon + BIB",
+    "mu_barrel_nobib": "Barrel muon, no BIB",
+    "mu_endcap_nobib": "Endcap muon, no BIB",
+}
+
+TITLE_LABELS = {
+    "reco_bib812_job0_10evt": "BIB812 Reconstruction Comparison (10 Events/Sample)",
+}
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -29,6 +41,28 @@ def parse_args():
 def clean(text):
     text = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(text).strip())
     return text.strip("_") or "sample"
+
+
+def presentation_label(text):
+    if text in SAMPLE_LABELS:
+        return SAMPLE_LABELS[text]
+
+    label = re.sub(r"[_-]+", " ", str(text)).strip()
+    replacements = {
+        "nu14": "neutrino",
+        "bib812": "BIB812",
+        "nobib": "no BIB",
+        "pt10": "pT 10 GeV",
+        "pt100": "pT 100 GeV",
+        "theta10 170": "theta 10-170 deg",
+    }
+    for old, new in replacements.items():
+        label = re.sub(rf"\b{old}\b", new, label, flags=re.IGNORECASE)
+    return label
+
+
+def plot_title(label, text):
+    return text
 
 
 def parse_sample(text):
@@ -292,7 +326,7 @@ def save_bar(path, event_rows, samples, metrics, ylabel, title):
             mean, err = mean_std(event_rows, key, sample)
             means.append(mean)
             errs.append(err)
-        plt.bar(x + (i - (len(samples) - 1) / 2) * width, means, width, yerr=errs, capsize=3, label=sample)
+        plt.bar(x + (i - (len(samples) - 1) / 2) * width, means, width, yerr=errs, capsize=3, label=presentation_label(sample))
     plt.xticks(x, [name for name, _ in metrics], rotation=25, ha="right")
     plt.ylabel(ylabel)
     plt.title(title)
@@ -319,7 +353,7 @@ def save_hist(path, rows, samples, key, xlabel, title, nbins=35, log=True):
     plt.figure(figsize=(5.5, 4))
     for sample, arr in zip(samples, arrays):
         if len(arr):
-            plt.hist(arr, bins=bins, histtype="step", linewidth=1.7, label=f"{sample} ({len(arr)})")
+            plt.hist(arr, bins=bins, histtype="step", linewidth=1.7, label=f"{presentation_label(sample)} ({len(arr)})")
     plt.xlabel(xlabel)
     plt.ylabel("objects" if rows and "object_index" in rows[0] else "events")
     if log:
@@ -343,11 +377,11 @@ def save_multiplicity(path, event_rows, samples, label):
         bins = bins_for(arrays, 20)
         for sample, arr in zip(samples, arrays):
             if len(arr):
-                plt.hist(arr, bins=bins, histtype="step", linewidth=1.5, label=f"{sample}: {metric_label}")
+                plt.hist(arr, bins=bins, histtype="step", linewidth=1.5, label=f"{presentation_label(sample)}: {metric_label}")
     plt.xlabel("objects per event")
     plt.ylabel("events")
     plt.yscale("log")
-    plt.title(f"{label}: reconstructed object multiplicities")
+    plt.title(plot_title(label, "Reconstructed Object Multiplicities"))
     plt.legend(frameon=False, fontsize=8)
     plt.tight_layout()
     plt.savefig(path)
@@ -370,7 +404,7 @@ def save_scatter(path, rows, samples, xkey, ykey, xlabel, ylabel, title, logy=Fa
         n = min(len(x), len(y))
         x, y = downsample(x[:n], y[:n])
         if len(x):
-            plt.scatter(x, y, s=8, alpha=0.45, label=f"{sample} ({n})", rasterized=True)
+            plt.scatter(x, y, s=8, alpha=0.45, label=f"{presentation_label(sample)} ({n})", rasterized=True)
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     if logy:
@@ -498,9 +532,9 @@ def main():
         outdir / f"reco_object_counts_{label}.pdf",
         event_rows,
         samples,
-        [("PFOs", "n_pfos"), ("clusters", "n_clusters"), ("tracks", "n_tracks"), ("track-linked PFOs", "n_pfos_with_tracks")],
+        [("PFOs", "n_pfos"), ("clusters", "n_clusters"), ("tracks", "n_tracks")],
         "mean per event",
-        f"{label}: reconstructed object counts",
+        plot_title(label, "Reconstructed Object Counts"),
     )
     save_bar(
         outdir / f"reco_event_energy_{label}.pdf",
@@ -508,24 +542,24 @@ def main():
         samples,
         [("sum PFO E", "sum_pfo_energy"), ("lead PFO E", "leading_pfo_energy"), ("sum cluster E", "sum_cluster_energy"), ("lead cluster E", "leading_cluster_energy")],
         "GeV",
-        f"{label}: event energy summaries",
+        plot_title(label, "Visible Reconstructed Energy"),
     )
     save_bar(
         outdir / f"pfo_track_fraction_{label}.pdf",
         event_rows,
         samples,
-        [("track-linked PFO fraction", "pfo_track_fraction")],
+        [("track-link fraction", "pfo_track_fraction")],
         "fraction",
-        f"{label}: charged-track association",
+        plot_title(label, "PFO Track Links"),
     )
     save_multiplicity(outdir / f"reco_multiplicity_distributions_{label}.pdf", event_rows, samples, label)
-    save_hist(outdir / f"pfo_energy_{label}.pdf", pfo_rows, samples, "energy", "PFO energy [GeV]", f"{label}: PFO energies")
-    save_hist(outdir / f"cluster_energy_{label}.pdf", cluster_rows, samples, "energy", "cluster energy [GeV]", f"{label}: cluster energies")
-    save_hist(outdir / f"pfo_theta_{label}.pdf", pfo_rows, samples, "theta_deg", "PFO theta [deg]", f"{label}: PFO polar angles", log=False)
-    save_hist(outdir / f"cluster_theta_{label}.pdf", cluster_rows, samples, "theta_deg", "cluster theta [deg]", f"{label}: cluster polar angles", log=False)
-    save_scatter(outdir / f"pfo_energy_vs_theta_{label}.pdf", pfo_rows, samples, "theta_deg", "energy", "PFO theta [deg]", "PFO energy [GeV]", f"{label}: PFO energy vs theta", logy=True)
-    save_scatter(outdir / f"pfo_pt_vs_theta_{label}.pdf", pfo_rows, samples, "theta_deg", "pt", "PFO theta [deg]", "PFO pT [GeV]", f"{label}: PFO pT vs theta", logy=True)
-    save_scatter(outdir / f"cluster_energy_vs_theta_{label}.pdf", cluster_rows, samples, "theta_deg", "energy", "cluster theta [deg]", "cluster energy [GeV]", f"{label}: cluster energy vs theta", logy=True)
+    save_hist(outdir / f"pfo_energy_{label}.pdf", pfo_rows, samples, "energy", "PFO energy [GeV]", plot_title(label, "PFO Energies"))
+    save_hist(outdir / f"cluster_energy_{label}.pdf", cluster_rows, samples, "energy", "cluster energy [GeV]", plot_title(label, "Cluster Energies"))
+    save_hist(outdir / f"pfo_theta_{label}.pdf", pfo_rows, samples, "theta_deg", "PFO theta [deg]", plot_title(label, "PFO Polar Angles"), log=False)
+    save_hist(outdir / f"cluster_theta_{label}.pdf", cluster_rows, samples, "theta_deg", "cluster theta [deg]", plot_title(label, "Cluster Polar Angles"), log=False)
+    save_scatter(outdir / f"pfo_energy_vs_theta_{label}.pdf", pfo_rows, samples, "theta_deg", "energy", "PFO theta [deg]", "PFO energy [GeV]", plot_title(label, "PFO Energy vs Theta"), logy=True)
+    save_scatter(outdir / f"pfo_pt_vs_theta_{label}.pdf", pfo_rows, samples, "theta_deg", "pt", "PFO theta [deg]", "PFO pT [GeV]", plot_title(label, "PFO pT vs Theta"), logy=True)
+    save_scatter(outdir / f"cluster_energy_vs_theta_{label}.pdf", cluster_rows, samples, "theta_deg", "energy", "cluster theta [deg]", "cluster energy [GeV]", plot_title(label, "Cluster Energy vs Theta"), logy=True)
 
     print(f"Events: {len(event_rows)}")
     print(f"PFOs: {len(pfo_rows)}")

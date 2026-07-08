@@ -52,6 +52,7 @@ GROUPS = {
 }
 
 SIGNAL_COLOR = "#00ff66"
+GEOMETRY_COLOR = "#777777"
 
 COLORS = {
     "OverlayVertexBarrelCollection": "#0066cc",
@@ -65,6 +66,46 @@ COLORS = {
     "OverlayHCalBarrelCollection": "#d00000",
     "OverlayHCalEndcapCollection": "#111111",
     **{name: SIGNAL_COLOR for name in SIGNAL_COLLECTIONS},
+}
+
+COLLECTION_LABELS = {
+    "OverlayVertexBarrelCollection": "Vertex barrel",
+    "OverlayVertexEndcapCollection": "Vertex endcap",
+    "OverlayInnerTrackerBarrelCollection": "Inner tracker barrel",
+    "OverlayInnerTrackerEndcapCollection": "Inner tracker endcap",
+    "OverlayOuterTrackerBarrelCollection": "Outer tracker barrel",
+    "OverlayOuterTrackerEndcapCollection": "Outer tracker endcap",
+    "OverlayECalBarrelCollection": "ECal barrel",
+    "OverlayECalEndcapCollection": "ECal endcap",
+    "OverlayHCalBarrelCollection": "HCal barrel",
+    "OverlayHCalEndcapCollection": "HCal endcap",
+    "VertexBarrelCollection": "Vertex barrel",
+    "VertexEndcapCollection": "Vertex endcap",
+    "InnerTrackerBarrelCollection": "Inner tracker barrel",
+    "InnerTrackerEndcapCollection": "Inner tracker endcap",
+    "OuterTrackerBarrelCollection": "Outer tracker barrel",
+    "OuterTrackerEndcapCollection": "Outer tracker endcap",
+    "ECalBarrelCollection": "ECal barrel",
+    "ECalEndcapCollection": "ECal endcap",
+    "HCalBarrelCollection": "HCal barrel",
+    "HCalEndcapCollection": "HCal endcap",
+}
+
+STUDY_LABELS = {
+    "nu14_bib812_job0_10evt": "Neutrino gun + BIB",
+    "muon_barrel_bib812_job0_10evt": "Barrel muon + BIB",
+    "muon_endcap_bib812_job0_10evt": "Endcap muon + BIB",
+    "nu14_pt100_theta10-170_bib812_20evt": "Neutrino gun + BIB",
+    "muon_barrel_pt10_bib812_20evt": "Barrel muon + BIB",
+    "muon_endcap_pt10_bib812_20evt": "Endcap muon + BIB",
+    "muon_barrel_pt10_nobib_20evt": "Barrel muon, no BIB",
+    "muon_endcap_pt10_nobib_20evt": "Endcap muon, no BIB",
+}
+
+GROUP_LABELS = {
+    "all": "all hits",
+    "tracker": "tracker hits",
+    "calo": "calorimeter hits",
 }
 
 ENVELOPE_OVERRIDES = {
@@ -260,6 +301,32 @@ def plot_prefix(path):
     return "__".join(path.parts[-3:]).replace(".edm4hep.root", "").replace(".root", "")
 
 
+def presentation_label(text):
+    text = str(text)
+    if text in STUDY_LABELS:
+        return STUDY_LABELS[text]
+
+    label = text.replace("__", " ").replace("_", " ")
+    replacements = {
+        "nu14": "neutrino",
+        "bib812": "BIB",
+        "nobib": "no BIB",
+        "pt10": "pT 10 GeV",
+        "pt100": "pT 100 GeV",
+        "theta10-170": "theta 10-170 deg",
+        "20evt": "20 events",
+        "10evt": "10 events",
+    }
+    for old, new in replacements.items():
+        label = label.replace(old, new)
+    return " ".join(label.split())
+
+
+def event_title(study_label, event):
+    title = presentation_label(study_label)
+    return title if event is None else f"{title}, event {event}"
+
+
 def plotted_count(n, max_points, plot_percent):
     if n == 0:
         return 0
@@ -328,7 +395,7 @@ def collection_envelope(name, x, y, z):
 def display_name(collection, role):
     if role == "signal":
         return f"Signal {collection}"
-    return collection.replace("Overlay", "")
+    return collection
 
 
 def collection_payload(events, path, event, collection, value_field, max_points, plot_percent, role):
@@ -500,16 +567,17 @@ def draw_ring_xy(ax, radius, segments, color, alpha):
         radius = radius / np.cos(np.pi / segments)
         phi = np.linspace(0, 2 * np.pi, segments, endpoint=False) + np.pi / segments
         xy = np.column_stack([radius * np.cos(phi), radius * np.sin(phi)])
-        ax.add_patch(Polygon(xy, closed=True, fill=False, edgecolor=color, linewidth=1.0, alpha=alpha))
+        ax.add_patch(Polygon(xy, closed=True, fill=False, edgecolor=color, linewidth=0.8, alpha=alpha))
     else:
         from matplotlib.patches import Circle
-        ax.add_patch(Circle((0, 0), radius, fill=False, edgecolor=color, linewidth=1.0, alpha=alpha))
+        ax.add_patch(Circle((0, 0), radius, fill=False, edgecolor=color, linewidth=0.8, alpha=alpha))
 
 
 def draw_envelope_projection(ax, envelope, color, x_key, y_key):
     if envelope is None:
         return
-    alpha = 0.28
+    alpha = 0.08
+    color = GEOMETRY_COLOR
     if {x_key, y_key} == {"x", "y"}:
         draw_ring_xy(ax, envelope["rin"], envelope["segments"], color, alpha)
         draw_ring_xy(ax, envelope["rout"], envelope["segments"], color, alpha)
@@ -522,7 +590,7 @@ def draw_envelope_projection(ax, envelope, color, x_key, y_key):
                 envelope["rout"] - envelope["rin"],
                 fill=False,
                 edgecolor=color,
-                linewidth=1.0,
+                linewidth=0.8,
                 alpha=alpha,
             ))
         else:
@@ -535,7 +603,7 @@ def draw_envelope_projection(ax, envelope, color, x_key, y_key):
                     envelope["rout"] - envelope["rin"],
                     fill=False,
                     edgecolor=color,
-                    linewidth=1.0,
+                    linewidth=0.8,
                     alpha=alpha,
                 ))
 
@@ -545,7 +613,7 @@ def draw_projection(points, x_key, y_key, xlabel, ylabel, title, outpath, geomet
     if not selected:
         return False
 
-    fig, ax = plt.subplots(figsize=(7, 6))
+    fig, ax = plt.subplots(figsize=(10, 6))
     all_x = []
     all_y = []
     total_hits = 0
@@ -589,7 +657,13 @@ def draw_projection(points, x_key, y_key, xlabel, ylabel, title, outpath, geomet
     ax.set_ylabel(ylabel)
     ax.set_title(f"{title}\nplotted {plotted_hits:,} of {total_hits:,} hits")
     ax.grid(True, alpha=0.25)
-    ax.legend(loc="best", fontsize=7, frameon=False)
+    ax.legend(
+        loc="upper left",
+        bbox_to_anchor=(1.02, 1.0),
+        borderaxespad=0,
+        fontsize=7,
+        frameon=False,
+    )
 
     xlim = axis_limits(np.concatenate(all_x), np.concatenate(all_y))
     if xlim is not None and x_key in {"x", "y"} and y_key in {"x", "y"}:
@@ -599,7 +673,7 @@ def draw_projection(points, x_key, y_key, xlabel, ylabel, title, outpath, geomet
     else:
         ax.set_aspect("auto")
 
-    plt.tight_layout()
+    plt.tight_layout(rect=(0, 0, 0.72, 1))
     plt.savefig(outpath)
     plt.close(fig)
     return True
@@ -610,7 +684,7 @@ def draw_xyz(points, title, outpath):
     if not selected:
         return False
 
-    fig = plt.figure(figsize=(8, 7))
+    fig = plt.figure(figsize=(10, 7))
     ax = fig.add_subplot(111, projection="3d")
     all_x = []
     all_y = []
@@ -651,8 +725,14 @@ def draw_xyz(points, title, outpath):
     ax.set_ylabel("y [cm]")
     ax.set_zlabel("z [cm]")
     ax.set_title(f"{title} xyz\nplotted {plotted_hits:,} of {total_hits:,} hits")
-    ax.legend(loc="upper left", fontsize=7, frameon=False)
-    plt.tight_layout()
+    ax.legend(
+        loc="upper left",
+        bbox_to_anchor=(1.08, 1.0),
+        borderaxespad=0,
+        fontsize=7,
+        frameon=False,
+    )
+    plt.tight_layout(rect=(0, 0, 0.72, 1))
     plt.savefig(outpath, dpi=130)
     plt.close(fig)
     return True
@@ -709,7 +789,8 @@ def interactive_html(payload):
 <title>{payload["title"]}</title>
 <style>
 html, body {{ margin: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f7f7f7; color: #222; }}
-#toolbar {{ position: fixed; left: 12px; top: 10px; z-index: 2; display: flex; align-items: center; gap: 12px; padding: 8px 10px; background: rgba(255,255,255,0.9); border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 1px 8px rgba(0,0,0,0.08); }}
+:root {{ --legend-width: 400px; }}
+#toolbar {{ position: fixed; left: 12px; right: calc(var(--legend-width) + 12px); top: 10px; z-index: 2; display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 8px 10px; background: rgba(255,255,255,0.9); border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 1px 8px rgba(0,0,0,0.08); }}
 #title {{ font-weight: 600; }}
 #help {{ font-size: 12px; color: #555; }}
 button {{ border: 1px solid #bbb; background: white; border-radius: 4px; padding: 4px 8px; cursor: pointer; }}
@@ -720,14 +801,18 @@ button:disabled {{ color: #999; cursor: default; }}
 .time-control {{ display: flex; align-items: center; gap: 6px; font-size: 12px; color: #333; }}
 #time-slider {{ width: 170px; }}
 #time-label {{ min-width: 110px; color: #444; }}
-#legend {{ position: fixed; left: 12px; bottom: 12px; z-index: 2; max-width: 390px; padding: 9px 10px; background: rgba(255,255,255,0.9); border: 1px solid #ddd; border-radius: 6px; font-size: 12px; line-height: 1.45; }}
+#legend {{ position: fixed; right: 0; top: 0; bottom: 0; z-index: 3; box-sizing: border-box; width: var(--legend-width); overflow: auto; padding: 14px 14px 18px; background: rgba(255,255,255,0.94); border-left: 1px solid #d4d4d4; font-size: 11px; line-height: 1.3; box-shadow: -1px 0 8px rgba(0,0,0,0.06); }}
 #legend-help {{ margin-bottom: 5px; color: #555; }}
 .legend-row {{ display: flex; align-items: center; gap: 7px; padding: 2px 3px; border-radius: 4px; cursor: pointer; user-select: none; }}
 .legend-row:hover {{ background: rgba(0,0,0,0.06); }}
 .legend-row.off {{ opacity: 0.35; text-decoration: line-through; }}
 .swatch {{ width: 11px; height: 11px; border-radius: 50%; flex: 0 0 auto; box-shadow: 0 0 0 1px rgba(0,0,0,0.25); }}
-canvas {{ width: 100vw; height: 100vh; display: block; cursor: grab; }}
+canvas {{ position: fixed; left: 0; top: 0; width: calc(100vw - var(--legend-width)); height: 100vh; display: block; cursor: grab; }}
 canvas.dragging {{ cursor: grabbing; }}
+@media (max-width: 900px) {{
+  :root {{ --legend-width: 300px; }}
+  #toolbar {{ right: calc(var(--legend-width) + 8px); gap: 8px; }}
+}}
 </style>
 </head>
 <body>
@@ -807,7 +892,7 @@ updateTimeControls();
 buildLegend();
 
 function buildLegend() {{
-  legend.innerHTML = `<div id="legend-help">Click detector part to hide/show</div>` + data.traces.map((t, i) => {{
+  legend.innerHTML = `<div id="legend-help">Click collection to hide/show</div>` + data.traces.map((t, i) => {{
     const sample = activeSample(t);
     return `<div class="legend-row ${{t.hidden ? "off" : ""}}" data-index="${{i}}" title="time: ${{t.time_source || "missing"}}"><span class="swatch" style="background:${{t.color}}"></span><span>${{t.name}} (${{t.total.toLocaleString()}} hits, ${{sample.x.length.toLocaleString()}} plotted)</span></div>`;
   }}).join("");
@@ -917,8 +1002,8 @@ function togglePlayback() {{
 
 function resize() {{
   const dpr = window.devicePixelRatio || 1;
-  width = window.innerWidth;
-  height = window.innerHeight;
+  width = canvas.clientWidth || window.innerWidth;
+  height = canvas.clientHeight || window.innerHeight;
   canvas.width = Math.floor(width * dpr);
   canvas.height = Math.floor(height * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1213,7 +1298,7 @@ function drawGeometryRing(radius, z, segments, color, alpha) {{
 
 function drawBarrelGeometry(g) {{
   const segments = g.segments || 64;
-  const alpha = 0.22;
+  const alpha = 0.09;
   for (const radius of [g.rin, g.rout]) {{
     drawGeometryRing(radius, -g.zmax, segments, g.color, alpha);
     drawGeometryRing(radius, g.zmax, segments, g.color, alpha);
@@ -1228,7 +1313,7 @@ function drawBarrelGeometry(g) {{
 
 function drawEndcapGeometry(g) {{
   const segments = g.segments || 64;
-  const alpha = 0.22;
+  const alpha = 0.09;
   for (const sign of [-1, 1]) {{
     for (const z of [sign * g.zin, sign * g.zout]) {{
       drawGeometryRing(g.rin, z, segments, g.color, alpha);
@@ -1247,7 +1332,7 @@ function drawEndcapGeometry(g) {{
 
 function drawNozzleGeometry(g) {{
   const segments = g.segments || 64;
-  const alpha = 0.18;
+  const alpha = 0.12;
   const tanAngle = Math.tan((g.angle_deg || 10) * Math.PI / 180);
   const zLimit = Math.min(Math.abs(bounds.z[0]), Math.abs(bounds.z[1]), g.zout);
   if (zLimit <= g.zin) return;
@@ -1424,7 +1509,7 @@ def write_interactive_xyz(points, title, outpath, geometry=True):
         if geometry and item.get("envelope") is not None:
             geometry_entries.append({
                 "trace": trace_index,
-                "color": item["color"],
+                "color": GEOMETRY_COLOR,
                 **item["envelope"],
             })
 
@@ -1438,7 +1523,7 @@ def write_interactive_xyz(points, title, outpath, geometry=True):
         })
 
     payload = {
-        "title": f"{title} interactive xyz",
+        "title": f"{title} 3D",
         "traces": traces,
         "geometry": geometry_entries,
     }
@@ -1447,7 +1532,7 @@ def write_interactive_xyz(points, title, outpath, geometry=True):
     return True
 
 
-def draw_group(points_by_collection, group, prefix, outdir, geometry=True):
+def draw_group(points_by_collection, group, prefix, outdir, title_prefix=None, geometry=True):
     group_points = [
         points_by_collection[name]
         for name in GROUPS[group]
@@ -1456,7 +1541,7 @@ def draw_group(points_by_collection, group, prefix, outdir, geometry=True):
     if not any(item["plotted_hits"] for item in group_points):
         return 0
 
-    title = f"{prefix} overlay {group}"
+    title = f"{title_prefix or prefix}: {GROUP_LABELS.get(group, group)}"
     outputs = [
         ("xy", "x", "y", "x [cm]", "y [cm]"),
         ("xz", "x", "z", "x [cm]", "z [cm]"),
@@ -1476,7 +1561,7 @@ def draw_group(points_by_collection, group, prefix, outdir, geometry=True):
     return n_written
 
 
-def inspect_file(path, outdir, max_points, plot_percent, geometry=True):
+def inspect_file(path, outdir, max_points, plot_percent, study_label=None, geometry=True):
     rows = []
     n_plots = 0
     with uproot.open(path) as root_file:
@@ -1485,6 +1570,7 @@ def inspect_file(path, outdir, max_points, plot_percent, geometry=True):
         for event in range(events.num_entries):
             points_by_collection = {}
             event_prefix = prefix if events.num_entries == 1 else f"{prefix}__event_{event}"
+            title_prefix = event_title(study_label or prefix, event if events.num_entries > 1 else None)
             collection_sets = [
                 ("bib", {**TRACKER_COLLECTIONS, **CALO_COLLECTIONS}),
                 ("signal", SIGNAL_COLLECTIONS),
@@ -1509,6 +1595,7 @@ def inspect_file(path, outdir, max_points, plot_percent, geometry=True):
                     group,
                     event_prefix,
                     outdir,
+                    title_prefix=title_prefix,
                     geometry=geometry,
                 )
     return rows, n_plots
@@ -1532,6 +1619,7 @@ def main():
             outdir,
             args.max_points_per_collection,
             args.plot_percent,
+            study_label=args.label,
             geometry=args.geometry == "envelope",
         )
         rows.extend(file_rows)
