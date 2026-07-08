@@ -7,19 +7,23 @@
 #SBATCH -c 4
 #SBATCH --mem=16G
 #SBATCH -t 00:30:00
-#SBATCH --output=pgun_perlmutter_%j.out
-#SBATCH --error=pgun_perlmutter_%j.err
+#SBATCH --array=0-19
+#SBATCH --output=pgun_perlmutter_%A_%a.out
+#SBATCH --error=pgun_perlmutter_%A_%a.err
 
 set -e
 
-JOB_ID=0
+JOB_ID=${SLURM_ARRAY_TASK_ID}
 NEVENTS=1
-PDG=13
-PT=10
-THETA_MIN=20
-THETA_MAX=22
-USE_BIB=1
-STUDY_NAME="muon-endcap"
+
+JOB_ID=${SLURM_ARRAY_TASK_ID:-${JOB_ID:-0}}
+NEVENTS=${NEVENTS:-1}
+PDG=${PDG:-13}
+PT=${PT:-10}
+THETA_MIN=${THETA_MIN:-20}
+THETA_MAX=${THETA_MAX:-22}
+USE_BIB=${USE_BIB:-1}
+STUDY_NAME="${STUDY_NAME:-muon_endcap_pt10_bib812}"
 
 cd "$SLURM_SUBMIT_DIR"
 source config.sh
