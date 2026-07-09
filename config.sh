@@ -60,7 +60,7 @@ export DATA_BIND="/global/cfs/cdirs/m5197,${PSCRATCH:-$SCRATCH},$HOME"
 export BIB_DIR="$DATA_GROUP_DIR/bib-v3p0-fmt2-norm1/SIM"
 export BIB_MUPLUS="$BIB_DIR/MUPLUS/"
 export BIB_MUMINUS="$BIB_DIR/MUMINUS/"
-export BIB_NUMBER=812
+export BIB_NUMBER=1666
 
 # Broken Perlmutter benchmark setup:
 # export BIB_DIR="$DATA_GROUP_DIR/bib-v3p0-benchmark/SIM"
