@@ -532,7 +532,7 @@ def main():
         outdir / f"reco_object_counts_{label}.pdf",
         event_rows,
         samples,
-        [("PFOs", "n_pfos"), ("clusters", "n_clusters"), ("tracks", "n_tracks")],
+        [("PFOs", "n_pfos"), ("track-linked PFOs", "n_pfos_with_tracks"), ("clusters", "n_clusters"), ("tracks", "n_tracks")],
         "mean per event",
         plot_title(label, "Reconstructed Object Counts"),
     )
