@@ -17,11 +17,34 @@ appears in more than one of train/val/test.
 """
 
 import json
+import os
+import re
 
 import h5py
 import numpy as np
 
 RAW_KEYS = ["px", "py", "pz", "E", "t", "vx", "vy", "vz", "pdg"]
+
+
+def assign_cycle_ids(paths):
+    """Cycle id per file: the integer token in the basename that VARIES
+    across the directory (constant tokens like version tags are skipped).
+
+    Returns (ids, token_pos_from_end, n_distinct). Callers should require
+    n_distinct == len(paths); anything less means the naming convention is
+    ambiguous and needs a hand-picked rule.
+    """
+    tokens = [re.findall(r"\d+", os.path.basename(p)) for p in paths]
+    n_tok = min(len(t) for t in tokens)
+    if n_tok == 0:
+        raise ValueError("filenames contain no integer tokens")
+    best_pos, best_distinct = 1, 0
+    for pos in range(1, n_tok + 1):
+        distinct = len({t[-pos] for t in tokens})
+        if distinct > best_distinct:
+            best_pos, best_distinct = pos, distinct
+    ids = [int(t[-best_pos]) for t in tokens]
+    return ids, best_pos, best_distinct
 
 # Feature layout: 8 continuous + 5 PDG one-hot (gamma, n, e+-, mu+-, other)
 FEATURE_NAMES = [

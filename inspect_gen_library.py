@@ -24,7 +24,6 @@ Run in the mucoll-inspect env (login node is fine, it reads a few files):
 import argparse
 import glob
 import os
-import re
 import sys
 
 import numpy as np
@@ -46,17 +45,19 @@ def parse_args():
     return parser.parse_args()
 
 
-def cycle_id(path):
-    matches = re.findall(r"(\d+)", os.path.basename(path))
-    return int(matches[-1]) if matches else -1
-
-
 def list_library(label, directory):
-    files = sorted(glob.glob(os.path.join(directory, "*.root")), key=cycle_id)
+    import libtest_common as lc
+    files = glob.glob(os.path.join(directory, "*.root"))
     print(f"{label}: {len(files)} files in {directory}")
     if not files:
         sys.exit(f"ERROR: no files for {label} -- check the directory")
-    return {cycle_id(p): p for p in files}
+    ids, pos, distinct = lc.assign_cycle_ids(files)
+    print(f"  e.g. {os.path.basename(files[0])}")
+    print(f"  cycle id = integer token #{pos} from filename end"
+          f" ({distinct} distinct over {len(files)} files)")
+    if distinct != len(files):
+        print(f"  !! WARNING: cycle ids not unique -- pairing will be wrong")
+    return dict(zip(ids, files))
 
 
 def open_events(path):
@@ -102,8 +103,11 @@ def load_particles(path):
 
 
 def clone_key(raw, decimals=None):
-    """Rows keyed on rotation-invariant quantities (identical across clones)."""
-    cols = np.column_stack([raw["E"], raw["pz"], raw["t"], raw["vz"]])
+    """Rows keyed on STORED rotation-invariant quantities (identical bits
+    across clones). Recomputed quantities like E are excluded: the rotation
+    changes px/py at the last float bit, which shifts recomputed E and
+    fragments the groups."""
+    cols = np.column_stack([raw["pz"], raw["t"], raw["vz"]])
     if decimals is not None:
         with np.errstate(divide="ignore"):
             mags = np.where(cols != 0, np.floor(np.log10(np.abs(cols) + 1e-300)), 0)

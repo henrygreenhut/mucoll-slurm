@@ -19,7 +19,6 @@ import argparse
 import glob
 import multiprocessing as mp
 import os
-import re
 import sys
 import time
 
@@ -41,11 +40,19 @@ def parse_args():
     return parser.parse_args()
 
 
-def cycle_id(path):
-    matches = re.findall(r"(\d+)", os.path.basename(path))
-    if not matches:
-        raise ValueError(f"no integer cycle id in filename: {path}")
-    return int(matches[-1])
+def sorted_by_cycle(paths):
+    """Sort paths by cycle id (the varying integer token in the basename)."""
+    import libtest_common as lc
+    ids, pos, distinct = lc.assign_cycle_ids(paths)
+    print(f"cycle id = integer token #{pos} from filename end"
+          f" ({distinct} distinct over {len(paths)} files)")
+    print(f"  e.g. {os.path.basename(paths[0])} -> {ids[0]}")
+    if distinct != len(paths):
+        raise SystemExit("cycle ids are not unique across files -- naming"
+                         " convention ambiguous; inspect filenames and fix"
+                         " assign_cycle_ids selection")
+    order = np.argsort(ids)
+    return [paths[i] for i in order], [ids[i] for i in order]
 
 
 def detect_collection(tree):
@@ -56,7 +63,7 @@ def detect_collection(tree):
 
 
 def read_file(task):
-    """Worker: (path, collection) -> (cycle, dict of flat arrays)."""
+    """Worker: (path, collection) -> (collection, dict of flat arrays)."""
     path, collection = task
     import awkward as ak
     import uproot
@@ -101,21 +108,18 @@ def read_file(task):
         out["E"] = np.sqrt(p2 + m ** 2).astype(np.float32)
     else:
         out["E"] = np.sqrt(p2).astype(np.float32)
-    return cycle_id(path), collection, out
+    return collection, out
 
 
 def main():
     args = parse_args()
-    files = sorted(glob.glob(os.path.join(args.input_dir, "*.root")), key=cycle_id)
+    files = glob.glob(os.path.join(args.input_dir, "*.root"))
     if not files:
         sys.exit(f"no *.root files in {args.input_dir}")
+    files, cycles = sorted_by_cycle(files)
     if args.limit:
-        files = files[: args.limit]
+        files, cycles = files[: args.limit], cycles[: args.limit]
     print(f"{len(files)} files from {args.input_dir}")
-
-    cycles = [cycle_id(p) for p in files]
-    if len(set(cycles)) != len(cycles):
-        sys.exit("duplicate cycle ids in input directory -- fix the file list")
 
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
     tasks = [(p, args.collection) for p in files]
@@ -133,7 +137,7 @@ def main():
         collection_seen = None
 
         with mp.Pool(args.workers) as pool:
-            for i, (cyc, coll, raw) in enumerate(pool.imap(read_file, tasks)):
+            for i, (coll, raw) in enumerate(pool.imap(read_file, tasks)):
                 collection_seen = collection_seen or coll
                 n = len(raw["pdg"])
                 for key, dset in dsets.items():
