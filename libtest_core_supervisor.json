@@ -1,5 +1,5 @@
 {
-  "remote_host": "hgreen@perlmutter.nersc.gov",
+  "remote_host": "perlmutter",
   "remote_dir": "~/mucoll/mucoll-slurm",
   "result_dir": "pfn_results",
   "poll_seconds": 300,
