@@ -62,6 +62,11 @@ def parse_args():
     parser.add_argument("--epochs", type=int, default=200)
     parser.add_argument("--patience", type=int, default=15)
     parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument(
+        "--split-fracs", type=float, nargs=3, metavar=("TRAIN", "VAL", "TEST"),
+        default=(0.60, 0.15, 0.25),
+        help="cycle-level train/validation/test fractions (default: "
+             "0.60 0.15 0.25; use 0.50 0.25 0.25 for large null units)")
     parser.add_argument("--max-minutes", type=float, default=0.0,
                         help="checkpoint and exit after this wall time (0 = off)")
     parser.add_argument("--features", default="paper", choices=["paper", "bib"],
@@ -168,6 +173,10 @@ def main():
         raise SystemExit("--n-files must be a multiple of --clone-factor")
     if args.overlap_test_units < 0:
         raise SystemExit("--overlap-test-units must be non-negative")
+    if any(frac <= 0 for frac in args.split_fracs):
+        raise SystemExit("--split-fracs values must all be positive")
+    if not np.isclose(sum(args.split_fracs), 1.0):
+        raise SystemExit("--split-fracs values must sum to 1")
 
     with open(os.path.join(outdir, "config.json"), "w") as f:
         json.dump(vars(args), f, indent=1)
@@ -181,7 +190,7 @@ def main():
     common, pos1, pos_b = lc.common_positions(store1, store_b)
     print(f"  paired cycles: {len(common)}"
           f" (norm1 files: {store1.n_files}, classB files: {store_b.n_files})")
-    splits = lc.split_indices(len(common))
+    splits = lc.split_indices(len(common), tuple(args.split_fracs))
 
     if args.null_test:
         # both classes norm1; disjoint cycle halves within every split
@@ -197,6 +206,14 @@ def main():
         UnitSampler(store1, split_a, args.n_files, args),   # class 0: unique
         UnitSampler(store_b, split_b, files_b, args),        # class 1: reuse
     ]
+    for cls, sampler in enumerate(samplers):
+        for split_name, positions in sampler.positions.items():
+            if len(positions) < sampler.files_per_unit:
+                raise SystemExit(
+                    "class {} {} split has {} cycles but a unit requires {}; "
+                    "adjust --split-fracs or --n-files".format(
+                        cls, split_name, len(positions),
+                        sampler.files_per_unit))
 
     # --- feature normalization + latent scale from train-split units -----
     if os.path.isfile(stats_path):
