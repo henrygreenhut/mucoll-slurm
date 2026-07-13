@@ -127,11 +127,12 @@ def main():
         fig.savefig(args.out)
         print(f"chart -> {args.out}")
     else:
+        default_titles = {"loss": "PFN training loss",
+                          "auc": "PFN validation AUC"}
         for tag, draw in [("loss", draw_loss), ("auc", draw_auc)]:
             fig, ax = plt.subplots(figsize=(4.8, 3.6), tight_layout=True)
             draw(ax, runs)
-            if args.title:
-                ax.set_title(args.title, fontsize=10)
+            ax.set_title(args.title or default_titles[tag], fontsize=11)
             out = f"{stem}_{tag}{ext}"
             fig.savefig(out)
             plt.close(fig)
