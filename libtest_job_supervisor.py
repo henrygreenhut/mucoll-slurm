@@ -106,7 +106,12 @@ def ssh_command(host, remote_command):
 
 
 def remote_snapshot(plan):
-    """Return ({label: complete}, all submitted/running debug job IDs)."""
+    """Return ({label: complete}, all of the user's live Slurm job IDs).
+
+    Count every QOS here.  Site-specific QOS display/filter behavior can differ
+    from the value passed to sbatch, and missing a live job is more dangerous
+    than conservatively waiting for an unrelated job to leave the queue.
+    """
     result_dir = plan.get("result_dir", "pfn_results")
     commands = ["cd {}".format(shell_path(plan["remote_dir"]))]
     for run in plan["runs"]:
@@ -116,7 +121,7 @@ def remote_snapshot(plan):
             "if [ -s {p} ]; then echo RESULT {l} complete; "
             "else echo RESULT {l} incomplete; fi".format(
                 p=shlex.quote(summary), l=shlex.quote(label)))
-    commands.append("squeue --me -h -q debug -o 'JOB %A'")
+    commands.append("squeue --me -h -o 'JOB %A'")
     result = ssh_command(plan["remote_host"], " && ".join(commands))
     if result.returncode:
         detail = result.stderr.strip() or result.stdout.strip()
