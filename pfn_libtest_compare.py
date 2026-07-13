@@ -55,13 +55,19 @@ def load_history(dirpath, max_epoch=0):
     return epochs, np.asarray([r[1] for r in rows]), np.asarray([r[2] for r in rows])
 
 
-def load_test_auc(dirpath):
+def load_test_result(dirpath):
     path = os.path.join(dirpath, "auc_summary.json")
     if os.path.isfile(path):
         with open(path) as f:
             d = json.load(f)
-        return d.get("test_auc"), d.get("bootstrap_std")
-    return None, None
+        return {
+            "auc": d.get("test_auc"),
+            "std": d.get("bootstrap_std"),
+            # Backwards compatibility: results written before test_mode was
+            # added used mutually disjoint blocked units.
+            "mode": d.get("test_mode", "disjoint"),
+        }
+    return {"auc": None, "std": None, "mode": None}
 
 
 def style_axis(ax):
@@ -87,11 +93,14 @@ def draw_auc(ax, runs):
     for i, (name, path, epochs, _, val_auc) in enumerate(runs):
         color = COLORS[i % len(COLORS)]
         ax.plot(epochs, val_auc, "-", lw=2, color=color, label=name)
-        test_auc, _ = load_test_auc(path)
+        test = load_test_result(path)
+        test_auc = test["auc"]
         if test_auc is not None:
-            ax.plot(epochs[-1], test_auc, "o", ms=7, color=color,
+            overlapping = test["mode"] == "overlapping"
+            ax.plot(epochs[-1], test_auc, "D" if overlapping else "o",
+                    ms=7, color=color,
                     markeredgecolor="white", zorder=5)
-            ax.annotate(f"test {test_auc:.3f}",
+            ax.annotate(f"test {test_auc:.3f}{'*' if overlapping else ''}",
                         (epochs[-1], test_auc), textcoords="offset points",
                         xytext=(6, -4), fontsize=8, color="#444444")
     ax.axhline(0.5, ls="--", lw=1, color="#888888")
@@ -102,6 +111,16 @@ def draw_auc(ax, runs):
     ax.set_ylim(lo, hi)
     ax.legend(frameon=False, fontsize=9, loc="lower right")
     style_axis(ax)
+
+
+def add_overlap_note(fig, runs):
+    if any(load_test_result(path)["mode"] == "overlapping"
+           for _, path, *_ in runs):
+        fig.text(
+            0.5, 0.005,
+            "* exploratory test AUC from overlapping held-out units; "
+            "no independent-unit uncertainty",
+            ha="center", va="bottom", fontsize=8, color="#555555")
 
 
 def main():
@@ -124,6 +143,7 @@ def main():
         draw_auc(ax_auc, runs)
         if args.title:
             fig.suptitle(args.title)
+        add_overlap_note(fig, runs)
         fig.savefig(args.out)
         print(f"chart -> {args.out}")
     else:
@@ -133,15 +153,21 @@ def main():
             fig, ax = plt.subplots(figsize=(4.8, 3.6), tight_layout=True)
             draw(ax, runs)
             ax.set_title(args.title or default_titles[tag], fontsize=11)
+            add_overlap_note(fig, runs)
             out = f"{stem}_{tag}{ext}"
             fig.savefig(out)
             plt.close(fig)
             print(f"chart -> {out}")
 
     for name, path, epochs, loss, val_auc in runs:
-        test_auc, test_std = load_test_auc(path)
-        test = (f"test AUC {test_auc:.4f} +- {test_std:.4f}"
-                if test_auc is not None else "test pending")
+        result = load_test_result(path)
+        test_auc, test_std = result["auc"], result["std"]
+        if test_auc is None:
+            test = "test pending"
+        elif result["mode"] == "overlapping":
+            test = f"test AUC {test_auc:.4f} * (overlapping; no error)"
+        else:
+            test = f"test AUC {test_auc:.4f} +- {test_std:.4f}"
         print(f"  {name:20s} epochs {len(epochs):3d} | first loss {loss[0]:9.3f}"
               f" | last loss {loss[-1]:7.4f} | best val AUC {val_auc.max():.4f}"
               f" | {test}")

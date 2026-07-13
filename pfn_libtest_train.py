@@ -52,6 +52,12 @@ def parse_args():
     parser.add_argument("--clone-factor", type=int, default=42)
     parser.add_argument("--units-per-epoch", type=int, default=2000, help="per class")
     parser.add_argument("--val-units", type=int, default=300, help="per class, fixed")
+    parser.add_argument(
+        "--overlap-test-units", type=int, default=0, metavar="N",
+        help="exploratory test mode: draw N random units per class from the "
+             "held-out cycle pool; units may overlap each other, so no "
+             "independent-unit bootstrap uncertainty is reported (default 0 "
+             "uses disjoint blocked test units)")
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--epochs", type=int, default=200)
     parser.add_argument("--patience", type=int, default=15)
@@ -160,6 +166,8 @@ def main():
 
     if args.n_files % args.clone_factor != 0:
         raise SystemExit("--n-files must be a multiple of --clone-factor")
+    if args.overlap_test_units < 0:
+        raise SystemExit("--overlap-test-units must be non-negative")
 
     with open(os.path.join(outdir, "config.json"), "w") as f:
         json.dump(vars(args), f, indent=1)
@@ -283,31 +291,57 @@ def main():
         state["done"] = True
         save_state(state_path, state)
 
-    # --- test evaluation: disjoint blocked units + unit bootstrap ----------
-    print("test evaluation (disjoint units, best weights)")
+    # --- test evaluation ---------------------------------------------------
     if os.path.isfile(best_w):
         model.load_weights(best_w)
-    blocks_a = lc.blocked_unit_positions(split_a["test"], args.n_files)
-    blocks_b = lc.blocked_unit_positions(split_b["test"], files_b)
-    test_defs = [(0, b) for b in blocks_a] + [(1, b) for b in blocks_b]
+    if args.overlap_test_units:
+        test_mode = "overlapping"
+        print("test evaluation (overlapping held-out units, best weights; "
+              "exploratory AUC)")
+        rng_test = np.random.default_rng(args.seed + 2026)
+        test_defs = [
+            (c, samplers[c].random_unit(rng_test, "test"))
+            for c in (0, 1) for _ in range(args.overlap_test_units)
+        ]
+    else:
+        test_mode = "disjoint"
+        print("test evaluation (disjoint units, best weights)")
+        blocks_a = lc.blocked_unit_positions(split_a["test"], args.n_files)
+        blocks_b = lc.blocked_unit_positions(split_b["test"], files_b)
+        test_defs = [(0, b) for b in blocks_a] + [(1, b) for b in blocks_b]
     y_test, s_test = predict_units(model, test_defs, samplers, mean, std,
                                    args.batch_size)
     auc = lc.auc_score(y_test, s_test)
-    boot_mean, boot_std = lc.bootstrap_auc(s_test[y_test == 0], s_test[y_test == 1])
-    print(f"\nTEST AUC = {auc:.4f} +- {boot_std:.4f} (bootstrap over"
-          f" {int((y_test == 0).sum())} unique / {int((y_test == 1).sum())} reuse units)")
+    if test_mode == "disjoint":
+        boot_mean, boot_std = lc.bootstrap_auc(
+            s_test[y_test == 0], s_test[y_test == 1])
+        uncertainty_note = "unit bootstrap over mutually disjoint test units"
+        print(f"\nTEST AUC = {auc:.4f} +- {boot_std:.4f} (bootstrap over"
+              f" {int((y_test == 0).sum())} unique /"
+              f" {int((y_test == 1).sum())} reuse units)")
+    else:
+        boot_mean, boot_std = None, None
+        uncertainty_note = (
+            "not estimated: constructed test units overlap in source cycles; "
+            "unit-level bootstrap would understate uncertainty")
+        print(f"\nTEST AUC = {auc:.4f} * ({int((y_test == 0).sum())} unique /"
+              f" {int((y_test == 1).sum())} reuse units; overlapping held-out"
+              " units, exploratory point estimate, no bootstrap error)")
 
     with open(os.path.join(outdir, "test_scores.csv"), "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["class", "score", "first_cycle_position", "n_files"])
+        writer.writerow(["class", "score", "first_cycle_position", "n_files",
+                         "test_mode"])
         for (cls, pos), score in zip(test_defs, s_test):
-            writer.writerow([cls, f"{score:.6f}", int(pos[0]), len(pos)])
+            writer.writerow([cls, f"{score:.6f}", int(pos[0]), len(pos), test_mode])
     with open(os.path.join(outdir, "auc_summary.json"), "w") as f:
         json.dump({
             "label": args.label, "test_auc": auc, "bootstrap_std": boot_std,
             "bootstrap_mean": boot_mean, "best_val_auc": state["best_val_auc"],
             "best_epoch": state["best_epoch"], "epochs_run": state["epoch"],
-            "n_test_units": len(test_defs), "config": vars(args),
+            "n_test_units": len(test_defs), "test_mode": test_mode,
+            "test_units_mutually_disjoint": test_mode == "disjoint",
+            "uncertainty_note": uncertainty_note, "config": vars(args),
         }, f, indent=1)
     print(f"outputs -> {outdir}")
 
