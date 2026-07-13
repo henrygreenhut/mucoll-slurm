@@ -42,7 +42,7 @@ export GEOM_NAME="MAIA_v0"
 
 # --- Output ------------------------------------------------------------------
 # Perlmutter trial setup.
-export OUTPUT_BASE_DIR="${PSCRATCH:-$SCRATCH}/mucoll/output"
+export OUTPUT_BASE_DIR="${OUTPUT_BASE_DIR:-${PSCRATCH:-$SCRATCH}/mucoll/output}"
 
 # Previous Oscar setup:
 # export OUTPUT_BASE_DIR="$DATA_GROUP_DIR/$USER/output"
@@ -57,10 +57,10 @@ export DATA_BIND="/global/cfs/cdirs/m5197,${PSCRATCH:-$SCRATCH},$HOME"
 # --- Beam-Induced Background (BIB) overlay samples ---------------------------
 # Used only when a job is launched "with BIB". Each path is a DIRECTORY of
 # *.edm4hep.root files (trailing slash matters); the overlay enumerates them.
-export BIB_DIR="$DATA_GROUP_DIR/bib-v3p0-fmt2-norm1/SIM"
-export BIB_MUPLUS="$BIB_DIR/MUPLUS/"
-export BIB_MUMINUS="$BIB_DIR/MUMINUS/"
-export BIB_NUMBER=6665
+export BIB_DIR="${BIB_DIR:-$DATA_GROUP_DIR/bib-v3p0-fmt2-norm1/SIM}"
+export BIB_MUPLUS="${BIB_MUPLUS:-$BIB_DIR/MUPLUS/}"
+export BIB_MUMINUS="${BIB_MUMINUS:-$BIB_DIR/MUMINUS/}"
+export BIB_NUMBER="${BIB_NUMBER:-6665}"
 
 # Broken Perlmutter benchmark setup:
 # export BIB_DIR="$DATA_GROUP_DIR/bib-v3p0-benchmark/SIM"
