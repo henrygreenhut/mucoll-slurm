@@ -58,6 +58,10 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--max-minutes", type=float, default=0.0,
                         help="checkpoint and exit after this wall time (0 = off)")
+    parser.add_argument("--features", default="paper", choices=["paper", "bib"],
+                        help="paper = PFN-ID inputs per arXiv:1810.05165 "
+                             "(log pT, theta, cos/sin phi, PDG one-hot); "
+                             "bib = + asinh time/vertex (BIB-literature tier)")
     parser.add_argument("--drop-phi", action="store_true",
                         help="ablation A1: remove cos/sin phi features")
     parser.add_argument("--null-test", action="store_true",
@@ -87,7 +91,8 @@ class UnitSampler:
     def build(self, file_positions, mean, std):
         raw = self.store.file_arrays(file_positions)
         raw = lc.apply_cuts(raw, self.args.e_min, self.args.t_abs_max)
-        feats = lc.build_features(raw, drop_phi=self.args.drop_phi)
+        feats = lc.build_features(raw, feature_set=self.args.features,
+                                  drop_phi=self.args.drop_phi)
         return (feats - mean) / std
 
     def random_unit(self, rng, split):
@@ -196,7 +201,8 @@ def main():
                 pos = samplers[cls].random_unit(rng, "train")
                 raw = samplers[cls].store.file_arrays(pos)
                 raw = lc.apply_cuts(raw, args.e_min, args.t_abs_max)
-                sample_feats.append(lc.build_features(raw, drop_phi=args.drop_phi))
+                sample_feats.append(lc.build_features(
+                    raw, feature_set=args.features, drop_phi=args.drop_phi))
         mean, std = lc.compute_norm_stats(sample_feats)
         if args.latent_scale == "auto":
             latent_scale = 1.0 / float(np.median([len(f) for f in sample_feats]))
@@ -204,11 +210,13 @@ def main():
             latent_scale = 1.0
         else:
             latent_scale = float(args.latent_scale)
-        lc.save_norm_stats(stats_path, mean, std, lc.feature_names(args.drop_phi),
+        lc.save_norm_stats(stats_path, mean, std,
+                           lc.feature_names(args.features, args.drop_phi),
                            latent_scale)
         del sample_feats
     n_features = len(mean)
-    print(f"  features: {n_features} ({'no-phi' if args.drop_phi else 'full'})"
+    print(f"  features: {n_features} ('{args.features}'"
+          f"{', no-phi' if args.drop_phi else ''})"
           f" | latent scale 1/{1.0 / latent_scale:.0f}")
 
     # --- fixed validation units ------------------------------------------

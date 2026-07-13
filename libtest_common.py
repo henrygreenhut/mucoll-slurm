@@ -46,11 +46,18 @@ def assign_cycle_ids(paths):
     ids = [int(t[-best_pos]) for t in tokens]
     return ids, best_pos, best_distinct
 
-# Feature layout: 8 continuous + 5 PDG one-hot (gamma, n, e+-, mu+-, other)
-FEATURE_NAMES = [
-    "logE", "logpt", "theta", "cosphi", "sinphi", "asinh_t", "asinh_vz",
-    "asinh_vr", "pdg_gamma", "pdg_n", "pdg_e", "pdg_mu", "pdg_other",
-]
+# Feature sets, anchored on the PFN paper (arXiv:1810.05165):
+#   paper = PFN-ID inputs (pT, angle, ID), adapted for BIB: theta instead of
+#           rapidity (forward particles), absolute angles via cos/sin phi
+#           (no jet axis to center on), log pT (6-decade spectrum).
+#   bib   = paper + time/vertex displacement (asinh-compressed), the BIB
+#           discriminants of arXiv:2105.09116 / 2203.06773.
+PDG_ONEHOT = ["pdg_gamma", "pdg_n", "pdg_e", "pdg_mu", "pdg_other"]
+FEATURE_SETS = {
+    "paper": ["logpt", "theta", "cosphi", "sinphi"] + PDG_ONEHOT,
+    "bib": ["logpt", "theta", "cosphi", "sinphi",
+            "asinh_t", "asinh_vz", "asinh_vr"] + PDG_ONEHOT,
+}
 PHI_FEATURES = ["cosphi", "sinphi"]
 
 
@@ -107,46 +114,44 @@ def apply_cuts(raw, e_min=0.0, t_abs_max=0.0):
     return {k: v[mask] for k, v in raw.items()}
 
 
-def build_features(raw, drop_phi=False):
+def feature_names(feature_set="paper", drop_phi=False):
+    names = list(FEATURE_SETS[feature_set])
+    if drop_phi:
+        names = [n for n in names if n not in PHI_FEATURES]
+    return names
+
+
+def build_features(raw, feature_set="paper", drop_phi=False):
     """(N, F) float32 feature array from raw particle arrays."""
-    px, py, pz = raw["px"], raw["py"], raw["pz"]
+    px, py = raw["px"], raw["py"]
     pt = np.hypot(px, py)
-    p = np.hypot(pt, pz)
     phi = np.arctan2(py, px)
-    theta = np.arctan2(pt, pz)
-    vr = np.hypot(raw["vx"], raw["vy"])
 
     apdg = np.abs(raw["pdg"])
-    onehot = np.zeros((len(px), 5), dtype=np.float32)
-    onehot[apdg == 22, 0] = 1.0
-    onehot[apdg == 2112, 1] = 1.0
-    onehot[apdg == 11, 2] = 1.0
-    onehot[apdg == 13, 3] = 1.0
-    onehot[onehot.sum(axis=1) == 0, 4] = 1.0
+    onehot = {name: np.zeros(len(px), dtype=np.float32) for name in PDG_ONEHOT}
+    onehot["pdg_gamma"][apdg == 22] = 1.0
+    onehot["pdg_n"][apdg == 2112] = 1.0
+    onehot["pdg_e"][apdg == 11] = 1.0
+    onehot["pdg_mu"][apdg == 13] = 1.0
+    assigned = sum(onehot[n] for n in PDG_ONEHOT[:4])
+    onehot["pdg_other"][assigned == 0] = 1.0
 
-    cols = [
-        np.log10(np.maximum(raw["E"], 1e-9)),
-        np.log10(np.maximum(pt, 1e-9)),
-        theta,
-        np.cos(phi),
-        np.sin(phi),
-        np.arcsinh(raw["t"]),
-        np.arcsinh(raw["vz"]),
-        np.arcsinh(vr),
-    ]
-    del p
-    feats = np.column_stack(cols).astype(np.float32)
-    feats = np.concatenate([feats, onehot], axis=1)
-    if drop_phi:
-        keep = [i for i, n in enumerate(FEATURE_NAMES) if n not in PHI_FEATURES]
-        feats = feats[:, keep]
-    return feats
-
-
-def feature_names(drop_phi=False):
-    if drop_phi:
-        return [n for n in FEATURE_NAMES if n not in PHI_FEATURES]
-    return list(FEATURE_NAMES)
+    columns = {
+        "logpt": lambda: np.log10(np.maximum(pt, 1e-9)),
+        "theta": lambda: np.arctan2(pt, raw["pz"]),
+        "cosphi": lambda: np.cos(phi),
+        "sinphi": lambda: np.sin(phi),
+        "asinh_t": lambda: np.arcsinh(raw["t"]),
+        "asinh_vz": lambda: np.arcsinh(raw["vz"]),
+        "asinh_vr": lambda: np.arcsinh(np.hypot(raw["vx"], raw["vy"])),
+    }
+    cols = []
+    for name in feature_names(feature_set, drop_phi):
+        if name in PDG_ONEHOT:
+            cols.append(onehot[name])
+        else:
+            cols.append(columns[name]())
+    return np.column_stack(cols).astype(np.float32)
 
 
 def compute_norm_stats(feature_arrays):
