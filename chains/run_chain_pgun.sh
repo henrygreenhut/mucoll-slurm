@@ -93,6 +93,7 @@ if [ "$DO_BIB" -eq 1 ]; then
                    --OverlayFullNumberBackground "$BIB_NUMBER")
 fi
 k4run "$MUCOLL_CONFIG/$MUCOLL_CONFIG_NAME/digi_steer.py" \
+    -n "$NEVENTS" \
     --inputFiles sim_output.edm4hep.root \
     --outputFile digi_output.edm4hep.root \
     --RandSeed "$DIGI_SEED" \
@@ -100,6 +101,7 @@ k4run "$MUCOLL_CONFIG/$MUCOLL_CONFIG_NAME/digi_steer.py" \
 # --- 4. Reconstruction -------------------------------------------------------
 echo "--- Reconstruction ---"
 k4run "$MUCOLL_CONFIG/$MUCOLL_CONFIG_NAME/reco_steer.py" \
+    -n "$NEVENTS" \
     --inputFiles digi_output.edm4hep.root \
     --outputFile reco_output.edm4hep.root
 
