@@ -68,8 +68,11 @@ cp -r "$MUCOLL_CONFIG/$MUCOLL_CONFIG_NAME/PandoraSettings/" ./
 
 # --- 1. Generation -----------------------------------------------------------
 echo "--- Generation ---"
-GEN_SEED=$((12345 + JOB_ID))
-DIGI_SEED=$((42 + JOB_ID))
+GEN_SEED_OFFSET=${GEN_SEED_OFFSET:-0}
+DIGI_SEED_OFFSET=${DIGI_SEED_OFFSET:-0}
+GEN_SEED=$((12345 + JOB_ID + GEN_SEED_OFFSET))
+DIGI_SEED=$((42 + JOB_ID + DIGI_SEED_OFFSET))
+echo "Seeds: GEN=$GEN_SEED DIGI=$DIGI_SEED"
 
 python "$MUCOLL_BENCHMARKS_PATH/generation/pgun/pgun_edm4hep.py" \
     -s "$GEN_SEED" \

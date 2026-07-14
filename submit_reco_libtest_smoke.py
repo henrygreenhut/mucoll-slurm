@@ -8,11 +8,16 @@ from pathlib import Path
 
 
 SAMPLES = {
-    "U": ("norm1", 42),
-    "R": ("norm42", 1),
-    "null_a": ("null_a", 42),
-    "null_b": ("null_b", 42),
+    "U": "norm1",
+    "R": "norm42",
+    # Null labels independently resample the same norm1 pool.  A distinct
+    # DIGI seed for null_b prevents identical overlay choices while retaining
+    # the same neutrino GEN seed in both labels.
+    "null_a": "norm1",
+    "null_b": "norm1",
 }
+
+DIGI_SEED_OFFSETS = {"U": 0, "R": 0, "null_a": 0, "null_b": 1000000}
 
 
 def parse_args():
@@ -29,6 +34,8 @@ def parse_args():
     parser.add_argument("--jobs-per-class", type=int, default=2)
     parser.add_argument("--events-per-job", type=int, default=10)
     parser.add_argument("--job-id-start", type=int, default=0)
+    parser.add_argument("--n-files", type=int, default=42,
+                        help="norm1 files per event; must be a multiple of 42")
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
 
@@ -37,6 +44,8 @@ def main():
     args = parse_args()
     if args.jobs_per_class < 1 or args.events_per_job < 1:
         raise SystemExit("job and event counts must be positive")
+    if args.n_files < 42 or args.n_files % 42:
+        raise SystemExit("--n-files must be a positive multiple of 42")
     pools = Path(args.pools).resolve()
     outdir = Path(args.outdir).resolve()
     slurm = Path(__file__).resolve().parent / "submit_pgun_perlmutter.slurm"
@@ -45,7 +54,9 @@ def main():
 
     commands = []
     for sample in args.classes:
-        library, bib_number = SAMPLES[sample]
+        library = SAMPLES[sample]
+        bib_number = (args.n_files // 42 if sample == "R"
+                      else args.n_files)
         plus = pools / library / args.split / "MUPLUS"
         minus = pools / library / args.split / "MUMINUS"
         for path in (plus, minus):
@@ -53,7 +64,8 @@ def main():
                 raise SystemExit("empty or missing pool: {}".format(path))
         for offset in range(args.jobs_per_class):
             job_id = args.job_id_start + offset
-            study = "reco_libtest_{}/{}".format(sample, args.split)
+            study = "reco_libtest_n{}_{}/{}".format(
+                args.n_files, sample, args.split)
             exports = ",".join([
                 "ALL", "JOB_ID={}".format(job_id),
                 "NEVENTS={}".format(args.events_per_job),
@@ -63,6 +75,7 @@ def main():
                 "BIB_MUPLUS={}/".format(plus),
                 "BIB_MUMINUS={}/".format(minus),
                 "BIB_NUMBER={}".format(bib_number),
+                "DIGI_SEED_OFFSET={}".format(DIGI_SEED_OFFSETS[sample]),
             ])
             command = [
                 "sbatch", "--parsable",
@@ -71,8 +84,9 @@ def main():
             ]
             commands.append(command)
 
-    print("{} jobs, {} events/class, split={}".format(
-        len(commands), args.jobs_per_class * args.events_per_job, args.split))
+    print("{} jobs, {} events/class, split={}, n_files={}".format(
+        len(commands), args.jobs_per_class * args.events_per_job, args.split,
+        args.n_files))
     for command in commands:
         print(" ".join(command))
         if not args.dry_run:
