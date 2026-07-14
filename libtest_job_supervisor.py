@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Laptop-side supervisor for resumable Perlmutter libtest jobs.
 
-One Slurm window is kept alive per unfinished label.  When that window leaves
-squeue, the supervisor checks for the final auc_summary.json and, if needed,
-submits exactly one continuation with the same label.  This avoids filling the
-debug-QOS submitted-job quota with dependency chains.
+By default one Slurm window is kept alive per unfinished label.  Plans may set
+``bundle_size`` and ``bundle_script`` to pack several independent labels into
+one full-node GPU allocation.  When a window leaves squeue, the supervisor
+waits one poll for final output, then resumes incomplete labels.
 """
 
 import argparse
@@ -60,6 +60,17 @@ def validate_plan(plan):
         raise SystemExit("unsafe or empty labels: {}".format(", ".join(bad)))
     if len(set(labels)) != len(labels):
         raise SystemExit("run labels must be unique")
+    bundle_size = int(plan.get("bundle_size", 1))
+    if bundle_size < 1:
+        raise SystemExit("bundle_size must be positive")
+    if bundle_size > 1:
+        bundle_min_size = int(plan.get("bundle_min_size", 3))
+        if not 2 <= bundle_min_size <= bundle_size:
+            raise SystemExit(
+                "bundle_min_size must be between 2 and bundle_size")
+        for key in ("bundle_script", "bundle_config"):
+            if not plan.get(key):
+                raise SystemExit("{} is required with bundle_size".format(key))
     for run in plan["runs"]:
         if int(run.get("max_windows", 10)) < 1:
             raise SystemExit("max_windows must be positive for {}".format(
@@ -172,6 +183,43 @@ def submit_window(plan, run, dry_run=False):
     return lines[0]
 
 
+def submission_command_bundle(plan, runs):
+    labels = ",".join(run["label"] for run in runs)
+    job_name = "lt_bundle_{}".format("_".join(
+        run["label"].replace("A0_", "")[:12] for run in runs))[:128]
+    return (
+        "cd {directory} && "
+        "BUNDLE_CONFIG={config} BUNDLE_LABELS={labels} "
+        "sbatch --parsable --job-name={job_name} "
+        "--export=ALL,BUNDLE_CONFIG,BUNDLE_LABELS {script}"
+    ).format(
+        directory=shell_path(plan["remote_dir"]),
+        config=shlex.quote(plan["bundle_config"]),
+        labels=shlex.quote(labels),
+        job_name=shlex.quote(job_name),
+        script=shlex.quote(plan["bundle_script"]),
+    )
+
+
+def submit_bundle(plan, runs, dry_run=False):
+    command = submission_command_bundle(plan, runs)
+    labels = ", ".join(run["label"] for run in runs)
+    if dry_run:
+        log("DRY RUN bundle [{}]: {}".format(labels, command))
+        return "dry-run-bundle"
+    result = ssh_command(plan["remote_host"], command)
+    if result.returncode:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise RuntimeError("bundle submission failed for [{}]: {}".format(
+            labels, detail))
+    lines = [line.strip().split(";", 1)[0]
+             for line in result.stdout.splitlines() if line.strip()]
+    if len(lines) != 1 or not lines[0].isdigit():
+        raise RuntimeError("unexpected sbatch output for bundle [{}]: {!r}"
+                           .format(labels, result.stdout))
+    return lines[0]
+
+
 def run_pass(plan, state, state_path, dry_run=False):
     complete, debug_jobs = remote_snapshot(plan)
     max_submitted = int(plan.get("max_submitted", 4))
@@ -208,28 +256,85 @@ def run_pass(plan, state, state_path, dry_run=False):
     if all(complete.get(run["label"], False) for run in plan["runs"]):
         return "complete"
 
-    for run in plan["runs"]:
-        if available <= 0:
-            break
-        label = run["label"]
-        info = state["runs"][label]
-        if complete.get(label, False) or label in disappeared:
-            continue
-        if info.get("active_job_id") in debug_jobs:
-            continue
-        max_windows = int(run.get("max_windows", 10))
-        if len(info["job_ids"]) >= max_windows:
-            continue
-        job_id = submit_window(plan, run, dry_run)
-        log("submitted {} window {} as job {}".format(
-            label, len(info["job_ids"]) + 1, job_id))
-        if not dry_run:
+    # Let the next remote snapshot observe files written while a job was
+    # exiting.  In particular, do not fill its slot with a lower-priority run
+    # before learning whether the just-finished label needs continuation.
+    if disappeared:
+        return "working"
+
+    bundle_size = int(plan.get("bundle_size", 1))
+    if bundle_size > 1:
+        eligible = []
+        for run in plan["runs"]:
+            label = run["label"]
+            info = state["runs"][label]
+            if complete.get(label, False):
+                continue
+            if info.get("active_job_id") in debug_jobs:
+                continue
+            if len(info["job_ids"]) >= int(run.get("max_windows", 10)):
+                continue
+            eligible.append(run)
+
+        bundle_min_size = int(plan.get("bundle_min_size", 3))
+        while available > 0 and eligible:
+            # A debug allocation is billed as a whole four-GPU node.  Three or
+            # four ranks use that node reasonably; a one/two-run tail is less
+            # expensive as independent fractionally billed shared-QOS jobs.
+            if len(eligible) >= bundle_min_size:
+                group = eligible[:bundle_size]
+                eligible = eligible[bundle_size:]
+                job_id = submit_bundle(plan, group, dry_run)
+                log("submitted GPU bundle job {} for {}".format(
+                    job_id, ", ".join(run["label"] for run in group)))
+                if dry_run:
+                    break
+                submitted_at = dt.datetime.now(dt.timezone.utc).isoformat()
+                for run in group:
+                    info = state["runs"][run["label"]]
+                    info["job_ids"].append(job_id)
+                    info["active_job_id"] = job_id
+                    info["last_submitted_at"] = submitted_at
+                save_state(state_path, state)
+                available -= 1
+                continue
+
+            run = eligible.pop(0)
+            job_id = submit_window(plan, run, dry_run)
+            log("submitted shared-QOS tail job {} for {}".format(
+                job_id, run["label"]))
+            if dry_run:
+                break
+            info = state["runs"][run["label"]]
             info["job_ids"].append(job_id)
             info["active_job_id"] = job_id
             info["last_submitted_at"] = dt.datetime.now(
                 dt.timezone.utc).isoformat()
             save_state(state_path, state)
-        available -= 1
+            available -= 1
+    else:
+        for run in plan["runs"]:
+            if available <= 0:
+                break
+            label = run["label"]
+            info = state["runs"][label]
+            if complete.get(label, False):
+                continue
+            if info.get("active_job_id") in debug_jobs:
+                continue
+            max_windows = int(run.get("max_windows", 10))
+            if len(info["job_ids"]) >= max_windows:
+                continue
+            job_id = submit_window(plan, run, dry_run)
+            log("submitted {} window {} as job {}".format(
+                label, len(info["job_ids"]) + 1, job_id))
+            if not dry_run:
+                info["job_ids"].append(job_id)
+                info["active_job_id"] = job_id
+                info["last_submitted_at"] = dt.datetime.now(
+                    dt.timezone.utc).isoformat()
+                save_state(state_path, state)
+            available -= 1
 
     exhausted = [
         run["label"] for run in plan["runs"]

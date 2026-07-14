@@ -4,6 +4,9 @@
   "result_dir": "pfn_results",
   "poll_seconds": 120,
   "max_submitted": 2,
+  "bundle_size": 4,
+  "bundle_script": "submit_libtest_bundle.slurm",
+  "bundle_config": "libtest_n210_supervisor.json",
   "runs": [
     {
       "label": "A0_n210_scaled_disjoint",

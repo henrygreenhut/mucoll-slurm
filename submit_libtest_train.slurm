@@ -1,18 +1,17 @@
 #!/bin/bash
 #SBATCH -J libtest_train
-#SBATCH -q debug
+#SBATCH -q shared
 #SBATCH -C gpu
 #SBATCH -A m5197_g
-#SBATCH -N 1
 #SBATCH -n 1
 #SBATCH -c 32
-#SBATCH -G 1
+#SBATCH --gpus-per-task=1
 #SBATCH -t 00:30:00
 #SBATCH --output=libtest_train_%x_%j.out
 #SBATCH --error=libtest_train_%x_%j.err
 
-# One 30-minute debug-queue training window; checkpoints and resumes via
-# --label, so chain several jobs to complete a training:
+# One 30-minute, fractionally charged shared-QOS training window; checkpoints
+# and resumes via --label, so chain several jobs to complete a training:
 #
 #   jid=$(sbatch --parsable --export=ALL,LABEL=A0_n42 submit_libtest_train.slurm)
 #   for i in 1 2 3 4 5; do
