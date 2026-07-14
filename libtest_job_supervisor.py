@@ -117,11 +117,11 @@ def ssh_command(host, remote_command):
 
 
 def remote_snapshot(plan):
-    """Return ({label: complete}, all of the user's live Slurm job IDs).
+    """Return ({label: complete}, the user's live GPU Slurm job IDs).
 
-    Count every QOS here.  Site-specific QOS display/filter behavior can differ
-    from the value passed to sbatch, and missing a live job is more dangerous
-    than conservatively waiting for an unrelated job to leave the queue.
+    Perlmutter applies CPU and GPU allocations/limits separately.  Restricting
+    this set to jobs requesting a GPU prevents unrelated CPU reconstruction
+    jobs from artificially blocking the GPU-training supervisor.
     """
     result_dir = plan.get("result_dir", "pfn_results")
     commands = ["cd {}".format(shell_path(plan["remote_dir"]))]
@@ -132,21 +132,26 @@ def remote_snapshot(plan):
             "if [ -s {p} ]; then echo RESULT {l} complete; "
             "else echo RESULT {l} incomplete; fi".format(
                 p=shlex.quote(summary), l=shlex.quote(label)))
-    commands.append("squeue --me -h -o 'JOB %A'")
+    # %b is GRES and %f is the requested feature/constraint string.  Check
+    # both because their exact rendering can differ between QOSes and job
+    # states; GPU jobs have either a gpu GRES or a gpu constraint.
+    commands.append("squeue --me -h -o 'JOB %A|%b|%f'")
     result = ssh_command(plan["remote_host"], " && ".join(commands))
     if result.returncode:
         detail = result.stderr.strip() or result.stdout.strip()
         raise RuntimeError("remote status check failed: {}".format(detail))
 
     complete = {}
-    debug_jobs = set()
+    gpu_jobs = set()
     for line in result.stdout.splitlines():
         fields = line.split()
         if len(fields) == 3 and fields[0] == "RESULT":
             complete[fields[1]] = fields[2] == "complete"
         elif len(fields) == 2 and fields[0] == "JOB":
-            debug_jobs.add(fields[1])
-    return complete, debug_jobs
+            job_id, gres, features = fields[1].split("|", 2)
+            if "gpu" in gres.lower() or "gpu" in features.lower():
+                gpu_jobs.add(job_id)
+    return complete, gpu_jobs
 
 
 def submission_command(plan, run):
@@ -221,9 +226,9 @@ def submit_bundle(plan, runs, dry_run=False):
 
 
 def run_pass(plan, state, state_path, dry_run=False):
-    complete, debug_jobs = remote_snapshot(plan)
+    complete, gpu_jobs = remote_snapshot(plan)
     max_submitted = int(plan.get("max_submitted", 4))
-    available = max(0, max_submitted - len(debug_jobs))
+    available = max(0, max_submitted - len(gpu_jobs))
     disappeared = set()
 
     for run in plan["runs"]:
@@ -231,7 +236,7 @@ def run_pass(plan, state, state_path, dry_run=False):
         info = state["runs"].setdefault(
             label, {"job_ids": [], "active_job_id": None})
         active = info.get("active_job_id")
-        if active and active not in debug_jobs:
+        if active and active not in gpu_jobs:
             # Do not resubmit in this pass.  On the next poll the result file
             # check will observe output written as the old job was exiting.
             log("{} window {} left squeue; checking output next poll".format(
@@ -247,7 +252,7 @@ def run_pass(plan, state, state_path, dry_run=False):
         info = state["runs"][label]
         if complete.get(label, False):
             status.append("{}=complete".format(label))
-        elif info.get("active_job_id") in debug_jobs:
+        elif info.get("active_job_id") in gpu_jobs:
             status.append("{}=job {}".format(label, info["active_job_id"]))
         else:
             status.append("{}=needs window".format(label))
@@ -270,7 +275,7 @@ def run_pass(plan, state, state_path, dry_run=False):
             info = state["runs"][label]
             if complete.get(label, False):
                 continue
-            if info.get("active_job_id") in debug_jobs:
+            if info.get("active_job_id") in gpu_jobs:
                 continue
             if len(info["job_ids"]) >= int(run.get("max_windows", 10)):
                 continue
@@ -320,7 +325,7 @@ def run_pass(plan, state, state_path, dry_run=False):
             info = state["runs"][label]
             if complete.get(label, False):
                 continue
-            if info.get("active_job_id") in debug_jobs:
+            if info.get("active_job_id") in gpu_jobs:
                 continue
             max_windows = int(run.get("max_windows", 10))
             if len(info["job_ids"]) >= max_windows:
