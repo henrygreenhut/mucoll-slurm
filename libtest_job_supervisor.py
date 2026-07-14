@@ -65,9 +65,9 @@ def validate_plan(plan):
         raise SystemExit("bundle_size must be positive")
     if bundle_size > 1:
         bundle_min_size = int(plan.get("bundle_min_size", 3))
-        if not 2 <= bundle_min_size <= bundle_size:
+        if not 1 <= bundle_min_size <= bundle_size:
             raise SystemExit(
-                "bundle_min_size must be between 2 and bundle_size")
+                "bundle_min_size must be between 1 and bundle_size")
         for key in ("bundle_script", "bundle_config"):
             if not plan.get(key):
                 raise SystemExit("{} is required with bundle_size".format(key))
@@ -283,9 +283,10 @@ def run_pass(plan, state, state_path, dry_run=False):
 
         bundle_min_size = int(plan.get("bundle_min_size", 3))
         while available > 0 and eligible:
-            # A debug allocation is billed as a whole four-GPU node.  Three or
-            # four ranks use that node reasonably; a one/two-run tail is less
-            # expensive as independent fractionally billed shared-QOS jobs.
+            # Pack as many ready labels as possible into each allocation.  A
+            # plan may set bundle_min_size=1 to keep even a one/two-run tail in
+            # the short debug queue; larger values send small tails through
+            # fractionally billed shared-QOS jobs instead.
             if len(eligible) >= bundle_min_size:
                 group = eligible[:bundle_size]
                 eligible = eligible[bundle_size:]

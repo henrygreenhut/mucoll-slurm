@@ -5,6 +5,7 @@
   "poll_seconds": 120,
   "max_submitted": 2,
   "bundle_size": 4,
+  "bundle_min_size": 1,
   "bundle_script": "submit_libtest_bundle.slurm",
   "bundle_config": "libtest_n210_supervisor.json",
   "runs": [
