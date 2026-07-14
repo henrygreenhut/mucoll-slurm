@@ -1,0 +1,39 @@
+{
+  "remote_host": "perlmutter",
+  "remote_dir": "~/mucoll/mucoll-slurm",
+  "result_dir": "pfn_results",
+  "poll_seconds": 120,
+  "max_submitted": 2,
+  "runs": [
+    {
+      "label": "A0_n210_scaled_disjoint",
+      "job_name": "lt_n210_scaled",
+      "max_windows": 20,
+      "train_args": "--n-files 210 --units-per-epoch 1000 --val-units 300 --batch-size 2 --patience 20 --latent-scale auto --split-fracs 0.50 0.25 0.25"
+    },
+    {
+      "label": "A0_n210_null_shared",
+      "job_name": "lt_n210_null",
+      "max_windows": 20,
+      "train_args": "--n-files 210 --units-per-epoch 1000 --val-units 300 --batch-size 2 --patience 20 --latent-scale auto --null-test --null-partition shared --split-fracs 0.50 0.25 0.25 --overlap-test-units 300"
+    },
+    {
+      "label": "A0_n42_null_shared_v2",
+      "job_name": "lt_n42_null_v2",
+      "max_windows": 10,
+      "train_args": "--n-files 42 --units-per-epoch 2000 --val-units 300 --batch-size 8 --patience 20 --latent-scale auto --null-test --null-partition shared --split-fracs 0.50 0.25 0.25 --overlap-test-units 300"
+    },
+    {
+      "label": "A0_n126_null_shared_v2",
+      "job_name": "lt_n126_null_v2",
+      "max_windows": 15,
+      "train_args": "--n-files 126 --units-per-epoch 1000 --val-units 300 --batch-size 2 --patience 20 --latent-scale auto --null-test --null-partition shared --split-fracs 0.50 0.25 0.25 --overlap-test-units 300"
+    },
+    {
+      "label": "A0_n714_null_shared_v2",
+      "job_name": "lt_n714_null_v2",
+      "max_windows": 20,
+      "train_args": "--n-files 714 --units-per-epoch 500 --val-units 50 --batch-size 1 --patience 20 --latent-scale auto --null-test --null-partition shared --split-fracs 0.50 0.25 0.25 --overlap-test-units 300"
+    }
+  ]
+}

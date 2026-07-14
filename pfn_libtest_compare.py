@@ -66,8 +66,10 @@ def load_test_result(dirpath):
             # Backwards compatibility: results written before test_mode was
             # added used mutually disjoint blocked units.
             "mode": d.get("test_mode", "disjoint"),
+            "near_constant": d.get("near_constant_test_scores", False),
         }
-    return {"auc": None, "std": None, "mode": None}
+    return {"auc": None, "std": None, "mode": None,
+            "near_constant": False}
 
 
 def style_axis(ax):
@@ -96,11 +98,13 @@ def draw_auc(ax, runs):
         test = load_test_result(path)
         test_auc = test["auc"]
         if test_auc is not None:
-            overlapping = test["mode"] == "overlapping"
-            ax.plot(epochs[-1], test_auc, "D" if overlapping else "o",
+            correlated = test["mode"] in ("overlapping", "shared-blocked")
+            suffix = ("*" if correlated else "") + (
+                "†" if test["near_constant"] else "")
+            ax.plot(epochs[-1], test_auc, "D" if correlated else "o",
                     ms=7, color=color,
                     markeredgecolor="white", zorder=5)
-            ax.annotate(f"test {test_auc:.3f}{'*' if overlapping else ''}",
+            ax.annotate(f"test {test_auc:.3f}{suffix}",
                         (epochs[-1], test_auc), textcoords="offset points",
                         xytext=(6, -4), fontsize=8, color="#444444")
     ax.axhline(0.5, ls="--", lw=1, color="#888888")
@@ -114,12 +118,18 @@ def draw_auc(ax, runs):
 
 
 def add_overlap_note(fig, runs):
-    if any(load_test_result(path)["mode"] == "overlapping"
+    if any(load_test_result(path)["mode"] in ("overlapping", "shared-blocked")
            for _, path, *_ in runs):
         fig.text(
             0.5, 0.005,
-            "* exploratory test AUC from overlapping held-out units; "
+            "* held-out source cycles reused across test units or labels; "
             "no independent-unit uncertainty",
+            ha="center", va="bottom", fontsize=8, color="#555555")
+    if any(load_test_result(path)["near_constant"]
+           for _, path, *_ in runs):
+        fig.text(
+            0.5, 0.025,
+            "† nearly constant classifier scores; rank AUC may be numerical",
             ha="center", va="bottom", fontsize=8, color="#555555")
 
 
@@ -164,10 +174,13 @@ def main():
         test_auc, test_std = result["auc"], result["std"]
         if test_auc is None:
             test = "test pending"
-        elif result["mode"] == "overlapping":
-            test = f"test AUC {test_auc:.4f} * (overlapping; no error)"
+        elif result["mode"] in ("overlapping", "shared-blocked"):
+            marker = " *" + (" †" if result["near_constant"] else "")
+            test = (f"test AUC {test_auc:.4f}{marker} "
+                    "(source-correlated; no error)")
         else:
-            test = f"test AUC {test_auc:.4f} +- {test_std:.4f}"
+            marker = " †" if result["near_constant"] else ""
+            test = f"test AUC {test_auc:.4f} +- {test_std:.4f}{marker}"
         print(f"  {name:20s} epochs {len(epochs):3d} | first loss {loss[0]:9.3f}"
               f" | last loss {loss[-1]:7.4f} | best val AUC {val_auc.max():.4f}"
               f" | {test}")

@@ -76,7 +76,15 @@ def parse_args():
     parser.add_argument("--drop-phi", action="store_true",
                         help="ablation A1: remove cos/sin phi features")
     parser.add_argument("--null-test", action="store_true",
-                        help="norm1-vs-norm1 from disjoint cycle halves (expect AUC 0.5)")
+                        help="norm1-vs-norm1 control (expect AUC 0.5)")
+    parser.add_argument(
+        "--null-partition", choices=["shared", "random-halves", "halves"],
+        default="shared",
+        help="null source pools: 'shared' draws both labels from the same "
+             "cycle pool (recommended; removes cycle identity as a label "
+             "feature); 'random-halves' uses disjoint randomly interleaved "
+             "pools for independent test units; 'halves' preserves the "
+             "legacy contiguous-half control")
     parser.add_argument("--shuffle-labels", action="store_true",
                         help="randomize training labels (expect val AUC 0.5)")
     parser.add_argument("--e-min", type=float, default=0.0, help="energy cut [GeV]")
@@ -177,7 +185,6 @@ def main():
         raise SystemExit("--split-fracs values must all be positive")
     if not np.isclose(sum(args.split_fracs), 1.0):
         raise SystemExit("--split-fracs values must sum to 1")
-
     with open(os.path.join(outdir, "config.json"), "w") as f:
         json.dump(vars(args), f, indent=1)
 
@@ -193,9 +200,29 @@ def main():
     splits = lc.split_indices(len(common), tuple(args.split_fracs))
 
     if args.null_test:
-        # both classes norm1; disjoint cycle halves within every split
-        split_a = {k: pos1[v[: len(v) // 2]] for k, v in splits.items()}
-        split_b = {k: pos1[v[len(v) // 2:]] for k, v in splits.items()}
+        if args.null_partition == "shared":
+            # Label-independent null: both classes draw independently from
+            # the same cycle pool.  Train/val/test remain cycle-disjoint.
+            split_a = {k: pos1[v] for k, v in splits.items()}
+            split_b = {k: pos1[v] for k, v in splits.items()}
+        elif args.null_partition == "random-halves":
+            # Independent-source null: randomly interleave the cycles before
+            # assigning disjoint halves to the labels.  This preserves blocked
+            # disjoint test evaluation without making cycle order a label
+            # feature, as the legacy contiguous halves did.
+            rng_partition = np.random.default_rng(args.seed + 714210)
+            split_a = {}
+            split_b = {}
+            for key, values in splits.items():
+                shuffled = rng_partition.permutation(values)
+                midpoint = len(shuffled) // 2
+                split_a[key] = pos1[shuffled[:midpoint]]
+                split_b[key] = pos1[shuffled[midpoint:]]
+        else:
+            # Legacy null retained only for reproducing earlier runs.  At
+            # large n, contiguous halves can expose cycle-range differences.
+            split_a = {k: pos1[v[: len(v) // 2]] for k, v in splits.items()}
+            split_b = {k: pos1[v[len(v) // 2:]] for k, v in splits.items()}
         files_b = args.n_files
     else:
         split_a = {k: pos1[v] for k, v in splits.items()}
@@ -324,11 +351,28 @@ def main():
         test_mode = "disjoint"
         print("test evaluation (disjoint units, best weights)")
         blocks_a = lc.blocked_unit_positions(split_a["test"], args.n_files)
-        blocks_b = lc.blocked_unit_positions(split_b["test"], files_b)
+        positions_b = split_b["test"]
+        if args.null_test and args.null_partition == "shared":
+            # Both null labels use the same held-out distribution, as they do
+            # during training, but a second deterministic blocking avoids
+            # comparing every unit with an identical copy of itself.  Blocks
+            # are disjoint within each label; source cycles may appear once in
+            # each label, matching shared-pool null resampling semantics.
+            rng_blocks = np.random.default_rng(args.seed + 2027)
+            positions_b = rng_blocks.permutation(positions_b)
+            test_mode = "shared-blocked"
+        blocks_b = lc.blocked_unit_positions(positions_b, files_b)
         test_defs = [(0, b) for b in blocks_a] + [(1, b) for b in blocks_b]
     y_test, s_test = predict_units(model, test_defs, samplers, mean, std,
                                    args.batch_size)
     auc = lc.auc_score(y_test, s_test)
+    score_std = float(np.std(s_test))
+    score_range = float(np.ptp(s_test))
+    near_constant_scores = score_std < 1e-3
+    if near_constant_scores:
+        print("WARNING: test scores are nearly constant "
+              f"(std={score_std:.3g}, range={score_range:.3g}); "
+              "rank AUC may be driven by numerical differences")
     if test_mode == "disjoint":
         boot_mean, boot_std = lc.bootstrap_auc(
             s_test[y_test == 0], s_test[y_test == 1])
@@ -336,6 +380,14 @@ def main():
         print(f"\nTEST AUC = {auc:.4f} +- {boot_std:.4f} (bootstrap over"
               f" {int((y_test == 0).sum())} unique /"
               f" {int((y_test == 1).sum())} reuse units)")
+    elif test_mode == "shared-blocked":
+        boot_mean, boot_std = None, None
+        uncertainty_note = (
+            "not estimated: units are disjoint within each null label, but "
+            "the labels reuse the same held-out source-cycle pool")
+        print(f"\nTEST AUC = {auc:.4f} * ({int((y_test == 0).sum())} /"
+              f" {int((y_test == 1).sum())} null units; disjoint within each"
+              " label, shared held-out source pool, no bootstrap error)")
     else:
         boot_mean, boot_std = None, None
         uncertainty_note = (
@@ -358,6 +410,8 @@ def main():
             "best_epoch": state["best_epoch"], "epochs_run": state["epoch"],
             "n_test_units": len(test_defs), "test_mode": test_mode,
             "test_units_mutually_disjoint": test_mode == "disjoint",
+            "test_score_std": score_std, "test_score_range": score_range,
+            "near_constant_test_scores": near_constant_scores,
             "uncertainty_note": uncertainty_note, "config": vars(args),
         }, f, indent=1)
     print(f"outputs -> {outdir}")
