@@ -1,0 +1,19 @@
+{
+  "runs": [
+    {
+      "label": "A0_n42_scaled_clean",
+      "script": "submit_libtest_train.slurm",
+      "train_args": "--n-files 42 --units-per-epoch 2000 --val-units 300 --batch-size 8 --patience 20 --latent-scale auto --split-fracs 0.50 0.25 0.25"
+    },
+    {
+      "label": "EVAL_n210_paired_overlap",
+      "script": "submit_libtest_evaluate.slurm",
+      "train_args": "--source-label A0_n210_scaled_disjoint --point-units 500 --bootstrap-reps 200 --bootstrap-units 100 --batch-size 2"
+    },
+    {
+      "label": "EVAL_n42_scaled_clean_paired_overlap",
+      "script": "submit_libtest_evaluate.slurm",
+      "train_args": "--source-label A0_n42_scaled_clean --point-units 500 --bootstrap-reps 200 --bootstrap-units 100 --batch-size 8"
+    }
+  ]
+}
