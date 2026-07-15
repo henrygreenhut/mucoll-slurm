@@ -58,8 +58,13 @@ echo "Particle: PDG=$PDG, pT=$PT GeV, theta=[$THETA_MIN, $THETA_MAX], BIB=$DO_BI
 echo "Output:   $OUTPUT_DIR/job_${JOB_ID}"
 
 # --- Scratch working directory ----------------------------------------------
-WORKDIR=/tmp/mucoll_job_${JOB_ID}_${RANDOM}
-mkdir -p "$WORKDIR"
+WORK_ROOT=${CHAIN_WORK_BASE:-/tmp}
+mkdir -p "$WORK_ROOT"
+WORKDIR=$(mktemp -d "$WORK_ROOT/mucoll_job_${JOB_ID}.XXXXXX")
+cleanup() {
+    rm -rf "$WORKDIR"
+}
+trap cleanup EXIT INT TERM
 cd "$WORKDIR"
 echo "Working in $WORKDIR"
 
@@ -118,4 +123,5 @@ done
 
 cd /
 rm -rf "$WORKDIR"
+trap - EXIT INT TERM
 echo "Job $JOB_ID finished successfully"

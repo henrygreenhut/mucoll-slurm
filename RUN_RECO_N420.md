@@ -37,21 +37,24 @@ Expected output: `[6291]`.
 ## 2. Produce the complete RECO data set
 
 The fixed sample has 2,000 training, 400 validation, and two independent
-400-event test cohorts per class. Fifty events are processed per CPU job.
-Each chain is submitted to the CPU `shared` QOS as one 4-CPU, 16-GB task, so
-Slurm can place many chains on a node and charge only the occupied fraction.
+400-event test cohorts per class. Each independent chain processes 50 events.
+The packed submitter places up to 64 chains on each CPU node inside a single
+Slurm allocation rather than submitting one allocation per chain.
 
 ```bash
-python3 submit_reco_libtest.py --split train  --events-per-class 2000
-python3 submit_reco_libtest.py --split val    --events-per-class 400
-python3 submit_reco_libtest.py --split test_a --events-per-class 400
-python3 submit_reco_libtest.py --split test_b --events-per-class 400
+python3 submit_reco_libtest_packed.py
 ```
 
-All three required samples (`U R null_b`) are submitted by default. The U
-sample is reused as the first null class; producing a separate `null_a` with
-the same seed would create an identical, redundant data set. Repeating a
-command skips completed outputs and resubmits missing jobs.
+The command generates a manifest containing only missing chunks and normally
+submits one three-node, 30-minute debug job for a completely empty data set.
+All three required samples (`U R null_b`) are included. The U sample is reused
+as the first null class; producing a separate `null_a` with the same seed would
+create an identical, redundant data set. Repeating the command preserves and
+skips completed outputs.
+
+Per-chain logs are written below `logs/tasks_JOBID/`. If a debug window ends
+before every task finishes, run the same command again; the next manifest will
+contain only the missing outputs.
 
 Count completed files with:
 
