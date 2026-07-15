@@ -1,0 +1,42 @@
+{
+ "label": "A0_n714_null_overlap",
+ "test_auc": 0.63785,
+ "bootstrap_std": null,
+ "bootstrap_mean": null,
+ "best_val_auc": 1.0,
+ "best_epoch": 8,
+ "epochs_run": 24,
+ "n_test_units": 200,
+ "test_mode": "overlapping",
+ "test_units_mutually_disjoint": false,
+ "uncertainty_note": "not estimated: constructed test units overlap in source cycles; unit-level bootstrap would understate uncertainty",
+ "config": {
+  "norm1_store": "/pscratch/sd/h/hgreen/mucoll/libtest/stores/gen_norm1_MUPLUS.h5",
+  "norm42_store": "/pscratch/sd/h/hgreen/mucoll/libtest/stores/gen_norm42_MUPLUS.h5",
+  "label": "A0_n714_null_overlap",
+  "outdir": "pfn_results",
+  "n_files": 714,
+  "clone_factor": 42,
+  "units_per_epoch": 100,
+  "val_units": 50,
+  "overlap_test_units": 100,
+  "batch_size": 1,
+  "epochs": 200,
+  "patience": 15,
+  "seed": 1,
+  "split_fracs": [
+   0.5,
+   0.25,
+   0.25
+  ],
+  "max_minutes": 25.0,
+  "features": "paper",
+  "drop_phi": false,
+  "null_test": true,
+  "shuffle_labels": false,
+  "e_min": 0.0,
+  "t_abs_max": 0.0,
+  "norm_stat_units": 100,
+  "latent_scale": "auto"
+ }
+}

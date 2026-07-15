@@ -1,0 +1,29 @@
+{
+ "norm1_store": "/pscratch/sd/h/hgreen/mucoll/libtest/stores/gen_norm1_MUPLUS.h5",
+ "norm42_store": "/pscratch/sd/h/hgreen/mucoll/libtest/stores/gen_norm42_MUPLUS.h5",
+ "label": "A0_n126_paper",
+ "outdir": "pfn_results",
+ "n_files": 126,
+ "clone_factor": 42,
+ "units_per_epoch": 1000,
+ "val_units": 300,
+ "overlap_test_units": 0,
+ "batch_size": 2,
+ "epochs": 200,
+ "patience": 15,
+ "seed": 1,
+ "split_fracs": [
+  0.6,
+  0.15,
+  0.25
+ ],
+ "max_minutes": 25.0,
+ "features": "paper",
+ "drop_phi": false,
+ "null_test": false,
+ "shuffle_labels": false,
+ "e_min": 0.0,
+ "t_abs_max": 0.0,
+ "norm_stat_units": 100,
+ "latent_scale": "auto"
+}

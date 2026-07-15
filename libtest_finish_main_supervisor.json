@@ -1,0 +1,25 @@
+{
+  "remote_host": "perlmutter",
+  "remote_dir": "~/mucoll/mucoll-slurm",
+  "result_dir": "pfn_results",
+  "poll_seconds": 120,
+  "max_submitted": 2,
+  "bundle_size": 4,
+  "bundle_min_size": 1,
+  "bundle_script": "submit_libtest_bundle.slurm",
+  "bundle_config": "libtest_finish_main_supervisor.json",
+  "runs": [
+    {
+      "label": "A0_n210_scaled_disjoint",
+      "job_name": "lt_n210_finish",
+      "max_windows": 4,
+      "train_args": "--n-files 210 --units-per-epoch 1000 --val-units 300 --batch-size 2 --patience 20 --latent-scale auto --split-fracs 0.50 0.25 0.25"
+    },
+    {
+      "label": "A0_n42_scaled_clean",
+      "job_name": "lt_n42_clean",
+      "max_windows": 10,
+      "train_args": "--n-files 42 --units-per-epoch 2000 --val-units 300 --batch-size 8 --patience 20 --latent-scale auto --split-fracs 0.50 0.25 0.25"
+    }
+  ]
+}
