@@ -112,9 +112,8 @@ def read_root_file(path):
     return vectors, source_files, source_events
 
 
-def main():
-    args = parse_args()
-    root_files = find_root_files(args.inputs)
+def write_store(inputs, output, class_name):
+    root_files = find_root_files(inputs)
     if not root_files:
         raise SystemExit("No reco ROOT files found")
 
@@ -136,8 +135,8 @@ def main():
         n_particles[i] = len(event)
         particles[i, :len(event), :] = event
 
-    os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
-    with h5py.File(args.out, "w") as h5:
+    os.makedirs(os.path.dirname(os.path.abspath(output)), exist_ok=True)
+    with h5py.File(output, "w") as h5:
         h5.create_dataset("particles", data=particles, compression="gzip")
         h5.create_dataset("n_particles", data=n_particles)
         h5.create_dataset("source_event", data=np.asarray(source_events, dtype=np.int32))
@@ -145,14 +144,19 @@ def main():
             "source_file",
             data=np.asarray(source_files, dtype=h5py.string_dtype("utf-8")),
         )
-        h5.attrs["class_name"] = args.class_name
+        h5.attrs["class_name"] = class_name
         h5.attrs["features"] = ",".join(PFO_FEATURES)
         h5.attrs["collection"] = "PandoraPFOs"
 
-    print(f"Wrote {args.out}")
+    print(f"Wrote {output}")
     print(f"Events: {len(all_events)}")
     print(f"PFO slots: {width}")
     print(f"Mean PFOs/event: {np.mean(n_particles):.2f}")
+
+
+def main():
+    args = parse_args()
+    write_store(args.inputs, args.out, args.class_name)
 
 
 if __name__ == "__main__":

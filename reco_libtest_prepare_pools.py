@@ -18,6 +18,8 @@ def parse_args():
     parser.add_argument("--fallback-muminus-from-muplus", action="store_true",
                         help="use MUPLUS files for both overlay polarities if "
                              "paired MUMINUS coverage is unavailable")
+    parser.add_argument("--exclude-cycle", type=int, action="append", default=[],
+                        help="cycle ID to exclude (repeatable)")
     parser.add_argument("--audit-only", action="store_true")
     parser.add_argument("--force", action="store_true",
                         help="replace existing pool symlinks and manifest")
@@ -137,11 +139,15 @@ def main():
             "both polarities are not available; either wait or pass "
             "--fallback-muminus-from-muplus")
 
-    cycles = sorted(common)
+    excluded = set(args.exclude_cycle)
+    cycles = sorted(common - excluded)
     if not cycles:
         raise SystemExit("the selected SIM libraries have no paired cycle IDs")
     splits = split_cycles(cycles)
     print("paired cycles: {} ({} .. {})".format(len(cycles), cycles[0], cycles[-1]))
+    if excluded:
+        print("excluded cycles: {}".format(
+            ", ".join(map(str, sorted(excluded)))))
     print("split counts: {}".format(
         ", ".join("{}={}".format(name, len(values))
                   for name, values in splits.items())))
@@ -169,6 +175,7 @@ def main():
         "norm1_sim": str(Path(args.norm1_sim).resolve()),
         "norm42_sim": str(Path(args.norm42_sim).resolve()),
         "fallback_muminus_from_muplus": use_fallback,
+        "excluded_cycles": sorted(excluded),
         "n_paired_cycles": len(cycles),
         "cycles": cycles,
         "splits": {name: values for name, values in splits.items()},
