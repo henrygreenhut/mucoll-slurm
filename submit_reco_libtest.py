@@ -27,7 +27,7 @@ def parse_args():
                         if scratch else None, required=not bool(scratch))
     parser.add_argument("--outdir", default=(scratch + "/mucoll/libtest/reco_n420_pfn")
                         if scratch else None, required=not bool(scratch))
-    parser.add_argument("--qos", default="regular")
+    parser.add_argument("--qos", default="shared")
     parser.add_argument("--time", default="04:00:00")
     parser.add_argument("--force", action="store_true",
                         help="submit jobs whose RECO output already exists")

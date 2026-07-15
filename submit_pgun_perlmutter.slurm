@@ -2,7 +2,6 @@
 #SBATCH -J pgun_perlmutter
 #SBATCH -q debug
 #SBATCH -C cpu
-#SBATCH -N 1
 #SBATCH -n 1
 #SBATCH -c 4
 #SBATCH --mem=16G

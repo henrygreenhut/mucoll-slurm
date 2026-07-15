@@ -38,6 +38,8 @@ Expected output: `[6291]`.
 
 The fixed sample has 2,000 training, 400 validation, and two independent
 400-event test cohorts per class. Fifty events are processed per CPU job.
+Each chain is submitted to the CPU `shared` QOS as one 4-CPU, 16-GB task, so
+Slurm can place many chains on a node and charge only the occupied fraction.
 
 ```bash
 python3 submit_reco_libtest.py --split train  --events-per-class 2000
