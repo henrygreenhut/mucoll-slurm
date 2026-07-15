@@ -122,8 +122,10 @@ def main():
         nodes, args.tasks_per_node))
     print(" ".join(command))
     if not args.dry_run:
-        result = subprocess.run(command, check=True, text=True,
-                                capture_output=True)
+        result = subprocess.run(command, check=True,
+                                universal_newlines=True,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
         print("submitted packed job {}".format(
             result.stdout.strip().split(";", 1)[0]))
 
