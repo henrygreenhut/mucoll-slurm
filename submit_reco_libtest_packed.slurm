@@ -8,7 +8,7 @@
 set -euo pipefail
 
 MANIFEST=$(realpath "$1")
-REPO=$(cd "$(dirname "$0")" && pwd)
+REPO=${SLURM_SUBMIT_DIR:?SLURM_SUBMIT_DIR is not set}
 TASKS_PER_NODE=${TASKS_PER_NODE:-64}
 TASKS=$(wc -l < "$MANIFEST")
 CAPACITY=$((SLURM_NNODES * TASKS_PER_NODE))
