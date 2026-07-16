@@ -26,9 +26,24 @@
       "train_args": "--n-files 420 --units-per-epoch 500 --val-units 300 --batch-size 1 --patience 20 --latent-scale auto --null-test --null-partition shared --split-fracs 0.50 0.25 0.25 --overlap-test-units 300"
     },
     {
+      "label": "A0_n420_rawsum_disjoint",
+      "script": "submit_libtest_train.slurm",
+      "train_args": "--n-files 420 --units-per-epoch 500 --val-units 300 --batch-size 1 --patience 20 --latent-scale none --split-fracs 0.50 0.25 0.25"
+    },
+    {
+      "label": "A0_n420_rawsum_null_shared",
+      "script": "submit_libtest_train.slurm",
+      "train_args": "--n-files 420 --units-per-epoch 500 --val-units 300 --batch-size 1 --patience 20 --latent-scale none --null-test --null-partition shared --split-fracs 0.50 0.25 0.25 --overlap-test-units 300"
+    },
+    {
       "label": "EVAL_n420_paired_overlap",
       "script": "submit_libtest_evaluate.slurm",
       "train_args": "--source-label A0_n420_scaled_disjoint --point-units 500 --bootstrap-reps 200 --bootstrap-units 100 --batch-size 1"
+    },
+    {
+      "label": "EVAL_n420_rawsum_paired_overlap",
+      "script": "submit_libtest_evaluate.slurm",
+      "train_args": "--source-label A0_n420_rawsum_disjoint --point-units 500 --bootstrap-reps 200 --bootstrap-units 100 --batch-size 1"
     }
   ]
 }

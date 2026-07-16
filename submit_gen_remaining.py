@@ -13,6 +13,9 @@ N42_EVAL = "EVAL_n42_scaled_clean_paired_overlap"
 N420_MAIN = "A0_n420_scaled_disjoint"
 N420_NULL = "A0_n420_null_shared"
 N420_EVAL = "EVAL_n420_paired_overlap"
+N420_RAW_MAIN = "A0_n420_rawsum_disjoint"
+N420_RAW_NULL = "A0_n420_rawsum_null_shared"
+N420_RAW_EVAL = "EVAL_n420_rawsum_paired_overlap"
 
 
 def finished(results, label):
@@ -31,18 +34,25 @@ def main():
 
     n42_done = finished(results, N42_MAIN)
     n420_done = finished(results, N420_MAIN)
+    n420_raw_done = finished(results, N420_RAW_MAIN)
     if not n42_done:
         labels.append(N42_MAIN)
     if not finished(results, N210_EVAL):
         labels.append(N210_EVAL)
     if not n420_done:
         labels.append(N420_MAIN)
-    if not finished(results, N420_NULL):
-        labels.append(N420_NULL)
+    if not n420_raw_done:
+        labels.append(N420_RAW_MAIN)
     if n42_done and not finished(results, N42_EVAL):
         labels.append(N42_EVAL)
+    if not finished(results, N420_NULL):
+        labels.append(N420_NULL)
+    if not finished(results, N420_RAW_NULL):
+        labels.append(N420_RAW_NULL)
     if n420_done and not finished(results, N420_EVAL):
         labels.append(N420_EVAL)
+    if n420_raw_done and not finished(results, N420_RAW_EVAL):
+        labels.append(N420_RAW_EVAL)
 
     if not labels:
         print("All remaining N=42, N=210, and N=420 GEN work is complete.")
@@ -63,7 +73,9 @@ def main():
     if not n42_done:
         print("N=42 overlapping evaluation is gated until training completes.")
     if not n420_done:
-        print("N=420 overlapping evaluation is gated until training completes.")
+        print("N=420 scaled-sum evaluation is gated until training completes.")
+    if not n420_raw_done:
+        print("N=420 raw-sum evaluation is gated until training completes.")
     print(" ".join(command))
     if not args.dry_run:
         active = subprocess.run(
