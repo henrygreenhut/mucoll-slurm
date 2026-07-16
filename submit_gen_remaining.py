@@ -10,6 +10,9 @@ from pathlib import Path
 N42_MAIN = "A0_n42_scaled_clean"
 N210_EVAL = "EVAL_n210_paired_overlap"
 N42_EVAL = "EVAL_n42_scaled_clean_paired_overlap"
+N420_MAIN = "A0_n420_scaled_disjoint"
+N420_NULL = "A0_n420_null_shared"
+N420_EVAL = "EVAL_n420_paired_overlap"
 
 
 def finished(results, label):
@@ -27,15 +30,22 @@ def main():
     labels = []
 
     n42_done = finished(results, N42_MAIN)
+    n420_done = finished(results, N420_MAIN)
     if not n42_done:
         labels.append(N42_MAIN)
     if not finished(results, N210_EVAL):
         labels.append(N210_EVAL)
+    if not n420_done:
+        labels.append(N420_MAIN)
+    if not finished(results, N420_NULL):
+        labels.append(N420_NULL)
     if n42_done and not finished(results, N42_EVAL):
         labels.append(N42_EVAL)
+    if n420_done and not finished(results, N420_EVAL):
+        labels.append(N420_EVAL)
 
     if not labels:
-        print("N=42 continuation and both overlapping evaluations are complete.")
+        print("All remaining N=42, N=210, and N=420 GEN work is complete.")
         return
 
     # The bundle has four ranks/GPUs. Only scientifically unblocked work is
@@ -52,6 +62,8 @@ def main():
     print("packed labels: {}".format(", ".join(labels)))
     if not n42_done:
         print("N=42 overlapping evaluation is gated until training completes.")
+    if not n420_done:
+        print("N=420 overlapping evaluation is gated until training completes.")
     print(" ".join(command))
     if not args.dry_run:
         active = subprocess.run(
