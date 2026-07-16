@@ -57,8 +57,11 @@ FEATURE_SETS = {
     "paper": ["logpt", "theta", "cosphi", "sinphi"] + PDG_ONEHOT,
     "bib": ["logpt", "theta", "cosphi", "sinphi",
             "asinh_t", "asinh_vz", "asinh_vr"] + PDG_ONEHOT,
+    "rotation": ["logpt", "theta", "cosphi", "sinphi",
+                 "asinh_t", "asinh_vz", "asinh_vr",
+                 "cosvphi", "sinvphi"] + PDG_ONEHOT,
 }
-PHI_FEATURES = ["cosphi", "sinphi"]
+PHI_FEATURES = ["cosphi", "sinphi", "cosvphi", "sinvphi"]
 
 
 class Store:
@@ -144,6 +147,8 @@ def build_features(raw, feature_set="paper", drop_phi=False):
         "asinh_t": lambda: np.arcsinh(raw["t"]),
         "asinh_vz": lambda: np.arcsinh(raw["vz"]),
         "asinh_vr": lambda: np.arcsinh(np.hypot(raw["vx"], raw["vy"])),
+        "cosvphi": lambda: np.cos(np.arctan2(raw["vy"], raw["vx"])),
+        "sinvphi": lambda: np.sin(np.arctan2(raw["vy"], raw["vx"])),
     }
     cols = []
     for name in feature_names(feature_set, drop_phi):
@@ -177,7 +182,7 @@ def load_norm_stats(path):
 
 
 def build_pfn(input_dim, latent_scale, phi_sizes=(200, 200, 256),
-              f_sizes=(200, 200, 200), lr=0.001):
+              f_sizes=(200, 200, 200), lr=0.001, n_classes=2):
     """PFN (per-particle Phi MLP -> masked sum -> F MLP) in plain Keras.
 
     Zero-padded particles (all features exactly 0) are masked out. The
@@ -202,7 +207,7 @@ def build_pfn(input_dim, latent_scale, phi_sizes=(200, 200, 256),
     g = summed
     for i, width in enumerate(f_sizes):
         g = layers.Dense(width, activation="relu", name=f"f_{i}")(g)
-    out = layers.Dense(2, activation="softmax", name="output")(g)
+    out = layers.Dense(n_classes, activation="softmax", name="output")(g)
     model = Model(inp, out)
     model.compile(optimizer=optimizers.Adam(learning_rate=lr),
                   loss="categorical_crossentropy", metrics=["acc"])

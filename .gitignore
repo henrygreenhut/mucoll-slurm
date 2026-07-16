@@ -9,3 +9,4 @@ __pycache__/
 *.pyc
 *.md
 !RUN_RECO_N420.md
+!RUN_GEN_VARIABLE_K.md
