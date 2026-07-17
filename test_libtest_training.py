@@ -7,6 +7,7 @@ import unittest
 import numpy as np
 
 import libtest_common as lc
+from pfn_libtest_train import binary_cross_entropy
 
 
 class LibtestNormalizationTests(unittest.TestCase):
@@ -59,6 +60,13 @@ class EarlyStoppingTests(unittest.TestCase):
         state["epoch"] = 80
         self.assertTrue(lc.should_early_stop(
             state, patience=20, min_epochs=80))
+
+
+class ValidationLossTests(unittest.TestCase):
+    def test_binary_cross_entropy_matches_two_class_definition(self):
+        labels = np.asarray([0, 1], dtype=np.int32)
+        scores = np.asarray([0.25, 0.75], dtype=np.float32)
+        self.assertAlmostEqual(binary_cross_entropy(labels, scores), -np.log(0.75))
 
     def test_patience_still_applies_after_floor(self):
         state = {"epoch": 80, "best_epoch": 70}

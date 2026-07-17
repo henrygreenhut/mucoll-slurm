@@ -127,6 +127,14 @@ def predict_units(model, unit_defs, samplers, mean, std, batch_size):
     return np.asarray(labels), np.asarray(scores)
 
 
+def binary_cross_entropy(labels, scores):
+    """Mean two-class cross entropy from PFN class-1 probabilities."""
+    scores = np.clip(np.asarray(scores, dtype=np.float64), 1e-7, 1.0 - 1e-7)
+    labels = np.asarray(labels, dtype=np.int32)
+    probabilities = np.where(labels == 1, scores, 1.0 - scores)
+    return float(-np.mean(np.log(probabilities)))
+
+
 def load_state(path):
     if os.path.isfile(path):
         with open(path) as f:
@@ -141,8 +149,14 @@ def save_state(path, state):
 
 def append_history(path, row):
     exists = os.path.isfile(path)
+    fieldnames = list(row)
+    if exists:
+        # Old runs did not record val_loss. Preserve their column layout if a
+        # user resumes one, instead of silently shifting CSV columns.
+        with open(path, newline="") as f:
+            fieldnames = next(csv.reader(f))
     with open(path, "a", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=list(row.keys()))
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         if not exists:
             writer.writeheader()
         writer.writerow(row)
@@ -285,6 +299,7 @@ def main():
         y_val, s_val = predict_units(model, val_defs, samplers, mean, std,
                                      args.batch_size)
         val_auc = lc.auc_score(y_val, s_val)
+        val_loss = binary_cross_entropy(y_val, s_val)
 
         state["epoch"] = epoch + 1
         improved = val_auc > state["best_val_auc"] + 1e-4
@@ -299,10 +314,12 @@ def main():
         checkpoint_manager.save(checkpoint_number=state["epoch"])
         append_history(history_path, {
             "epoch": epoch, "train_loss": float(np.mean(losses)),
-            "val_auc": val_auc, "seconds": round(train_time, 1),
+            "val_loss": val_loss, "val_auc": val_auc,
+            "seconds": round(train_time, 1),
         })
         save_state(state_path, state)
-        print(f"epoch {epoch}: loss {np.mean(losses):.4f} | val AUC {val_auc:.4f}"
+        print(f"epoch {epoch}: loss {np.mean(losses):.4f} | val loss {val_loss:.4f}"
+              f" | val AUC {val_auc:.4f}"
               f"{' *' if improved else ''} | {train_time:.0f}s", flush=True)
 
         if lc.should_early_stop(state, args.patience, args.min_epochs):

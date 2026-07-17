@@ -51,7 +51,7 @@ trainer. The important ones are:
 | N=420 reconstruction study | `reco_libtest_prepare_pools.py`, `submit_reco_libtest_packed.py`, `run_reco_libtest_task.sh`, `make_reco_libtest_stores.py`, `train_reco_libtest_pfn.py` |
 | Simulation chain | `chains/run_chain_pgun.sh` |
 | Batch entry points | `submit_*.slurm` |
-| Result plotting | `pfn_libtest_compare.py` |
+| Result plotting | `pfn_libtest_compare.py`, `plot_gen_trials.py` |
 | Software invariants | `test_libtest_training.py`, `test_variable_reuse_common.py` |
 
 Generated logs, plots, stores, and results are ignored. HDF5 stores and EDM4hep
@@ -79,6 +79,9 @@ sbatch --export=ALL,LABEL=gen_n420_null_v2,TRAIN_ARGS="--n-files 420 --units-per
 Each shared-QOS job is one resumable 25-minute training window. If `state.json`
 does not say `done: true`, submit the identical command again. The model,
 optimizer, epoch, and best-validation state are restored from the checkpoint.
+New histories record both training and validation cross entropy. Older results
+recorded training loss and validation AUC only; they cannot support a genuine
+validation-loss curve retroactively.
 
 After the main model finishes, estimate its held-out AUC with paired
 source-cycle resampling:
