@@ -5,6 +5,7 @@ import argparse
 import csv
 import json
 import os
+import subprocess
 from pathlib import Path
 
 import h5py
@@ -21,6 +22,8 @@ FEATURES = (
 )
 RAW = {name: i for i, name in enumerate(
     ("pt", "eta", "phi", "energy", "mass", "charge", "type", "px", "py", "pz"))}
+N_FILES = 420
+EXPECTED_EVENTS = {"train": 2000, "val": 400, "test_a": 400, "test_b": 400}
 
 
 def parse_args():
@@ -30,15 +33,10 @@ def parse_args():
     parser.add_argument("--class-b", required=True)
     parser.add_argument("--label", required=True)
     parser.add_argument("--outdir", default="reco_pfn_results")
-    parser.add_argument("--n-files", type=int, default=420)
     parser.add_argument("--epochs", type=int, default=150)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--patience", type=int, default=20)
     parser.add_argument("--seed", type=int, default=1)
-    parser.add_argument("--expected-train", type=int, default=2000,
-                        help="required events per class in the training store")
-    parser.add_argument("--expected-eval", type=int, default=400,
-                        help="required events per class in every other store")
     return parser.parse_args()
 
 
@@ -119,12 +117,26 @@ def combine_pair(pair, width):
 
 
 def get_pfn(input_dim):
+    """Build the EnergyFlow PFN used for the original RECO study."""
     try:
         from energyflow.archs.efn import PFN
     except ImportError:
         from energyflow.archs import PFN
     return PFN(input_dim=input_dim, Phi_sizes=(64, 64, 64),
                F_sizes=(64, 64, 64))
+
+
+def git_provenance():
+    """Return the checked-out revision and whether tracked code is modified."""
+    try:
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], text=True).strip()
+        dirty = bool(subprocess.check_output(
+            ["git", "status", "--short", "--untracked-files=no"],
+            text=True).strip())
+        return {"commit": commit, "dirty": dirty}
+    except (OSError, subprocess.CalledProcessError):
+        return {"commit": None, "dirty": None}
 
 
 def callbacks(weights, patience):
@@ -177,8 +189,8 @@ def main():
     store_dir = Path(args.store_dir).resolve()
     pairs = {
         split: load_pair(
-            store_dir, args.n_files, args.class_a, args.class_b, split,
-            args.expected_train if split == "train" else args.expected_eval)
+            store_dir, N_FILES, args.class_a, args.class_b, split,
+            EXPECTED_EVENTS[split])
         for split in ("train", "val", "test_a", "test_b")
     }
     width = max(item[0].shape[1] for pair in pairs.values() for item in pair)
@@ -237,10 +249,22 @@ def main():
         "label": args.label,
         "class_a": args.class_a,
         "class_b": args.class_b,
-        "n_files": args.n_files,
+        "n_files": N_FILES,
         "features": list(FEATURES),
         "architecture": {"Phi": [64, 64, 64], "F": [64, 64, 64],
                          "aggregation": "sum"},
+        "implementation": {
+            "class": "energyflow.archs.PFN",
+            "energyflow": __import__("energyflow").__version__,
+            "tensorflow": tf.__version__,
+        },
+        "code": git_provenance(),
+        "training": {
+            "epochs_requested": args.epochs,
+            "batch_size": args.batch_size,
+            "patience": args.patience,
+            "early_stopping_monitor": "val_loss",
+        },
         "seed": args.seed,
         "epochs_run": len(history.history["loss"]),
         "results": results,

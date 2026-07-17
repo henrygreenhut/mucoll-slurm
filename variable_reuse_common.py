@@ -125,8 +125,6 @@ def sample_definition(rng, mother_pool, reuse_k, mother_equivalents,
     angles = rng.uniform(0.0, 2.0 * np.pi, size=(n_unique, reuse_k))
     if rotation_policy == "baseline-unrotated" and reuse_k == 1:
         angles.fill(0.0)
-    elif rotation_policy == "include-original":
-        angles[:, 0] = 0.0
     elif rotation_policy not in ("all-random", "baseline-unrotated"):
         raise ValueError("unknown rotation policy: {}".format(rotation_policy))
     return {"mothers": mothers, "angles": angles, "reuse_k": int(reuse_k)}

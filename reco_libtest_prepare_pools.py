@@ -15,9 +15,6 @@ def parse_args():
     parser.add_argument("--norm42-sim", required=True,
                         help="norm42 SIM directory containing polarity folders")
     parser.add_argument("--outdir", required=True)
-    parser.add_argument("--fallback-muminus-from-muplus", action="store_true",
-                        help="use MUPLUS files for both overlay polarities if "
-                             "paired MUMINUS coverage is unavailable")
     parser.add_argument("--exclude-cycle", type=int, action="append", default=[],
                         help="cycle ID to exclude (repeatable)")
     parser.add_argument("--audit-only", action="store_true")
@@ -116,28 +113,15 @@ def main():
             print("{}/{}: {} SIM files".format(
                 library, polarity, len(source[library][polarity])))
 
-    use_fallback = False
     required = [(lib, pol) for lib in ("norm1", "norm42")
                 for pol in ("MUPLUS", "MUMINUS")]
-    if all(source[lib][pol] for lib, pol in required):
-        common = set.intersection(*(set(source[lib][pol]) for lib, pol in required))
-        polarity_sources = {
-            lib: {pol: source[lib][pol] for pol in ("MUPLUS", "MUMINUS")}
-            for lib in ("norm1", "norm42")
-        }
-    elif args.fallback_muminus_from_muplus:
-        if not source["norm1"]["MUPLUS"] or not source["norm42"]["MUPLUS"]:
-            raise SystemExit("fallback requires both MUPLUS libraries")
-        use_fallback = True
-        common = set(source["norm1"]["MUPLUS"]) & set(source["norm42"]["MUPLUS"])
-        polarity_sources = {
-            lib: {pol: source[lib]["MUPLUS"] for pol in ("MUPLUS", "MUMINUS")}
-            for lib in ("norm1", "norm42")
-        }
-    else:
-        raise SystemExit(
-            "both polarities are not available; either wait or pass "
-            "--fallback-muminus-from-muplus")
+    if not all(source[lib][pol] for lib, pol in required):
+        raise SystemExit("both polarities must be present in both SIM libraries")
+    common = set.intersection(*(set(source[lib][pol]) for lib, pol in required))
+    polarity_sources = {
+        lib: {pol: source[lib][pol] for pol in ("MUPLUS", "MUMINUS")}
+        for lib in ("norm1", "norm42")
+    }
 
     excluded = set(args.exclude_cycle)
     cycles = sorted(common - excluded)
@@ -151,8 +135,6 @@ def main():
     print("split counts: {}".format(
         ", ".join("{}={}".format(name, len(values))
                   for name, values in splits.items())))
-    if use_fallback:
-        print("NOTE: MUPLUS files will be used for both overlay polarities")
     if args.audit_only:
         return
 
@@ -163,23 +145,25 @@ def main():
                 populate(outdir, library, split, polarity, selected,
                          polarity_sources[library][polarity], args.force)
 
-    # Null classes use interleaved halves of norm1 cycles within every split.
+    # Null B has the same source distribution as U. The production task gives
+    # it an independent digitization seed, so only stochastic reconstruction
+    # differs between the two labels.
     for split, selected in splits.items():
-        for null_name, null_cycles in (("null_a", selected[::2]),
-                                       ("null_b", selected[1::2])):
-            for polarity in ("MUPLUS", "MUMINUS"):
-                populate(outdir, null_name, split, polarity, null_cycles,
-                         polarity_sources["norm1"][polarity], args.force)
+        for polarity in ("MUPLUS", "MUMINUS"):
+            populate(outdir, "null_b", split, polarity, selected,
+                     polarity_sources["norm1"][polarity], args.force)
 
     manifest = {
         "norm1_sim": str(Path(args.norm1_sim).resolve()),
         "norm42_sim": str(Path(args.norm42_sim).resolve()),
-        "fallback_muminus_from_muplus": use_fallback,
         "excluded_cycles": sorted(excluded),
         "n_paired_cycles": len(cycles),
         "cycles": cycles,
         "splits": {name: values for name, values in splits.items()},
-        "null_partition": "alternating cycle IDs within each split",
+        "null_construction": (
+            "null_b shares every norm1 source cycle with U and uses an "
+            "independent digitization seed"
+        ),
     }
     manifest_path = outdir / "manifest.json"
     if manifest_path.exists() and not args.force:

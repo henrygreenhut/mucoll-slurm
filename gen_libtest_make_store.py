@@ -33,10 +33,6 @@ def parse_args():
     parser.add_argument("--input-dir", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--workers", type=int, default=32)
-    parser.add_argument("--limit", type=int, default=0,
-                        help="convert only the first N files (0 = all)")
-    parser.add_argument("--collection", default="",
-                        help="MCParticle collection name (default: auto-detect)")
     return parser.parse_args()
 
 
@@ -117,12 +113,10 @@ def main():
     if not files:
         sys.exit(f"no *.root files in {args.input_dir}")
     files, cycles = sorted_by_cycle(files)
-    if args.limit:
-        files, cycles = files[: args.limit], cycles[: args.limit]
     print(f"{len(files)} files from {args.input_dir}")
 
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
-    tasks = [(p, args.collection) for p in files]
+    tasks = [(p, "") for p in files]
 
     start = time.time()
     with h5py.File(args.output, "w") as out:

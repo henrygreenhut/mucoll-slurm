@@ -10,24 +10,15 @@
 #SBATCH --output=libtest_train_%x_%j.out
 #SBATCH --error=libtest_train_%x_%j.err
 
-# One 30-minute, fractionally charged shared-QOS training window; checkpoints
-# and resumes via --label, so chain several jobs to complete a training:
-#
-#   jid=$(sbatch --parsable --export=ALL,LABEL=A0_n42 submit_libtest_train.slurm)
-#   for i in 1 2 3 4 5; do
-#     jid=$(sbatch --parsable --dependency=afterany:$jid \
-#           --export=ALL,LABEL=A0_n42 submit_libtest_train.slurm)
-#   done
-#
-# Needs only the NERSC tensorflow module (no pip installs).
-# Env overrides: LABEL (required-ish), TRAIN_ARGS, STORE_DIR, POLARITY
+# One resumable shared-QOS training window. Resubmit the same LABEL and
+# TRAIN_ARGS after it finishes if state.json is not complete.
 
 set -e
 cd "$SLURM_SUBMIT_DIR"
 
 module load tensorflow
 
-LABEL=${LABEL:-A0_n42}
+LABEL=${LABEL:?set LABEL to a unique result name}
 TRAIN_ARGS=${TRAIN_ARGS:-}
 POLARITY=${POLARITY:-MUPLUS}
 STORE_DIR=${STORE_DIR:-$PSCRATCH/mucoll/libtest/stores}

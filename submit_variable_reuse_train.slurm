@@ -14,7 +14,7 @@ set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 module load tensorflow
 
-LABEL=${LABEL:-variable_k_scaled_allrandom}
+LABEL=${LABEL:?set LABEL to a unique result name}
 TRAIN_ARGS=${TRAIN_ARGS:-}
 
 python pfn_variable_reuse_train.py \

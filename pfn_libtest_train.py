@@ -5,24 +5,21 @@
 Units are whole variable-length particle sets (no capping, no random
 subsampling): unique = --n-files norm1 cycles, reuse = n_files/42 norm42
 cycles, same decay statistics. Splits are by cycle (train/val/test =
-60/15/25 of the paired cycles); within a split both classes use the same
+50/25/25 of the paired cycles); within a split both classes use the same
 cycles, so mother identity carries no label information.
 
-Designed for 30-minute Perlmutter debug-queue windows: checkpoints every
-epoch and exits cleanly at --max-minutes; resubmit with the same --label to
-resume. Test evaluation (disjoint blocked units + unit bootstrap) runs
-automatically once training finishes.
+Designed for resumable Perlmutter windows: model and Adam optimizer state are
+checkpointed every epoch, and the process exits cleanly at --max-minutes.
+Resubmit with the same --label to resume. Test evaluation (disjoint blocked
+units + unit bootstrap) runs automatically once training finishes.
 
 Needs only numpy, h5py, tensorflow (no sklearn, no energyflow); the PFN
 architecture (Phi=(200,200,256), masked scaled sum, F=(200,200,200)) is
 built in plain Keras in libtest_common.build_pfn. On Perlmutter GPU nodes:
 `module load tensorflow`.
 
-Examples:
-    python pfn_libtest_train.py --label A0_n42
-    python pfn_libtest_train.py --label A1_nophi_n42 --drop-phi
-    python pfn_libtest_train.py --label null_n42 --null-test
-    python pfn_libtest_train.py --label shuffle_n42 --shuffle-labels
+Fixed analysis choices are declared below. Command-line options are reserved
+for event size, compute budget, random seeds, and the scaled/raw sum test.
 """
 
 import argparse
@@ -37,6 +34,9 @@ import libtest_common as lc
 
 PHI_SIZES = (200, 200, 256)
 F_SIZES = (200, 200, 200)
+CLONE_FACTOR = 42
+SOURCE_SPLIT = (0.50, 0.25, 0.25)
+NORM_STAT_UNITS = 100
 
 
 def parse_args():
@@ -49,7 +49,6 @@ def parse_args():
     parser.add_argument("--outdir", default="pfn_results")
     parser.add_argument("--n-files", type=int, default=42,
                         help="norm1 files per unit (must be multiple of clone factor)")
-    parser.add_argument("--clone-factor", type=int, default=42)
     parser.add_argument("--units-per-epoch", type=int, default=2000, help="per class")
     parser.add_argument("--val-units", type=int, default=300, help="per class, fixed")
     parser.add_argument(
@@ -61,57 +60,40 @@ def parse_args():
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--epochs", type=int, default=200)
     parser.add_argument("--patience", type=int, default=15)
+    parser.add_argument("--min-epochs", type=int, default=0,
+                        help="do not apply early stopping before this many "
+                             "epochs have completed")
     parser.add_argument("--seed", type=int, default=1)
-    parser.add_argument(
-        "--split-fracs", type=float, nargs=3, metavar=("TRAIN", "VAL", "TEST"),
-        default=(0.60, 0.15, 0.25),
-        help="cycle-level train/validation/test fractions (default: "
-             "0.60 0.15 0.25; use 0.50 0.25 0.25 for large null units)")
+    parser.add_argument("--model-seed", type=int,
+                        help="TensorFlow initialization seed (default: --seed)")
     parser.add_argument("--max-minutes", type=float, default=0.0,
                         help="checkpoint and exit after this wall time (0 = off)")
-    parser.add_argument("--features", default="paper", choices=["paper", "bib"],
-                        help="paper = PFN-ID inputs per arXiv:1810.05165 "
-                             "(log pT, theta, cos/sin phi, PDG one-hot); "
-                             "bib = + asinh time/vertex (BIB-literature tier)")
-    parser.add_argument("--drop-phi", action="store_true",
-                        help="ablation A1: remove cos/sin phi features")
     parser.add_argument("--null-test", action="store_true",
                         help="norm1-vs-norm1 control (expect AUC 0.5)")
-    parser.add_argument(
-        "--null-partition", choices=["shared", "random-halves", "halves"],
-        default="shared",
-        help="null source pools: 'shared' draws both labels from the same "
-             "cycle pool (recommended; removes cycle identity as a label "
-             "feature); 'random-halves' uses disjoint randomly interleaved "
-             "pools for independent test units; 'halves' preserves the "
-             "legacy contiguous-half control")
-    parser.add_argument("--shuffle-labels", action="store_true",
-                        help="randomize training labels (expect val AUC 0.5)")
-    parser.add_argument("--e-min", type=float, default=0.0, help="energy cut [GeV]")
-    parser.add_argument("--t-abs-max", type=float, default=0.0, help="|t| cut")
-    parser.add_argument("--norm-stat-units", type=int, default=100,
-                        help="units per class used to compute feature mean/std")
     parser.add_argument("--latent-scale", default="auto",
                         help="constant multiplying the summed latent: 'auto' = "
                              "1/median unit multiplicity (default), 'none' = raw "
                              "sum (ablation), or an explicit float")
-    return parser.parse_args()
+    args = parser.parse_args()
+    # Persist fixed scientific choices in every result config.
+    args.clone_factor = CLONE_FACTOR
+    args.split_fracs = SOURCE_SPLIT
+    args.norm_stat_units = NORM_STAT_UNITS
+    args.null_partition = "shared"
+    return args
 
 
 class UnitSampler:
     """Builds (features, label) units for one class from one store."""
 
-    def __init__(self, store, positions_by_split, files_per_unit, args):
+    def __init__(self, store, positions_by_split, files_per_unit):
         self.store = store
         self.positions = positions_by_split
         self.files_per_unit = files_per_unit
-        self.args = args
 
     def build(self, file_positions, mean, std):
         raw = self.store.file_arrays(file_positions)
-        raw = lc.apply_cuts(raw, self.args.e_min, self.args.t_abs_max)
-        feats = lc.build_features(raw, feature_set=self.args.features,
-                                  drop_phi=self.args.drop_phi)
+        feats = lc.build_features(raw)
         return (feats - mean) / std
 
     def random_unit(self, rng, split):
@@ -168,6 +150,10 @@ def append_history(path, row):
 
 def main():
     args = parse_args()
+    if args.model_seed is None:
+        args.model_seed = args.seed
+    import tensorflow as tf
+    tf.keras.utils.set_random_seed(args.model_seed)
     start_time = time.time()
     outdir = os.path.join(args.outdir, args.label)
     os.makedirs(outdir, exist_ok=True)
@@ -181,10 +167,8 @@ def main():
         raise SystemExit("--n-files must be a multiple of --clone-factor")
     if args.overlap_test_units < 0:
         raise SystemExit("--overlap-test-units must be non-negative")
-    if any(frac <= 0 for frac in args.split_fracs):
-        raise SystemExit("--split-fracs values must all be positive")
-    if not np.isclose(sum(args.split_fracs), 1.0):
-        raise SystemExit("--split-fracs values must sum to 1")
+    if args.min_epochs < 0 or args.min_epochs > args.epochs:
+        raise SystemExit("--min-epochs must be between 0 and --epochs")
     with open(os.path.join(outdir, "config.json"), "w") as f:
         json.dump(vars(args), f, indent=1)
 
@@ -200,29 +184,10 @@ def main():
     splits = lc.split_indices(len(common), tuple(args.split_fracs))
 
     if args.null_test:
-        if args.null_partition == "shared":
-            # Label-independent null: both classes draw independently from
-            # the same cycle pool.  Train/val/test remain cycle-disjoint.
-            split_a = {k: pos1[v] for k, v in splits.items()}
-            split_b = {k: pos1[v] for k, v in splits.items()}
-        elif args.null_partition == "random-halves":
-            # Independent-source null: randomly interleave the cycles before
-            # assigning disjoint halves to the labels.  This preserves blocked
-            # disjoint test evaluation without making cycle order a label
-            # feature, as the legacy contiguous halves did.
-            rng_partition = np.random.default_rng(args.seed + 714210)
-            split_a = {}
-            split_b = {}
-            for key, values in splits.items():
-                shuffled = rng_partition.permutation(values)
-                midpoint = len(shuffled) // 2
-                split_a[key] = pos1[shuffled[:midpoint]]
-                split_b[key] = pos1[shuffled[midpoint:]]
-        else:
-            # Legacy null retained only for reproducing earlier runs.  At
-            # large n, contiguous halves can expose cycle-range differences.
-            split_a = {k: pos1[v[: len(v) // 2]] for k, v in splits.items()}
-            split_b = {k: pos1[v[len(v) // 2:]] for k, v in splits.items()}
+        # Label-independent null: both classes independently sample the same
+        # source pool. Train/validation/test remain cycle-disjoint.
+        split_a = {k: pos1[v] for k, v in splits.items()}
+        split_b = {k: pos1[v] for k, v in splits.items()}
         files_b = args.n_files
     else:
         split_a = {k: pos1[v] for k, v in splits.items()}
@@ -230,8 +195,8 @@ def main():
         files_b = args.n_files // args.clone_factor
 
     samplers = [
-        UnitSampler(store1, split_a, args.n_files, args),   # class 0: unique
-        UnitSampler(store_b, split_b, files_b, args),        # class 1: reuse
+        UnitSampler(store1, split_a, args.n_files),   # class 0: unique
+        UnitSampler(store_b, split_b, files_b),       # class 1: reuse
     ]
     for cls, sampler in enumerate(samplers):
         for split_name, positions in sampler.positions.items():
@@ -252,9 +217,7 @@ def main():
             for _ in range(args.norm_stat_units):
                 pos = samplers[cls].random_unit(rng, "train")
                 raw = samplers[cls].store.file_arrays(pos)
-                raw = lc.apply_cuts(raw, args.e_min, args.t_abs_max)
-                sample_feats.append(lc.build_features(
-                    raw, feature_set=args.features, drop_phi=args.drop_phi))
+                sample_feats.append(lc.build_features(raw))
         mean, std = lc.compute_norm_stats(sample_feats)
         if args.latent_scale == "auto":
             latent_scale = 1.0 / float(np.median([len(f) for f in sample_feats]))
@@ -262,14 +225,10 @@ def main():
             latent_scale = 1.0
         else:
             latent_scale = float(args.latent_scale)
-        lc.save_norm_stats(stats_path, mean, std,
-                           lc.feature_names(args.features, args.drop_phi),
-                           latent_scale)
+        lc.save_norm_stats(stats_path, mean, std, lc.FEATURE_NAMES, latent_scale)
         del sample_feats
     n_features = len(mean)
-    print(f"  features: {n_features} ('{args.features}'"
-          f"{', no-phi' if args.drop_phi else ''})"
-          f" | latent scale 1/{1.0 / latent_scale:.0f}")
+    print(f"  features: {n_features} | latent scale 1/{1.0 / latent_scale:.0f}")
 
     # --- fixed validation units ------------------------------------------
     rng_val = np.random.default_rng(args.seed + 999)
@@ -279,10 +238,34 @@ def main():
     # --- model -------------------------------------------------------------
     model = lc.build_pfn(n_features, latent_scale,
                          phi_sizes=PHI_SIZES, f_sizes=F_SIZES)
-    if state["epoch"] > 0 and os.path.isfile(last_w):
-        model.load_weights(last_w)
-        print(f"  resumed from epoch {state['epoch']}"
+    # Materialize Adam slot variables before restoring so its moments and
+    # iteration counter are included, rather than silently resetting at each
+    # Slurm window.
+    if hasattr(model.optimizer, "build"):
+        model.optimizer.build(model.trainable_variables)
+    checkpoint_epoch = tf.Variable(0, dtype=tf.int64, trainable=False)
+    checkpoint_best_auc = tf.Variable(-1.0, dtype=tf.float64, trainable=False)
+    checkpoint_best_epoch = tf.Variable(-1, dtype=tf.int64, trainable=False)
+    checkpoint = tf.train.Checkpoint(
+        model=model, optimizer=model.optimizer, epoch=checkpoint_epoch,
+        best_val_auc=checkpoint_best_auc, best_epoch=checkpoint_best_epoch)
+    checkpoint_manager = tf.train.CheckpointManager(
+        checkpoint, os.path.join(outdir, "resume_checkpoint"), max_to_keep=1)
+    if checkpoint_manager.latest_checkpoint:
+        status = checkpoint.restore(checkpoint_manager.latest_checkpoint)
+        status.assert_existing_objects_matched()
+        state["epoch"] = int(checkpoint_epoch.numpy())
+        state["best_val_auc"] = float(checkpoint_best_auc.numpy())
+        state["best_epoch"] = int(checkpoint_best_epoch.numpy())
+        print(f"  resumed model + Adam from epoch {state['epoch']}"
               f" (best val AUC {state['best_val_auc']:.4f})")
+    elif state["epoch"] > 0 and os.path.isfile(last_w):
+        # Backward compatibility for pre-fix runs. New labels immediately use
+        # the full TensorFlow checkpoint above.
+        model.load_weights(last_w)
+        print(f"  resumed legacy weights from epoch {state['epoch']}"
+              f" (best val AUC {state['best_val_auc']:.4f}); optimizer state"
+              " was unavailable")
 
     # --- training loop ------------------------------------------------------
     history_path = os.path.join(outdir, "history.csv")
@@ -291,10 +274,6 @@ def main():
         rng = np.random.default_rng(args.seed * 100003 + epoch)
         train_defs = [(c, samplers[c].random_unit(rng, "train"))
                       for c in (0, 1) for _ in range(args.units_per_epoch)]
-        if args.shuffle_labels:
-            classes = rng.integers(0, 2, size=len(train_defs))
-            train_defs = [(int(k), pos) for k, (_, pos) in zip(classes, train_defs)]
-
         t0 = time.time()
         losses = []
         for x, y, _ in make_batches(train_defs, samplers, mean, std,
@@ -314,6 +293,10 @@ def main():
             state["best_epoch"] = epoch
             model.save_weights(best_w)
         model.save_weights(last_w)
+        checkpoint_epoch.assign(state["epoch"])
+        checkpoint_best_auc.assign(state["best_val_auc"])
+        checkpoint_best_epoch.assign(state["best_epoch"])
+        checkpoint_manager.save(checkpoint_number=state["epoch"])
         append_history(history_path, {
             "epoch": epoch, "train_loss": float(np.mean(losses)),
             "val_auc": val_auc, "seconds": round(train_time, 1),
@@ -322,7 +305,7 @@ def main():
         print(f"epoch {epoch}: loss {np.mean(losses):.4f} | val AUC {val_auc:.4f}"
               f"{' *' if improved else ''} | {train_time:.0f}s", flush=True)
 
-        if epoch - state["best_epoch"] >= args.patience:
+        if lc.should_early_stop(state, args.patience, args.min_epochs):
             print(f"early stop: no val improvement for {args.patience} epochs")
             state["done"] = True
             save_state(state_path, state)

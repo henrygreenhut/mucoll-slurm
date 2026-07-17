@@ -117,9 +117,8 @@ def main():
     clone_factor = int(cfg(config, "clone_factor", 42))
     split_fracs = tuple(cfg(config, "split_fracs", (0.60, 0.15, 0.25)))
     null_test = bool(cfg(config, "null_test", False))
-    null_partition = cfg(config, "null_partition", "halves")
-    if null_test and null_partition != "shared":
-        raise SystemExit("paired-cycle evaluation supports the corrected shared-pool null only")
+    if null_test and cfg(config, "null_partition", "shared") != "shared":
+        raise SystemExit("paired-cycle evaluation requires a shared-pool null")
 
     store1 = lc.Store(config["norm1_store"])
     store_b = store1 if null_test else lc.Store(config["norm42_store"])
@@ -131,18 +130,11 @@ def main():
     files_b = n_files if null_test else n_files // clone_factor
     files_per_unit = (n_files, files_b)
 
-    # UnitSampler needs only feature/cut fields during evaluation.
-    eval_config = argparse.Namespace(
-        e_min=float(cfg(config, "e_min", 0.0)),
-        t_abs_max=float(cfg(config, "t_abs_max", 0.0)),
-        features=cfg(config, "features", "paper"),
-        drop_phi=bool(cfg(config, "drop_phi", False)),
-    )
     dummy_splits_a = {"test": pool_a}
     dummy_splits_b = {"test": pool_b}
     samplers = [
-        UnitSampler(store1, dummy_splits_a, n_files, eval_config),
-        UnitSampler(store_b, dummy_splits_b, files_b, eval_config),
+        UnitSampler(store1, dummy_splits_a, n_files),
+        UnitSampler(store_b, dummy_splits_b, files_b),
     ]
     mean, std, latent_scale = lc.load_norm_stats(stats_path)
     model = lc.build_pfn(len(mean), latent_scale,

@@ -22,8 +22,6 @@ def parse_args():
     parser.add_argument("--input-dir", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--workers", type=int, default=32)
-    parser.add_argument("--limit", type=int, default=0)
-    parser.add_argument("--collection", default="")
     parser.add_argument("--exclude-cycle", type=int, action="append", default=[])
     return parser.parse_args()
 
@@ -89,8 +87,6 @@ def main():
     pairs = sorted(zip(cycle_ids, paths))
     excluded = set(args.exclude_cycle)
     pairs = [(cycle, path) for cycle, path in pairs if cycle not in excluded]
-    if args.limit:
-        pairs = pairs[:args.limit]
     cycles = [pair[0] for pair in pairs]
     paths = [pair[1] for pair in pairs]
     print("{} cycles; cycle token #{} from filename end; excluded {}".format(
@@ -98,7 +94,7 @@ def main():
 
     output_parent = os.path.dirname(os.path.abspath(args.output))
     os.makedirs(output_parent, exist_ok=True)
-    tasks = [(path, args.collection) for path in paths]
+    tasks = [(path, "") for path in paths]
     start = time.time()
 
     with h5py.File(args.output, "w") as output:

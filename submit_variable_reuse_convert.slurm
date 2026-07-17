@@ -22,12 +22,10 @@ POLARITY=${POLARITY:-MUPLUS}
 INPUT_DIR=${INPUT_DIR:-$DATA_GROUP_DIR/bib-v3p0-fmt2-norm1-split-mother-norot/GEN/$POLARITY}
 STORE_DIR=${STORE_DIR:-$PSCRATCH/mucoll/libtest/stores}
 WORKERS=${WORKERS:-64}
-LIMIT=${LIMIT:-0}
 
 mkdir -p "$STORE_DIR"
 python3 gen_mother_make_store.py \
     --input-dir "$INPUT_DIR" \
     --output "$STORE_DIR/gen_split_mothers_${POLARITY}.h5" \
     --workers "$WORKERS" \
-    --limit "$LIMIT" \
     --exclude-cycle 6291

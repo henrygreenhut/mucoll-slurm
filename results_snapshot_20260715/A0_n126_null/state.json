@@ -1,6 +1,0 @@
-{
- "epoch": 16,
- "best_val_auc": 0.5143222222222222,
- "best_epoch": 0,
- "done": true
-}

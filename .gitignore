@@ -1,12 +1,12 @@
-plots/
-pfn_data/
-pfn_results/
-bdt_results/
-feature_diagnostics/
-overlay_diagnostics/
-root_sanity_checks/
 __pycache__/
 *.pyc
-*.md
-!RUN_RECO_N420.md
-!RUN_GEN_VARIABLE_K.md
+
+# Large products live on PSCRATCH; compact training outputs remain local but
+# are never source-controlled.
+logs/
+plots/
+pfn_results/
+variable_k_results/
+reco_pfn_results/
+*.out
+*.err

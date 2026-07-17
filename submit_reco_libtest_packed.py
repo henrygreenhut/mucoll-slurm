@@ -23,24 +23,20 @@ JOB_ID_BASE = {
 }
 LIBRARY = {"U": "norm1", "R": "norm42", "null_b": "norm1"}
 DIGI_OFFSET = {"U": 0, "R": 0, "null_b": 1_000_000}
+N_FILES = 420
+EVENTS_PER_JOB = 50
 
 
 def parse_args():
     scratch = os.environ.get("PSCRATCH", "")
     parser = argparse.ArgumentParser()
-    parser.add_argument("--splits", nargs="+", choices=list(SPLIT_EVENTS),
-                        default=list(SPLIT_EVENTS))
-    parser.add_argument("--classes", nargs="+", choices=list(LIBRARY),
-                        default=list(LIBRARY))
-    parser.add_argument("--events-per-job", type=int, default=50)
-    parser.add_argument("--n-files", type=int, default=420)
     parser.add_argument("--tasks-per-node", type=int, default=64)
     parser.add_argument("--qos", default="debug")
     parser.add_argument("--time", default="00:30:00")
     parser.add_argument("--account", default="m5197")
-    parser.add_argument("--pools", default=(scratch + "/mucoll/libtest/bib_pools")
+    parser.add_argument("--pools", default=(scratch + "/mucoll/libtest/bib_pools_v2")
                         if scratch else None, required=not bool(scratch))
-    parser.add_argument("--outdir", default=(scratch + "/mucoll/libtest/reco_n420_pfn")
+    parser.add_argument("--outdir", default=(scratch + "/mucoll/libtest/reco_n420_pfn_v2")
                         if scratch else None, required=not bool(scratch))
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
@@ -49,10 +45,8 @@ def parse_args():
 
 def main():
     args = parse_args()
-    if args.events_per_job < 1 or args.tasks_per_node < 1:
-        raise SystemExit("event and task counts must be positive")
-    if args.n_files < 42 or args.n_files % 42:
-        raise SystemExit("--n-files must be a positive multiple of 42")
+    if args.tasks_per_node < 1:
+        raise SystemExit("--tasks-per-node must be positive")
 
     repo = Path(__file__).resolve().parent
     pools = Path(args.pools).resolve()
@@ -60,13 +54,13 @@ def main():
     logs = repo / "logs"
     logs.mkdir(exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    manifest = logs / "reco_n{}_{}.tsv".format(args.n_files, stamp)
+    manifest = logs / "reco_n{}_{}.tsv".format(N_FILES, stamp)
 
     rows = []
     skipped = 0
-    for split in args.splits:
-        n_jobs = math.ceil(SPLIT_EVENTS[split] / args.events_per_job)
-        for sample in args.classes:
+    for split in SPLIT_EVENTS:
+        n_jobs = math.ceil(SPLIT_EVENTS[split] / EVENTS_PER_JOB)
+        for sample in LIBRARY:
             library = LIBRARY[sample]
             plus = pools / library / split / "MUPLUS"
             minus = pools / library / split / "MUMINUS"
@@ -74,12 +68,12 @@ def main():
                 if not directory.is_dir() or not any(directory.glob("*.root")):
                     raise SystemExit("empty or missing pool: {}".format(directory))
 
-            bib_number = args.n_files if sample != "R" else args.n_files // 42
-            study = "reco_libtest_n{}_{}/{}".format(args.n_files, sample, split)
+            bib_number = N_FILES if sample != "R" else N_FILES // 42
+            study = "reco_libtest_n{}_{}/{}".format(N_FILES, sample, split)
             for index in range(n_jobs):
                 job_id = JOB_ID_BASE[split] + index
-                first = index * args.events_per_job
-                nevents = min(args.events_per_job,
+                first = index * EVENTS_PER_JOB
+                nevents = min(EVENTS_PER_JOB,
                               SPLIT_EVENTS[split] - first)
                 expected = (outdir / study / "job_{}".format(job_id) /
                             "reco_output_{}.edm4hep.root".format(job_id))

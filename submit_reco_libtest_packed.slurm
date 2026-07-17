@@ -19,7 +19,7 @@ if [ "$TASKS" -lt 1 ] || [ "$TASKS" -gt "$CAPACITY" ]; then
 fi
 
 mkdir -p "$REPO/logs/tasks_$SLURM_JOB_ID"
-export CHAIN_WORK_BASE="$PSCRATCH/mucoll/libtest/work/reco420/$SLURM_JOB_ID"
+export CHAIN_WORK_BASE="$PSCRATCH/mucoll/libtest/work/reco420_v2/$SLURM_JOB_ID"
 mkdir -p "$CHAIN_WORK_BASE"
 
 echo "Running $TASKS independent chains on $SLURM_NNODES CPU node(s)"

@@ -46,22 +46,11 @@ def assign_cycle_ids(paths):
     ids = [int(t[-best_pos]) for t in tokens]
     return ids, best_pos, best_distinct
 
-# Feature sets, anchored on the PFN paper (arXiv:1810.05165):
-#   paper = PFN-ID inputs (pT, angle, ID), adapted for BIB: theta instead of
-#           rapidity (forward particles), absolute angles via cos/sin phi
-#           (no jet axis to center on), log pT (6-decade spectrum).
-#   bib   = paper + time/vertex displacement (asinh-compressed), the BIB
-#           discriminants of arXiv:2105.09116 / 2203.06773.
+# PFN-ID inputs, adapted for BIB: theta instead of rapidity for forward
+# particles, absolute phi because there is no jet axis, and log pT for the
+# six-decade momentum spectrum.
 PDG_ONEHOT = ["pdg_gamma", "pdg_n", "pdg_e", "pdg_mu", "pdg_other"]
-FEATURE_SETS = {
-    "paper": ["logpt", "theta", "cosphi", "sinphi"] + PDG_ONEHOT,
-    "bib": ["logpt", "theta", "cosphi", "sinphi",
-            "asinh_t", "asinh_vz", "asinh_vr"] + PDG_ONEHOT,
-    "rotation": ["logpt", "theta", "cosphi", "sinphi",
-                 "asinh_t", "asinh_vz", "asinh_vr",
-                 "cosvphi", "sinvphi"] + PDG_ONEHOT,
-}
-PHI_FEATURES = ["cosphi", "sinphi", "cosvphi", "sinvphi"]
+FEATURE_NAMES = ["logpt", "theta", "cosphi", "sinphi"] + PDG_ONEHOT
 
 
 class Store:
@@ -105,26 +94,7 @@ def split_indices(n_common, fracs=(0.60, 0.15, 0.25)):
     }
 
 
-def apply_cuts(raw, e_min=0.0, t_abs_max=0.0):
-    """Deterministic physics cuts; identical for both classes. 0 = no cut."""
-    mask = np.ones(len(raw["E"]), dtype=bool)
-    if e_min > 0:
-        mask &= raw["E"] >= e_min
-    if t_abs_max > 0:
-        mask &= np.abs(raw["t"]) <= t_abs_max
-    if mask.all():
-        return raw
-    return {k: v[mask] for k, v in raw.items()}
-
-
-def feature_names(feature_set="paper", drop_phi=False):
-    names = list(FEATURE_SETS[feature_set])
-    if drop_phi:
-        names = [n for n in names if n not in PHI_FEATURES]
-    return names
-
-
-def build_features(raw, feature_set="paper", drop_phi=False):
+def build_features(raw):
     """(N, F) float32 feature array from raw particle arrays."""
     px, py = raw["px"], raw["py"]
     pt = np.hypot(px, py)
@@ -144,14 +114,9 @@ def build_features(raw, feature_set="paper", drop_phi=False):
         "theta": lambda: np.arctan2(pt, raw["pz"]),
         "cosphi": lambda: np.cos(phi),
         "sinphi": lambda: np.sin(phi),
-        "asinh_t": lambda: np.arcsinh(raw["t"]),
-        "asinh_vz": lambda: np.arcsinh(raw["vz"]),
-        "asinh_vr": lambda: np.arcsinh(np.hypot(raw["vx"], raw["vy"])),
-        "cosvphi": lambda: np.cos(np.arctan2(raw["vy"], raw["vx"])),
-        "sinvphi": lambda: np.sin(np.arctan2(raw["vy"], raw["vx"])),
     }
     cols = []
-    for name in feature_names(feature_set, drop_phi):
+    for name in FEATURE_NAMES:
         if name in PDG_ONEHOT:
             cols.append(onehot[name])
         else:
@@ -160,15 +125,73 @@ def build_features(raw, feature_set="paper", drop_phi=False):
 
 
 def compute_norm_stats(feature_arrays):
-    """Per-feature mean/std over a list of (N, F) arrays."""
-    stacked = np.concatenate(feature_arrays, axis=0)
-    mean = stacked.mean(axis=0)
-    std = stacked.std(axis=0)
+    """Per-feature mean/std with streaming float64 accumulation.
+
+    The GEN studies can use O(10^8) float32 particle rows to estimate these
+    statistics.  Reducing a two-dimensional float32 array along axis zero
+    eventually stops incrementing one-hot counts at 2**24, corrupting both
+    the mean and variance.  Merge per-array float64 moments instead; this is
+    also much less memory-hungry than concatenating all normalization units.
+    """
+    count = 0
+    mean = None
+    m2 = None
+    n_features = None
+    for array in feature_arrays:
+        values = np.asarray(array)
+        if values.ndim != 2:
+            raise ValueError("normalization arrays must have shape (N, F)")
+        if n_features is None:
+            n_features = values.shape[1]
+            mean = np.zeros(n_features, dtype=np.float64)
+            m2 = np.zeros(n_features, dtype=np.float64)
+        elif values.shape[1] != n_features:
+            raise ValueError("normalization arrays have inconsistent feature counts")
+        chunk_count = len(values)
+        if chunk_count == 0:
+            continue
+        chunk_mean = np.mean(values, axis=0, dtype=np.float64)
+        chunk_var = np.var(values, axis=0, dtype=np.float64)
+        new_count = count + chunk_count
+        delta = chunk_mean - mean
+        mean += delta * (float(chunk_count) / float(new_count))
+        m2 += (chunk_var * chunk_count
+               + delta * delta * count * chunk_count / float(new_count))
+        count = new_count
+    if count == 0:
+        raise ValueError("cannot compute normalization from zero particles")
+    std = np.sqrt(np.maximum(m2 / float(count), 0.0))
     std[std < 1e-6] = 1.0
     return mean.astype(np.float32), std.astype(np.float32)
 
 
+def validate_norm_stats(mean, std, names=None):
+    """Reject non-finite or internally inconsistent cached statistics."""
+    mean = np.asarray(mean)
+    std = np.asarray(std)
+    if mean.ndim != 1 or std.shape != mean.shape:
+        raise ValueError("normalization mean/std shapes do not match")
+    if not np.all(np.isfinite(mean)) or not np.all(np.isfinite(std)):
+        raise ValueError("normalization statistics contain non-finite values")
+    if np.any(std <= 0):
+        raise ValueError("normalization standard deviations must be positive")
+    if names is not None:
+        names = list(names)
+        if len(names) != len(mean):
+            raise ValueError("normalization feature names do not match mean/std")
+        if all(name in names for name in PDG_ONEHOT):
+            onehot_total = float(np.sum(
+                [mean[names.index(name)] for name in PDG_ONEHOT],
+                dtype=np.float64))
+            if not np.isclose(onehot_total, 1.0, rtol=0.0, atol=1e-4):
+                raise ValueError(
+                    "invalid PDG one-hot normalization means: sum is {:.8g}, "
+                    "expected 1; cached statistics may have float32 reduction "
+                    "overflow".format(onehot_total))
+
+
 def save_norm_stats(path, mean, std, names, latent_scale):
+    validate_norm_stats(mean, std, names)
     with open(path, "w") as f:
         json.dump({"names": names, "mean": mean.tolist(), "std": std.tolist(),
                    "latent_scale": latent_scale}, f, indent=1)
@@ -177,8 +200,17 @@ def save_norm_stats(path, mean, std, names, latent_scale):
 def load_norm_stats(path):
     with open(path) as f:
         d = json.load(f)
-    return (np.asarray(d["mean"], np.float32), np.asarray(d["std"], np.float32),
-            float(d["latent_scale"]))
+    mean = np.asarray(d["mean"], np.float32)
+    std = np.asarray(d["std"], np.float32)
+    validate_norm_stats(mean, std, d.get("names"))
+    return mean, std, float(d["latent_scale"])
+
+
+def should_early_stop(state, patience, min_epochs, metric_epoch_key="best_epoch"):
+    """Whether patience is exhausted after respecting an epoch floor."""
+    if state["epoch"] < min_epochs:
+        return False
+    return state["epoch"] - 1 - state[metric_epoch_key] >= patience
 
 
 def build_pfn(input_dim, latent_scale, phi_sizes=(200, 200, 256),

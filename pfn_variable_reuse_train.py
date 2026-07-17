@@ -15,6 +15,8 @@ from variable_reuse_common import MotherStore, cycle_split_mothers, sample_defin
 
 PHI_SIZES = (200, 200, 256)
 F_SIZES = (200, 200, 200)
+SOURCE_SPLIT = (0.50, 0.25, 0.25)
+NORM_PARTICLES_PER_CLASS = 100000
 
 
 def parse_args():
@@ -30,7 +32,7 @@ def parse_args():
     parser.add_argument("--mother-equivalents", type=int, default=29400,
                         help="fixed copies/event; 29400 is about 420 old cycle files")
     parser.add_argument("--rotation-policy",
-                        choices=["all-random", "baseline-unrotated", "include-original"],
+                        choices=["all-random", "baseline-unrotated"],
                         default="all-random")
     parser.add_argument("--units-per-epoch", type=int, default=20,
                         help="training pseudo-events per k and epoch")
@@ -41,22 +43,22 @@ def parse_args():
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--patience", type=int, default=10)
+    parser.add_argument("--min-epochs", type=int, default=0,
+                        help="do not apply early stopping before this many "
+                             "epochs have completed")
     parser.add_argument("--seed", type=int, default=1)
-    parser.add_argument("--split-fracs", type=float, nargs=3,
-                        default=[0.5, 0.25, 0.25])
-    parser.add_argument("--features", choices=sorted(lc.FEATURE_SETS), default="paper")
-    parser.add_argument("--drop-phi", action="store_true")
-    parser.add_argument("--e-min", type=float, default=0.0)
-    parser.add_argument("--t-abs-max", type=float, default=0.0)
+    parser.add_argument("--model-seed", type=int,
+                        help="TensorFlow initialization seed (default: --seed)")
     parser.add_argument("--latent-scale", default="auto",
                         help="auto, none, or a numeric constant")
-    parser.add_argument("--norm-stat-units", type=int, default=1,
-                        help="normalization pseudo-events sampled per k")
-    parser.add_argument("--norm-particles-per-unit", type=int, default=100000)
     parser.add_argument("--null-test", action="store_true",
                         help="independently permute k labels in train/val/test")
     parser.add_argument("--max-minutes", type=float, default=25.0)
-    return parser.parse_args()
+    args = parser.parse_args()
+    args.split_fracs = SOURCE_SPLIT
+    args.norm_stat_units = 1
+    args.norm_particles_per_unit = NORM_PARTICLES_PER_CLASS
+    return args
 
 
 def save_json(path, value):
@@ -97,10 +99,9 @@ def make_definitions(rng, samplers, split, units_per_class, null_test=False):
     return definitions
 
 
-def unit_features(store, definition, args):
+def unit_features(store, definition):
     raw = store.rotated_mothers(definition["mothers"], definition["angles"])
-    raw = lc.apply_cuts(raw, args.e_min, args.t_abs_max)
-    return lc.build_features(raw, args.features, args.drop_phi)
+    return lc.build_features(raw)
 
 
 def batches(definitions, store, args, mean, std, n_classes, rng=None):
@@ -109,7 +110,7 @@ def batches(definitions, store, args, mean, std, n_classes, rng=None):
         rng.shuffle(order)
     for first in range(0, len(order), args.batch_size):
         selected = [definitions[index] for index in order[first:first + args.batch_size]]
-        arrays = [unit_features(store, definition, args)
+        arrays = [unit_features(store, definition)
                   for _, definition in selected]
         max_particles = max(len(array) for array in arrays)
         x = np.zeros((len(arrays), max_particles, len(mean)), dtype=np.float32)
@@ -152,7 +153,7 @@ def compute_stats(store, samplers, args):
             definition = sample_definition(
                 rng, sampler["pools"]["train"], sampler["reuse_k"],
                 sampler["mother_equivalents"], sampler["rotation_policy"])
-            features = unit_features(store, definition, args)
+            features = unit_features(store, definition)
             particle_counts.append(len(features))
             if len(features) > args.norm_particles_per_unit:
                 positions = rng.choice(len(features), args.norm_particles_per_unit,
@@ -177,6 +178,10 @@ def compute_stats(store, samplers, args):
 
 def main():
     args = parse_args()
+    if args.model_seed is None:
+        args.model_seed = args.seed
+    import tensorflow as tf
+    tf.keras.utils.set_random_seed(args.model_seed)
     reuse_values = sorted(set(args.reuse_k))
     if len(reuse_values) < 2:
         raise SystemExit("provide at least two distinct --reuse-k values")
@@ -186,6 +191,8 @@ def main():
                              .format(args.mother_equivalents, reuse_k))
     if args.batch_size < 1 or args.units_per_epoch < 1:
         raise SystemExit("batch size and units per epoch must be positive")
+    if args.min_epochs < 0 or args.min_epochs > args.epochs:
+        raise SystemExit("--min-epochs must be between 0 and --epochs")
 
     result_dir = os.path.join(args.outdir, args.label)
     os.makedirs(result_dir, exist_ok=True)
@@ -225,9 +232,7 @@ def main():
         mean, std, latent_scale = lc.load_norm_stats(stats_path)
     else:
         mean, std, latent_scale = compute_stats(store, samplers, args)
-        lc.save_norm_stats(stats_path, mean, std,
-                           lc.feature_names(args.features, args.drop_phi),
-                           latent_scale)
+        lc.save_norm_stats(stats_path, mean, std, lc.FEATURE_NAMES, latent_scale)
     print("  classes k={} | fixed {:,} mother-equivalents | latent scale {:.4g}"
           .format(reuse_values, args.mother_equivalents, latent_scale))
 
@@ -238,10 +243,33 @@ def main():
 
     model = lc.build_pfn(len(mean), latent_scale, PHI_SIZES, F_SIZES,
                          n_classes=n_classes)
-    if state["epoch"] > 0 and os.path.isfile(last_weights):
+    if hasattr(model.optimizer, "build"):
+        model.optimizer.build(model.trainable_variables)
+    checkpoint_epoch = tf.Variable(0, dtype=tf.int64, trainable=False)
+    checkpoint_best_auc = tf.Variable(-1.0, dtype=tf.float64, trainable=False)
+    checkpoint_best_accuracy = tf.Variable(0.0, dtype=tf.float64, trainable=False)
+    checkpoint_best_epoch = tf.Variable(-1, dtype=tf.int64, trainable=False)
+    checkpoint = tf.train.Checkpoint(
+        model=model, optimizer=model.optimizer, epoch=checkpoint_epoch,
+        best_val_macro_auc=checkpoint_best_auc,
+        best_val_accuracy=checkpoint_best_accuracy,
+        best_epoch=checkpoint_best_epoch)
+    checkpoint_manager = tf.train.CheckpointManager(
+        checkpoint, os.path.join(result_dir, "resume_checkpoint"), max_to_keep=1)
+    if checkpoint_manager.latest_checkpoint:
+        status = checkpoint.restore(checkpoint_manager.latest_checkpoint)
+        status.assert_existing_objects_matched()
+        state["epoch"] = int(checkpoint_epoch.numpy())
+        state["best_val_macro_auc"] = float(checkpoint_best_auc.numpy())
+        state["best_val_accuracy"] = float(checkpoint_best_accuracy.numpy())
+        state["best_epoch"] = int(checkpoint_best_epoch.numpy())
+        print("  resumed model + Adam from epoch {} (best macro AUC {:.4f})"
+              .format(state["epoch"], state["best_val_macro_auc"]))
+    elif state["epoch"] > 0 and os.path.isfile(last_weights):
         model.load_weights(last_weights)
-        print("  resumed epoch {} (best macro AUC {:.4f})".format(
-            state["epoch"], state["best_val_macro_auc"]))
+        print("  resumed legacy weights from epoch {} (best macro AUC {:.4f}); "
+              "optimizer state was unavailable".format(
+                  state["epoch"], state["best_val_macro_auc"]))
 
     while not state["done"] and state["epoch"] < args.epochs:
         epoch = state["epoch"]
@@ -268,6 +296,11 @@ def main():
             state["best_epoch"] = epoch
             model.save_weights(best_weights)
         model.save_weights(last_weights)
+        checkpoint_epoch.assign(state["epoch"])
+        checkpoint_best_auc.assign(state["best_val_macro_auc"])
+        checkpoint_best_accuracy.assign(state["best_val_accuracy"])
+        checkpoint_best_epoch.assign(state["best_epoch"])
+        checkpoint_manager.save(checkpoint_number=state["epoch"])
         append_history(history_path, {
             "epoch": epoch, "train_loss": float(np.mean(losses)),
             "val_accuracy": accuracy, "val_macro_auc": macro_auc,
@@ -278,7 +311,7 @@ def main():
               .format(epoch, np.mean(losses), accuracy, macro_auc,
                       " *" if improved else "", seconds), flush=True)
 
-        if epoch - state["best_epoch"] >= args.patience:
+        if lc.should_early_stop(state, args.patience, args.min_epochs):
             state["done"] = True
             save_json(state_path, state)
             print("early stop: no validation improvement for {} epochs"

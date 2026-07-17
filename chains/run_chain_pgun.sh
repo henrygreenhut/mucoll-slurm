@@ -48,7 +48,7 @@ fi
 # --- Resolve repo location and load shared config / environment --------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 source "$SCRIPT_DIR/../config.sh"           # WORK_DIR, MUCOLL_BENCHMARKS_PATH, BIB_*, GEOM_NAME
-source "$SCRIPT_DIR/../scripts/setup.sh"     # spack stack (glob-based)
+source "$SCRIPT_DIR/../scripts/setup.sh"     # Muon Collider software stack
 # Detector geometry + PYTHONPATH for the digi/reco steering files.
 # (setup_config.sh exports MUCOLL_GEO, MUCOLL_CONFIG, MUCOLL_CONFIG_NAME, PYTHONPATH)
 source "$MUCOLL_BENCHMARKS_PATH/setup_config.sh" "$MUCOLL_BENCHMARKS_PATH" "$GEOM_NAME"

@@ -16,4 +16,4 @@ cd "$SLURM_SUBMIT_DIR"
 module load python
 
 conda run -p "$PSCRATCH/mucoll/envs/mucoll-inspect" \
-    python make_reco_libtest_stores.py --n-files 420
+    python make_reco_libtest_stores.py
