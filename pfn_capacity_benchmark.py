@@ -11,6 +11,15 @@ FEATURE_NAMES length), n-list/batch-sizes defaulted to the actual n-sweep
 particle counts (n=42/126/210/420 files) and the batch sizes bracketing the
 observed n=420 --batch-size 1 configuration.
 
+Known hard ceiling, independent of GPU memory: batch*N*256 (256 = widest
+Phi layer) must stay under 2**31-1, or a TF/XLA CUDA kernel launch computes
+a negative element count and hard-aborts ("Check failed: work_element_count
+>= 0") -- i.e. batch*N < 2**31 / 256 = 8,388,608. Confirmed: n420 (N=
+1,255,800) batch=4 (5.0M, fits) vs batch=8 (10.0M, aborts on an 80GB card
+with >60GB free -- more memory does not help, this is a 32-bit indexing
+bug, not OOM). A different TensorFlow/XLA version might raise or remove
+this; not otherwise investigated.
+
 Batch sizes within one N are tried ASCENDING (smallest first), stopping at
 the first SKIP or OOM -- not descending. A hard GPU abort (SIGABRT, seen for
 a sufficiently oversized allocation attempt) kills the process outright and

@@ -29,7 +29,13 @@ export REAL_STORE=${REAL_STORE:-$PSCRATCH/mucoll/libtest/stores/gen_norm1_MUPLUS
 # not a catchable Python exception, e.g. from a wildly oversized allocation
 # attempt) must not take the other three, still-succeeding ranks down with
 # it. Matches the proven pattern in submit_reco_libtest_packed.slurm.
-srun --cpu-bind=cores --kill-on-bad-exit=0 bash cap_bench_task.sh
+#
+# With --max-gb 0 (default), a rank hitting its true ceiling and aborting is
+# an EXPECTED, useful outcome, not a script failure -- `|| true` stops that
+# nonzero exit from tripping `set -e` and skipping the verification below.
+srun --cpu-bind=cores --kill-on-bad-exit=0 bash cap_bench_task.sh || \
+    echo "one or more ranks exited non-zero (expected if a rank found its" \
+         "true capacity ceiling); continuing to GPU-binding verification"
 
 echo ""
 echo "=== GPU binding verification ==="

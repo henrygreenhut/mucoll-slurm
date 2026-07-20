@@ -99,7 +99,13 @@ def parse_args():
                         help="overlapping held-out events per class for the "
                              "primary (automatic) test AUC")
     parser.add_argument("--eval-bootstrap-reps", type=int, default=200,
-                        help="paired-cycle bootstrap replicates (resumable)")
+                        help="paired-cycle bootstrap replicates (resumable; "
+                             "each one regenerates events from resampled "
+                             "cycles and reruns the model, so this is the "
+                             "dominant cost of evaluation -- e.g. 25-50 for "
+                             "a quick separation check, 0 or 1 to skip the "
+                             "bootstrap entirely and report only the point "
+                             "estimate test_auc with no uncertainty)")
     parser.add_argument("--eval-bootstrap-units", type=int, default=100,
                         help="regenerated events per class per bootstrap pool")
     args = parser.parse_args()
@@ -485,15 +491,19 @@ def main():
             return
 
     values = np.asarray(values, dtype=np.float64)
+    have_bootstrap = len(values) > 1
     with open(summary_path, "w") as f:
         json.dump({
             "label": args.label,
             "test_auc": point["auc"],
-            "bootstrap_mean": float(np.mean(values)),
-            "bootstrap_std": float(np.std(values, ddof=1)),
-            "bootstrap_ci68": np.percentile(values, [16, 84]).tolist(),
-            "bootstrap_ci95": np.percentile(values, [2.5, 97.5]).tolist(),
-            "test_mode": "overlapping-paired-cycle-bootstrap",
+            "bootstrap_mean": float(np.mean(values)) if have_bootstrap else None,
+            "bootstrap_std": float(np.std(values, ddof=1)) if have_bootstrap else None,
+            "bootstrap_ci68": (np.percentile(values, [16, 84]).tolist()
+                               if have_bootstrap else None),
+            "bootstrap_ci95": (np.percentile(values, [2.5, 97.5]).tolist()
+                               if have_bootstrap else None),
+            "test_mode": ("overlapping-paired-cycle-bootstrap" if have_bootstrap
+                         else "overlapping-point-estimate-only"),
             "test_units_mutually_disjoint": False,
             "n_test_units": 2 * args.eval_point_units,
             "test_score_std": point["score_std"],
@@ -505,14 +515,22 @@ def main():
             "best_epoch": state["best_epoch"], "epochs_run": state["epoch"],
             "uncertainty_note": (
                 "two-level nonparametric bootstrap over matched held-out "
-                "cycle pairs; events regenerated per pool; frozen classifier"),
+                "cycle pairs; events regenerated per pool; frozen classifier"
+                if have_bootstrap else
+                "no bootstrap requested (--eval-bootstrap-reps <= 1): point "
+                "estimate only, no calibrated uncertainty on test_auc"),
             "config": vars(args),
         }, f, indent=1)
-    print(f"\nTEST AUC = {point['auc']:.4f}"
-          f" (paired-cycle bootstrap SD {np.std(values, ddof=1):.4f},"
-          f" 95% CI [{np.percentile(values, 2.5):.4f},"
-          f" {np.percentile(values, 97.5):.4f}])"
-          f" | disjoint cross-check {disjoint_auc:.4f}")
+    if have_bootstrap:
+        print(f"\nTEST AUC = {point['auc']:.4f}"
+              f" (paired-cycle bootstrap SD {np.std(values, ddof=1):.4f},"
+              f" 95% CI [{np.percentile(values, 2.5):.4f},"
+              f" {np.percentile(values, 97.5):.4f}])"
+              f" | disjoint cross-check {disjoint_auc:.4f}")
+    else:
+        print(f"\nTEST AUC = {point['auc']:.4f} (point estimate only, no"
+              " bootstrap requested) | disjoint cross-check"
+              f" {disjoint_auc:.4f}")
     print(f"outputs -> {outdir}")
 
 
