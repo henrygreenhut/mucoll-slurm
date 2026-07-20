@@ -74,6 +74,18 @@ def parse_args():
                         help="constant multiplying the summed latent: 'auto' = "
                              "1/median unit multiplicity (default), 'none' = raw "
                              "sum (ablation), or an explicit float")
+    parser.add_argument("--arch", default="local", choices=["local", "energyflow"],
+                        help="'energyflow' uses energyflow.archs.PFN directly "
+                             "(textbook raw sum; requires --latent-scale none); "
+                             "'local' is the equivalence-checked Keras build "
+                             "with the optional latent scale")
+    parser.add_argument("--eval-point-units", type=int, default=300,
+                        help="overlapping held-out events per class for the "
+                             "primary (automatic) test AUC")
+    parser.add_argument("--eval-bootstrap-reps", type=int, default=200,
+                        help="paired-cycle bootstrap replicates (resumable)")
+    parser.add_argument("--eval-bootstrap-units", type=int, default=100,
+                        help="regenerated events per class per bootstrap pool")
     args = parser.parse_args()
     # Persist fixed scientific choices in every result config.
     args.clone_factor = CLONE_FACTOR
@@ -250,8 +262,17 @@ def main():
                 for c in (0, 1) for _ in range(args.val_units)]
 
     # --- model -------------------------------------------------------------
-    model = lc.build_pfn(n_features, latent_scale,
-                         phi_sizes=PHI_SIZES, f_sizes=F_SIZES)
+    if args.arch == "energyflow":
+        if latent_scale != 1.0:
+            raise SystemExit(
+                "--arch energyflow computes the textbook raw sum; run with "
+                "--latent-scale none (the latent scale only exists in the "
+                "local build)")
+        model = lc.build_pfn_energyflow(n_features,
+                                        phi_sizes=PHI_SIZES, f_sizes=F_SIZES)
+    else:
+        model = lc.build_pfn(n_features, latent_scale,
+                             phi_sizes=PHI_SIZES, f_sizes=F_SIZES)
     # Materialize Adam slot variables before restoring so its moments and
     # iteration counter are included, rather than silently resetting at each
     # Slurm window.
@@ -335,85 +356,137 @@ def main():
         state["done"] = True
         save_state(state_path, state)
 
-    # --- test evaluation ---------------------------------------------------
+    # --- evaluation --------------------------------------------------------
+    # Primary protocol (automatic): overlapping held-out events with a
+    # paired-cycle bootstrap -- the cluster bootstrap over the true
+    # independent objects (source cycles). A quick disjoint blocked
+    # evaluation is retained as a secondary cross-check. Resumable across
+    # windows; skipped entirely once the summary exists.
+    summary_path = os.path.join(outdir, "auc_summary.json")
+    if os.path.isfile(summary_path):
+        with open(summary_path) as f:
+            prior = json.load(f)
+        if prior.get("test_mode") == "overlapping-paired-cycle-bootstrap":
+            print(f"evaluation already complete -> {summary_path}")
+            return
+
     if os.path.isfile(best_w):
         model.load_weights(best_w)
-    if args.overlap_test_units:
-        test_mode = "overlapping"
-        print("test evaluation (overlapping held-out units, best weights; "
-              "exploratory AUC)")
-        rng_test = np.random.default_rng(args.seed + 2026)
-        test_defs = [
-            (c, samplers[c].random_unit(rng_test, "test"))
-            for c in (0, 1) for _ in range(args.overlap_test_units)
-        ]
-    else:
-        test_mode = "disjoint"
-        print("test evaluation (disjoint units, best weights)")
-        blocks_a = lc.blocked_unit_positions(split_a["test"], args.n_files)
-        positions_b = split_b["test"]
-        if args.null_test and args.null_partition == "shared":
-            # Both null labels use the same held-out distribution, as they do
-            # during training, but a second deterministic blocking avoids
-            # comparing every unit with an identical copy of itself.  Blocks
-            # are disjoint within each label; source cycles may appear once in
-            # each label, matching shared-pool null resampling semantics.
-            rng_blocks = np.random.default_rng(args.seed + 2027)
-            positions_b = rng_blocks.permutation(positions_b)
-            test_mode = "shared-blocked"
-        blocks_b = lc.blocked_unit_positions(positions_b, files_b)
-        test_defs = [(0, b) for b in blocks_a] + [(1, b) for b in blocks_b]
-    y_test, s_test = predict_units(model, test_defs, samplers, mean, std,
-                                   args.batch_size)
-    auc = lc.auc_score(y_test, s_test)
-    score_std = float(np.std(s_test))
-    score_range = float(np.ptp(s_test))
-    near_constant_scores = score_std < 1e-3
-    if near_constant_scores:
-        print("WARNING: test scores are nearly constant "
-              f"(std={score_std:.3g}, range={score_range:.3g}); "
-              "rank AUC may be driven by numerical differences")
-    if test_mode == "disjoint":
-        boot_mean, boot_std = lc.bootstrap_auc(
-            s_test[y_test == 0], s_test[y_test == 1])
-        uncertainty_note = "unit bootstrap over mutually disjoint test units"
-        print(f"\nTEST AUC = {auc:.4f} +- {boot_std:.4f} (bootstrap over"
-              f" {int((y_test == 0).sum())} unique /"
-              f" {int((y_test == 1).sum())} reuse units)")
-    elif test_mode == "shared-blocked":
-        boot_mean, boot_std = None, None
-        uncertainty_note = (
-            "not estimated: units are disjoint within each null label, but "
-            "the labels reuse the same held-out source-cycle pool")
-        print(f"\nTEST AUC = {auc:.4f} * ({int((y_test == 0).sum())} /"
-              f" {int((y_test == 1).sum())} null units; disjoint within each"
-              " label, shared held-out source pool, no bootstrap error)")
-    else:
-        boot_mean, boot_std = None, None
-        uncertainty_note = (
-            "not estimated: constructed test units overlap in source cycles; "
-            "unit-level bootstrap would understate uncertainty")
-        print(f"\nTEST AUC = {auc:.4f} * ({int((y_test == 0).sum())} unique /"
-              f" {int((y_test == 1).sum())} reuse units; overlapping held-out"
-              " units, exploratory point estimate, no bootstrap error)")
+    pool_a = split_a["test"]
+    pool_b = split_b["test"]
+    files_per_unit = (args.n_files, files_b)
 
-    with open(os.path.join(outdir, "test_scores.csv"), "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["class", "score", "first_cycle_position", "n_files",
-                         "test_mode"])
-        for (cls, pos), score in zip(test_defs, s_test):
-            writer.writerow([cls, f"{score:.6f}", int(pos[0]), len(pos), test_mode])
-    with open(os.path.join(outdir, "auc_summary.json"), "w") as f:
+    # 1) secondary: disjoint blocked cross-check (cheap, recomputed on resume)
+    blocks_a = lc.blocked_unit_positions(pool_a, args.n_files)
+    positions_b = pool_b
+    if args.null_test:
+        rng_blocks = np.random.default_rng(args.seed + 2027)
+        positions_b = rng_blocks.permutation(positions_b)
+    blocks_b = lc.blocked_unit_positions(positions_b, files_b)
+    disjoint_defs = [(0, b) for b in blocks_a] + [(1, b) for b in blocks_b]
+    y_dj, s_dj = predict_units(model, disjoint_defs, samplers, mean, std,
+                               args.batch_size)
+    disjoint_auc = lc.auc_score(y_dj, s_dj)
+    if args.null_test:
+        disjoint_std = None
+    else:
+        _, disjoint_std = lc.bootstrap_auc(s_dj[y_dj == 0], s_dj[y_dj == 1])
+    print(f"disjoint cross-check: AUC {disjoint_auc:.4f}"
+          + (f" +- {disjoint_std:.4f}" if disjoint_std is not None else ""))
+
+    # 2) primary: overlapping point estimate (cached once computed)
+    point_path = os.path.join(outdir, "point_summary.json")
+    if os.path.isfile(point_path):
+        with open(point_path) as f:
+            point = json.load(f)
+    else:
+        print(f"primary evaluation: {args.eval_point_units} overlapping"
+              " events/class from the held-out cycle pool")
+        rng_pt = np.random.default_rng(args.seed + 2026)
+        point_defs = [(c, rng_pt.choice(pools, size=files_per_unit[c],
+                                        replace=False))
+                      for c, pools in ((0, pool_a), (1, pool_b))
+                      for _ in range(args.eval_point_units)]
+        y_pt, s_pt = predict_units(model, point_defs, samplers, mean, std,
+                                   args.batch_size)
+        point = {"auc": lc.auc_score(y_pt, s_pt),
+                 "score_std": float(np.std(s_pt)),
+                 "score_range": float(np.ptp(s_pt))}
+        with open(os.path.join(outdir, "test_scores.csv"), "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["class", "score", "test_mode"])
+            for (cls, _), score in zip(point_defs, s_pt):
+                writer.writerow([cls, f"{score:.6g}", "overlapping"])
+        with open(point_path, "w") as f:
+            json.dump(point, f, indent=1)
+        print(f"point AUC = {point['auc']:.6f}")
+    if point["score_std"] < 1e-3:
+        print("WARNING: test scores are nearly constant "
+              f"(std={point['score_std']:.3g}); rank AUC may be driven by "
+              "numerical noise")
+
+    # 3) primary uncertainty: paired-cycle bootstrap, resumable via CSV
+    boot_path = os.path.join(outdir, "paired_cycle_bootstrap.csv")
+    values = []
+    if os.path.isfile(boot_path):
+        with open(boot_path, newline="") as f:
+            values = [float(row["auc"]) for row in csv.DictReader(f)]
+    n_test_cycles = len(pool_a)
+    for rep in range(len(values), args.eval_bootstrap_reps):
+        rng = np.random.default_rng(args.seed + 1000003 * (rep + 1))
+        slots = rng.integers(0, n_test_cycles, size=n_test_cycles)
+        bpool_a, bpool_b = pool_a[slots], pool_b[slots]
+        boot_defs = [(c, rng.choice(bpool, size=files_per_unit[c],
+                                    replace=False))
+                     for c, bpool in ((0, bpool_a), (1, bpool_b))
+                     for _ in range(args.eval_bootstrap_units)]
+        y_b, s_b = predict_units(model, boot_defs, samplers, mean, std,
+                                 args.batch_size)
+        rep_auc = lc.auc_score(y_b, s_b)
+        exists = os.path.isfile(boot_path)
+        with open(boot_path, "a", newline="") as f:
+            writer = csv.writer(f)
+            if not exists:
+                writer.writerow(["replicate", "auc"])
+            writer.writerow([rep, f"{rep_auc:.12g}"])
+        values.append(rep_auc)
+        print(f"bootstrap {rep + 1}/{args.eval_bootstrap_reps}:"
+              f" AUC {rep_auc:.6f}", flush=True)
+        if (args.max_minutes > 0
+                and (time.time() - start_time) / 60 > args.max_minutes):
+            print("wall-clock limit reached -- bootstrap checkpointed;"
+                  " resubmit with the same --label to continue")
+            return
+
+    values = np.asarray(values, dtype=np.float64)
+    with open(summary_path, "w") as f:
         json.dump({
-            "label": args.label, "test_auc": auc, "bootstrap_std": boot_std,
-            "bootstrap_mean": boot_mean, "best_val_auc": state["best_val_auc"],
+            "label": args.label,
+            "test_auc": point["auc"],
+            "bootstrap_mean": float(np.mean(values)),
+            "bootstrap_std": float(np.std(values, ddof=1)),
+            "bootstrap_ci68": np.percentile(values, [16, 84]).tolist(),
+            "bootstrap_ci95": np.percentile(values, [2.5, 97.5]).tolist(),
+            "test_mode": "overlapping-paired-cycle-bootstrap",
+            "test_units_mutually_disjoint": False,
+            "n_test_units": 2 * args.eval_point_units,
+            "test_score_std": point["score_std"],
+            "test_score_range": point["score_range"],
+            "near_constant_test_scores": point["score_std"] < 1e-3,
+            "disjoint_check": {"auc": disjoint_auc, "bootstrap_std": disjoint_std,
+                               "n_units": len(disjoint_defs)},
+            "best_val_auc": state["best_val_auc"],
             "best_epoch": state["best_epoch"], "epochs_run": state["epoch"],
-            "n_test_units": len(test_defs), "test_mode": test_mode,
-            "test_units_mutually_disjoint": test_mode == "disjoint",
-            "test_score_std": score_std, "test_score_range": score_range,
-            "near_constant_test_scores": near_constant_scores,
-            "uncertainty_note": uncertainty_note, "config": vars(args),
+            "uncertainty_note": (
+                "two-level nonparametric bootstrap over matched held-out "
+                "cycle pairs; events regenerated per pool; frozen classifier"),
+            "config": vars(args),
         }, f, indent=1)
+    print(f"\nTEST AUC = {point['auc']:.4f}"
+          f" (paired-cycle bootstrap SD {np.std(values, ddof=1):.4f},"
+          f" 95% CI [{np.percentile(values, 2.5):.4f},"
+          f" {np.percentile(values, 97.5):.4f}])"
+          f" | disjoint cross-check {disjoint_auc:.4f}")
     print(f"outputs -> {outdir}")
 
 

@@ -95,16 +95,11 @@ def draw_auc(ax, runs):
     for i, (name, path, epochs, _, val_auc) in enumerate(runs):
         color = COLORS[i % len(COLORS)]
         ax.plot(epochs, val_auc, "-", lw=2, color=color, label=name)
-        test = load_test_result(path)
-        test_auc = test["auc"]
+        test_auc = load_test_result(path)["auc"]
         if test_auc is not None:
-            correlated = test["mode"] in ("overlapping", "shared-blocked")
-            suffix = ("*" if correlated else "") + (
-                "†" if test["near_constant"] else "")
-            ax.plot(epochs[-1], test_auc, "D" if correlated else "o",
-                    ms=7, color=color,
+            ax.plot(epochs[-1], test_auc, "o", ms=7, color=color,
                     markeredgecolor="white", zorder=5)
-            ax.annotate(f"test {test_auc:.3f}{suffix}",
+            ax.annotate(f"test {test_auc:.3f}",
                         (epochs[-1], test_auc), textcoords="offset points",
                         xytext=(6, -4), fontsize=8, color="#444444")
     ax.axhline(0.5, ls="--", lw=1, color="#888888")
@@ -115,22 +110,6 @@ def draw_auc(ax, runs):
     ax.set_ylim(lo, hi)
     ax.legend(frameon=False, fontsize=9, loc="lower right")
     style_axis(ax)
-
-
-def add_overlap_note(fig, runs):
-    if any(load_test_result(path)["mode"] in ("overlapping", "shared-blocked")
-           for _, path, *_ in runs):
-        fig.text(
-            0.5, 0.005,
-            "* held-out source cycles reused across test units or labels; "
-            "no independent-unit uncertainty",
-            ha="center", va="bottom", fontsize=8, color="#555555")
-    if any(load_test_result(path)["near_constant"]
-           for _, path, *_ in runs):
-        fig.text(
-            0.5, 0.025,
-            "† nearly constant classifier scores; rank AUC may be numerical",
-            ha="center", va="bottom", fontsize=8, color="#555555")
 
 
 def main():
@@ -153,7 +132,6 @@ def main():
         draw_auc(ax_auc, runs)
         if args.title:
             fig.suptitle(args.title)
-        add_overlap_note(fig, runs)
         fig.savefig(args.out)
         print(f"chart -> {args.out}")
     else:
@@ -163,7 +141,6 @@ def main():
             fig, ax = plt.subplots(figsize=(4.8, 3.6), tight_layout=True)
             draw(ax, runs)
             ax.set_title(args.title or default_titles[tag], fontsize=11)
-            add_overlap_note(fig, runs)
             out = f"{stem}_{tag}{ext}"
             fig.savefig(out)
             plt.close(fig)

@@ -137,8 +137,12 @@ def main():
         UnitSampler(store_b, dummy_splits_b, files_b),
     ]
     mean, std, latent_scale = lc.load_norm_stats(stats_path)
-    model = lc.build_pfn(len(mean), latent_scale,
-                         phi_sizes=PHI_SIZES, f_sizes=F_SIZES)
+    if cfg(config, "arch", "local") == "energyflow":
+        model = lc.build_pfn_energyflow(len(mean),
+                                        phi_sizes=PHI_SIZES, f_sizes=F_SIZES)
+    else:
+        model = lc.build_pfn(len(mean), latent_scale,
+                             phi_sizes=PHI_SIZES, f_sizes=F_SIZES)
     model.load_weights(weights)
     batch_size = args.batch_size or int(cfg(config, "batch_size", 8))
 

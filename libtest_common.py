@@ -213,6 +213,27 @@ def should_early_stop(state, patience, min_epochs, metric_epoch_key="best_epoch"
     return state["epoch"] - 1 - state[metric_epoch_key] >= patience
 
 
+def build_pfn_energyflow(input_dim, phi_sizes=(200, 200, 256),
+                         f_sizes=(200, 200, 200)):
+    """The textbook PFN straight from the energyflow package (raw sum).
+
+    Identical computation to build_pfn with latent_scale=1 (verified by
+    pfn_arch_equivalence_check.py); use this when package provenance is
+    preferred and the raw-sum optimization dynamics are acceptable.
+    """
+    try:
+        from energyflow.archs.efn import PFN
+    except ImportError:
+        try:
+            from energyflow.archs import PFN
+        except ImportError:
+            raise SystemExit(
+                "energyflow is not installed in this environment; "
+                "`pip install --user energyflow` or use --arch local")
+    return PFN(input_dim=input_dim, Phi_sizes=phi_sizes,
+               F_sizes=f_sizes).model
+
+
 def build_pfn(input_dim, latent_scale, phi_sizes=(200, 200, 256),
               f_sizes=(200, 200, 200), lr=0.001, n_classes=2):
     """PFN (per-particle Phi MLP -> masked sum -> F MLP) in plain Keras.
