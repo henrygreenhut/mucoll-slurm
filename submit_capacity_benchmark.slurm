@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH -J cap_bench
 #SBATCH -q debug
-#SBATCH -C gpu
+#SBATCH -C gpu&hbm80g
 #SBATCH -A m5197_g
 #SBATCH -N 1
 #SBATCH --ntasks-per-node=4

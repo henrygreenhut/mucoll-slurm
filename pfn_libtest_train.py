@@ -58,8 +58,24 @@ def parse_args():
              "independent-unit bootstrap uncertainty is reported (default 0 "
              "uses disjoint blocked test units)")
     parser.add_argument("--batch-size", type=int, default=8)
-    parser.add_argument("--epochs", type=int, default=200)
-    parser.add_argument("--patience", type=int, default=15)
+    parser.add_argument("--epochs", type=int, default=None,
+                        help="max epochs (default: 200, or 40 for --null-test "
+                             "-- a null has nothing to converge to, so it "
+                             "doesn't need the same budget as a signal run)")
+    parser.add_argument("--patience", type=int, default=None,
+                        help="epochs without improvement before stopping "
+                             "(default: 15, or 8 for --null-test)")
+    parser.add_argument("--min-delta", type=float, default=None,
+                        help="minimum val AUC gain over the running best to "
+                             "count as improvement (default: 1e-4, or 0.02 "
+                             "for --null-test). A null's val AUC has ~0.02-"
+                             "0.03 sampling noise at --val-units 300/class "
+                             "(SE = sqrt((2n+1)/(12n^2)) under AUC=0.5); too "
+                             "small a threshold lets pure noise repeatedly "
+                             "look like a new best, resetting patience and "
+                             "running to the epoch cap chasing nothing -- "
+                             "observed burning a full 80-epoch cap (~11 GPU-h) "
+                             "on a null at n=420")
     parser.add_argument("--min-epochs", type=int, default=0,
                         help="do not apply early stopping before this many "
                              "epochs have completed")
@@ -92,6 +108,16 @@ def parse_args():
     args.split_fracs = SOURCE_SPLIT
     args.norm_stat_units = NORM_STAT_UNITS
     args.null_partition = "shared"
+    # Null-aware defaults: a null has no real ceiling to converge to, so it
+    # doesn't warrant the signal run's budget, and its val AUC noise floor
+    # (~0.02-0.03 at --val-units 300/class) means a tiny min-delta just
+    # chases fluctuations instead of detecting genuine improvement.
+    if args.epochs is None:
+        args.epochs = 40 if args.null_test else 200
+    if args.patience is None:
+        args.patience = 8 if args.null_test else 15
+    if args.min_delta is None:
+        args.min_delta = 0.02 if args.null_test else 1e-4
     return args
 
 
@@ -323,7 +349,7 @@ def main():
         val_loss = binary_cross_entropy(y_val, s_val)
 
         state["epoch"] = epoch + 1
-        improved = val_auc > state["best_val_auc"] + 1e-4
+        improved = val_auc > state["best_val_auc"] + args.min_delta
         if improved:
             state["best_val_auc"] = val_auc
             state["best_epoch"] = epoch

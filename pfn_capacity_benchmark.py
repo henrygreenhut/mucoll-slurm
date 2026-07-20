@@ -88,22 +88,37 @@ def parse_args():
                              "real batch (new random files, naturally varying "
                              "N) at every timed step instead of synthetic data")
     parser.add_argument("--real-seed", type=int, default=1)
-    parser.add_argument("--max-gb", type=float, default=30.0,
+    parser.add_argument("--max-gb", type=float, default=0.0,
                         help="skip (without attempting) any batch*N combo "
                              "whose estimated training memory exceeds this "
-                             "-- a sufficiently oversized allocation attempt "
-                             "can trigger a hard CUDA/cuDNN abort (SIGABRT) "
-                             "that no Python except clause can catch and "
-                             "that kills the whole process; observed for a "
-                             "batch=8 attempt at N~1.26M on a 40GB A100")
+                             "(0 = off, default). A sufficiently oversized "
+                             "allocation attempt can trigger a hard CUDA/"
+                             "cuDNN abort (SIGABRT) that no Python except "
+                             "clause can catch and that kills the process --"
+                             " observed once for batch=8 at N~1.26M on a "
+                             "40GB A100. Off by default because ascending "
+                             "order + flush=True + the launch script's "
+                             "--kill-on-bad-exit=0 already contain that: a "
+                             "crash only loses the untested sizes above it, "
+                             "every smaller result (incl. its real-data "
+                             "check) is on disk first, and sibling ranks are "
+                             "unaffected. Set a cap only if even that residual "
+                             "cost (a few wasted seconds, one lost rank) is "
+                             "unacceptable for a given sweep.")
     return parser.parse_args()
 
 
-def estimate_training_gb(n_particles, batch_size, bytes_per_particle=8192):
-    """Rough per-particle training-memory rule of thumb (~8 KB/particle:
-    forward activations + gradients + framework overhead), used only to
-    SKIP combos before attempting them -- not a substitute for the measured
-    peakGPU MB column, which is exact for whatever was actually attempted."""
+def estimate_training_gb(n_particles, batch_size, bytes_per_particle=4300):
+    """Per-particle training-memory rule of thumb, used only to SKIP combos
+    before attempting them -- not a substitute for the measured peakGPU MB
+    column, which is exact for whatever was actually attempted.
+
+    4300 B/particle calibrated from real measured peakGPU across n=42/126/
+    210/420 (job 56213836, A100-SXM4-40GB): every point converged on ~3800
+    B/particle to within ~1%; 4300 keeps a ~13% margin. The original 8192
+    figure was a pre-measurement guess and was ~2.1x too conservative --
+    it caused n210 batch=8 and n420 batch=4 to be skipped (never attempted,
+    not crashed) when they likely would have fit."""
     return batch_size * n_particles * bytes_per_particle / 1024**3
 
 
@@ -221,10 +236,12 @@ def main():
         # Ascending: whatever succeeds is on record BEFORE we risk a size
         # that might hard-crash the whole process. batch*N grows monotonically
         # with batch (fixed N), so stopping at the first SKIP/OOM is exact --
-        # nothing larger in this sorted list would do better.
+        # nothing larger in this sorted list would do better. The real-data
+        # check runs after EVERY success (not just the final one) so a later
+        # crash never erases an already-earned measurement.
         for batch_size in sorted(set(batch_sizes)):
             est_gb = estimate_training_gb(n_particles, batch_size)
-            if est_gb > args.max_gb:
+            if args.max_gb > 0 and est_gb > args.max_gb:
                 print(f"{n_particles:>8} {batch_size:>6} {'SKIP':>7}"
                       f"  est. ~{est_gb:.0f} GB > --max-gb {args.max_gb:g} GB"
                       " -- not attempted (risk of an uncatchable GPU abort)")
@@ -244,26 +261,26 @@ def main():
             dense = dense_dataset_gb(args.events_per_epoch, n_particles, args.input_dim)
             print(f"{n_particles:>8} {batch_size:>6} {'ok':>7} {ms:9.1f} "
                   f"{mpps:13.2f} {peak_s} {sec_epoch:9.0f} {dense:12.1f}")
+
+            if store is not None:
+                reset_gpu_stats()
+                try:
+                    ms_real, ns = bench_real(model, store, n_particles, batch_size,
+                                             args.input_dim, args.steps, args.real_seed)
+                except oom_errors:
+                    print(f"  real-data check: OOM at batch={batch_size}"
+                          " (synthetic fit; real shape variance pushed it over)")
+                    continue
+                peak = gpu_peak_mb()
+                peak_s = f"{peak:.0f}" if peak is not None else "-"
+                print(f"  real, freshly-sampled each step: N {min(ns)}-{max(ns)}"
+                      f" (target {n_particles}) batch={batch_size} ->"
+                      f" {ms_real:.1f} ms/step (fixed-shape synthetic was"
+                      f" {ms:.1f} ms/step, {ms_real/ms - 1:+.1%}) peakGPU {peak_s} MB")
         if largest_ok is None:
             print(f"\nStopping: N={n_particles} does not fit at any batch size"
                   " (not even the smallest tested).")
             break
-        fitting_batch = largest_ok
-
-        if store is not None:
-            reset_gpu_stats()
-            try:
-                ms_real, ns = bench_real(model, store, n_particles, fitting_batch,
-                                         args.input_dim, args.steps, args.real_seed)
-            except oom_errors:
-                print(f"  real-data check: OOM at batch={fitting_batch}")
-                continue
-            peak = gpu_peak_mb()
-            peak_s = f"{peak:.0f}" if peak is not None else "-"
-            print(f"  real, freshly-sampled each step: N {min(ns)}-{max(ns)}"
-                  f" (target {n_particles}) batch={fitting_batch} ->"
-                  f" {ms_real:.1f} ms/step (fixed-shape synthetic was"
-                  f" {ms:.1f} ms/step, {ms_real/ms - 1:+.1%}) peakGPU {peak_s} MB")
 
     print("\nNotes:")
     print(" - 'denseRAM GB' = host RAM if the dataset were one padded array as in")
