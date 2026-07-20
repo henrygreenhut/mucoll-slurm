@@ -25,7 +25,11 @@ cd "$SLURM_SUBMIT_DIR"
 module load tensorflow
 
 export REAL_STORE=${REAL_STORE:-$PSCRATCH/mucoll/libtest/stores/gen_norm1_MUPLUS.h5}
-srun --cpu-bind=cores bash cap_bench_task.sh
+# --kill-on-bad-exit=0: a single rank hitting a hard GPU abort (SIGABRT --
+# not a catchable Python exception, e.g. from a wildly oversized allocation
+# attempt) must not take the other three, still-succeeding ranks down with
+# it. Matches the proven pattern in submit_reco_libtest_packed.slurm.
+srun --cpu-bind=cores --kill-on-bad-exit=0 bash cap_bench_task.sh
 
 echo ""
 echo "=== GPU binding verification ==="

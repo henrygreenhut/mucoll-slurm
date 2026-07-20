@@ -22,9 +22,12 @@ IDFILE="cap_bench_gpuid_${SLURM_JOB_ID}_rank${SLURM_PROCID}.txt"
 cat "$IDFILE"
 
 echo "rank $SLURM_PROCID -> $LABEL (N=$N) -> $OUT"
-python pfn_capacity_benchmark.py \
+# -u: belt-and-suspenders alongside the script's own flush=True print --
+# guarantees no already-succeeded result is lost to output buffering if a
+# later, larger batch size hard-aborts the process.
+python -u pfn_capacity_benchmark.py \
     --n-list "$N" \
-    --batch-sizes 8,4,2,1 \
+    --batch-sizes 1,2,4,8 \
     --real-store "$REAL_STORE" \
     > "$OUT" 2>&1
 echo "rank $SLURM_PROCID ($LABEL) done"

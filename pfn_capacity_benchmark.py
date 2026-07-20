@@ -11,6 +11,17 @@ FEATURE_NAMES length), n-list/batch-sizes defaulted to the actual n-sweep
 particle counts (n=42/126/210/420 files) and the batch sizes bracketing the
 observed n=420 --batch-size 1 configuration.
 
+Batch sizes within one N are tried ASCENDING (smallest first), stopping at
+the first SKIP or OOM -- not descending. A hard GPU abort (SIGABRT, seen for
+a sufficiently oversized allocation attempt) kills the process outright and
+is not a catchable Python exception; descending from the largest size means
+a crash there would lose every smaller, likely-successful size that was
+never reached. Ascending guarantees whatever succeeded before a crash is
+already on record, illuminating the true "starts working here" boundary
+rather than just "didn't crash at the top of the range". stdout is written
+unbuffered for the same reason: a crash must not lose already-printed,
+not-yet-flushed results.
+
 Two run modes:
 
   1. Default: fixed-shape synthetic sweep. Phi is applied densely to every
@@ -42,9 +53,12 @@ the host-RAM cost of a dense (all-in-RAM padded array) dataset at each N.
 """
 
 import argparse
+import functools
 import time
 
 import numpy as np
+
+print = functools.partial(print, flush=True)  # a crash must not lose buffered output
 
 
 PHI_SIZES = (200, 200, 256)
@@ -60,9 +74,10 @@ def parse_args():
                         help="features per particle (current FEATURE_NAMES: 9)")
     parser.add_argument("--n-list", default=N_SWEEP_DEFAULT,
                         help="comma-separated particles-per-event values")
-    parser.add_argument("--batch-sizes", default="8,4,2,1",
-                        help="comma-separated batch sizes (tried in order per N; "
-                             "first that fits is reported, then moves to next N)")
+    parser.add_argument("--batch-sizes", default="1,2,4,8",
+                        help="comma-separated batch sizes; always tried "
+                             "ascending regardless of the order given here, "
+                             "stopping at the first SKIP or OOM")
     parser.add_argument("--steps", type=int, default=10,
                         help="timed steps per configuration (after 3 warmup)")
     parser.add_argument("--events-per-epoch", type=int, default=40000,
@@ -73,7 +88,23 @@ def parse_args():
                              "real batch (new random files, naturally varying "
                              "N) at every timed step instead of synthetic data")
     parser.add_argument("--real-seed", type=int, default=1)
+    parser.add_argument("--max-gb", type=float, default=30.0,
+                        help="skip (without attempting) any batch*N combo "
+                             "whose estimated training memory exceeds this "
+                             "-- a sufficiently oversized allocation attempt "
+                             "can trigger a hard CUDA/cuDNN abort (SIGABRT) "
+                             "that no Python except clause can catch and "
+                             "that kills the whole process; observed for a "
+                             "batch=8 attempt at N~1.26M on a 40GB A100")
     return parser.parse_args()
+
+
+def estimate_training_gb(n_particles, batch_size, bytes_per_particle=8192):
+    """Rough per-particle training-memory rule of thumb (~8 KB/particle:
+    forward activations + gradients + framework overhead), used only to
+    SKIP combos before attempting them -- not a substitute for the measured
+    peakGPU MB column, which is exact for whatever was actually attempted."""
+    return batch_size * n_particles * bytes_per_particle / 1024**3
 
 
 def get_model(input_dim):
@@ -186,18 +217,26 @@ def main():
 
     oom_errors = (tf.errors.ResourceExhaustedError, tf.errors.InternalError, MemoryError)
     for n_particles in n_list:
-        fit_any = False
-        fitting_batch = None
-        for batch_size in batch_sizes:
+        largest_ok = None
+        # Ascending: whatever succeeds is on record BEFORE we risk a size
+        # that might hard-crash the whole process. batch*N grows monotonically
+        # with batch (fixed N), so stopping at the first SKIP/OOM is exact --
+        # nothing larger in this sorted list would do better.
+        for batch_size in sorted(set(batch_sizes)):
+            est_gb = estimate_training_gb(n_particles, batch_size)
+            if est_gb > args.max_gb:
+                print(f"{n_particles:>8} {batch_size:>6} {'SKIP':>7}"
+                      f"  est. ~{est_gb:.0f} GB > --max-gb {args.max_gb:g} GB"
+                      " -- not attempted (risk of an uncatchable GPU abort)")
+                break
             reset_gpu_stats()
             try:
                 ms = bench_fixed_shape(model, n_particles, batch_size,
                                        args.input_dim, args.steps)
             except oom_errors:
                 print(f"{n_particles:>8} {batch_size:>6} {'OOM':>7}")
-                continue
-            fit_any = True
-            fitting_batch = batch_size
+                break
+            largest_ok = batch_size
             mpps = batch_size * n_particles / ms / 1000.0
             sec_epoch = args.events_per_epoch / batch_size * ms / 1000.0
             peak = gpu_peak_mb()
@@ -205,12 +244,13 @@ def main():
             dense = dense_dataset_gb(args.events_per_epoch, n_particles, args.input_dim)
             print(f"{n_particles:>8} {batch_size:>6} {'ok':>7} {ms:9.1f} "
                   f"{mpps:13.2f} {peak_s} {sec_epoch:9.0f} {dense:12.1f}")
-            break  # largest fitting batch size is enough per N
-        if not fit_any:
-            print(f"\nStopping: N={n_particles} does not fit at any batch size.")
+        if largest_ok is None:
+            print(f"\nStopping: N={n_particles} does not fit at any batch size"
+                  " (not even the smallest tested).")
             break
+        fitting_batch = largest_ok
 
-        if store is not None and fitting_batch is not None:
+        if store is not None:
             reset_gpu_stats()
             try:
                 ms_real, ns = bench_real(model, store, n_particles, fitting_batch,
