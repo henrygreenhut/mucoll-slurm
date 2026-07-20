@@ -39,6 +39,13 @@ SOURCE_SPLIT = (0.50, 0.25, 0.25)
 NORM_STAT_UNITS = 100
 
 
+def parse_size_list(text):
+    sizes = tuple(int(v) for v in text.split(","))
+    if any(s <= 0 for s in sizes):
+        raise argparse.ArgumentTypeError("layer sizes must be positive")
+    return sizes
+
+
 def parse_args():
     scratch = os.environ.get("PSCRATCH", ".")
     store_dir = os.path.join(scratch, "mucoll/libtest/stores")
@@ -108,10 +115,27 @@ def parse_args():
                              "estimate test_auc with no uncertainty)")
     parser.add_argument("--eval-bootstrap-units", type=int, default=100,
                         help="regenerated events per class per bootstrap pool")
+    parser.add_argument("--phi-sizes", type=parse_size_list,
+                        default=PHI_SIZES,
+                        help=f"comma-separated Phi (per-particle) layer "
+                             f"widths, e.g. 100,100,128 for a small network "
+                             f"(default: {PHI_SIZES[0]},{PHI_SIZES[1]},"
+                             f"{PHI_SIZES[2]})")
+    parser.add_argument("--f-sizes", type=parse_size_list,
+                        default=F_SIZES,
+                        help=f"comma-separated F (event-level) layer widths "
+                             f"(default: {F_SIZES[0]},{F_SIZES[1]},{F_SIZES[2]})")
+    parser.add_argument("--split-fracs", type=float, nargs=3,
+                        default=SOURCE_SPLIT, metavar=("TRAIN", "VAL", "TEST"),
+                        help=f"cycle-level train/val/test fractions, must "
+                             f"sum to 1 (default: {SOURCE_SPLIT[0]} "
+                             f"{SOURCE_SPLIT[1]} {SOURCE_SPLIT[2]})")
     args = parser.parse_args()
+    if abs(sum(args.split_fracs) - 1.0) > 1e-6:
+        raise SystemExit(f"--split-fracs must sum to 1, got {args.split_fracs}")
     # Persist fixed scientific choices in every result config.
     args.clone_factor = CLONE_FACTOR
-    args.split_fracs = SOURCE_SPLIT
+    args.split_fracs = tuple(args.split_fracs)
     args.norm_stat_units = NORM_STAT_UNITS
     args.null_partition = "shared"
     # Null-aware defaults: a null has no real ceiling to converge to, so it
@@ -295,16 +319,22 @@ def main():
 
     # --- model -------------------------------------------------------------
     if args.arch == "energyflow":
-        if latent_scale != 1.0:
-            raise SystemExit(
-                "--arch energyflow computes the textbook raw sum; run with "
-                "--latent-scale none (the latent scale only exists in the "
-                "local build)")
-        model = lc.build_pfn_energyflow(n_features,
-                                        phi_sizes=PHI_SIZES, f_sizes=F_SIZES)
+        if latent_scale == 1.0:
+            model = lc.build_pfn_energyflow(n_features,
+                                            phi_sizes=args.phi_sizes,
+                                            f_sizes=args.f_sizes)
+        else:
+            # energyflow.archs.EFN's actual weighted-aggregation graph with
+            # z_i = latent_scale (real particles) / 0 (padding), verified
+            # bitwise-equivalent to the local scaled build by
+            # pfn_arch_equivalence_check.py -- official-package provenance
+            # for the scaled variant too, not a local reimplementation.
+            model = lc.build_pfn_energyflow_scaled(
+                n_features, latent_scale,
+                phi_sizes=args.phi_sizes, f_sizes=args.f_sizes)
     else:
         model = lc.build_pfn(n_features, latent_scale,
-                             phi_sizes=PHI_SIZES, f_sizes=F_SIZES)
+                             phi_sizes=args.phi_sizes, f_sizes=args.f_sizes)
     # Materialize Adam slot variables before restoring so its moments and
     # iteration counter are included, rather than silently resetting at each
     # Slurm window.

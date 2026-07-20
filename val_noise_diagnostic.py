@@ -73,6 +73,11 @@ def main():
     null_test = config.get("null_test", False)
     arch = config.get("arch", "local")
     batch_size = args.batch_size or config.get("batch_size", 4)
+    # Read the actual architecture used for this checkpoint, not the
+    # trainer's current defaults -- a hyperparameter scan produces
+    # checkpoints with varying Phi/F sizes.
+    phi_sizes = tuple(config.get("phi_sizes", PHI_SIZES))
+    f_sizes = tuple(config.get("f_sizes", F_SIZES))
 
     store1 = lc.Store(config["norm1_store"])
     store_b = store1 if null_test else lc.Store(config["norm42_store"])
@@ -88,11 +93,15 @@ def main():
     ]
 
     if arch == "energyflow":
-        model = lc.build_pfn_energyflow(len(mean), phi_sizes=PHI_SIZES,
-                                        f_sizes=F_SIZES)
+        if latent_scale == 1.0:
+            model = lc.build_pfn_energyflow(len(mean), phi_sizes=phi_sizes,
+                                            f_sizes=f_sizes)
+        else:
+            model = lc.build_pfn_energyflow_scaled(
+                len(mean), latent_scale, phi_sizes=phi_sizes, f_sizes=f_sizes)
     else:
-        model = lc.build_pfn(len(mean), latent_scale, phi_sizes=PHI_SIZES,
-                             f_sizes=F_SIZES)
+        model = lc.build_pfn(len(mean), latent_scale, phi_sizes=phi_sizes,
+                             f_sizes=f_sizes)
     model.load_weights(os.path.join(source_dir, "best.weights.h5"))
 
     n_val_cycles = len(val_idx)

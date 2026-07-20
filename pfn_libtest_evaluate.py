@@ -137,12 +137,22 @@ def main():
         UnitSampler(store_b, dummy_splits_b, files_b),
     ]
     mean, std, latent_scale = lc.load_norm_stats(stats_path)
-    if cfg(config, "arch", "local") == "energyflow":
-        model = lc.build_pfn_energyflow(len(mean),
-                                        phi_sizes=PHI_SIZES, f_sizes=F_SIZES)
+    # Read the actual architecture used for this checkpoint, not the
+    # module's current defaults -- a hyperparameter scan produces
+    # checkpoints with varying Phi/F sizes.
+    phi_sizes = tuple(cfg(config, "phi_sizes", PHI_SIZES))
+    f_sizes = tuple(cfg(config, "f_sizes", F_SIZES))
+    arch = cfg(config, "arch", "local")
+    if arch == "energyflow":
+        if latent_scale == 1.0:
+            model = lc.build_pfn_energyflow(len(mean), phi_sizes=phi_sizes,
+                                            f_sizes=f_sizes)
+        else:
+            model = lc.build_pfn_energyflow_scaled(
+                len(mean), latent_scale, phi_sizes=phi_sizes, f_sizes=f_sizes)
     else:
         model = lc.build_pfn(len(mean), latent_scale,
-                             phi_sizes=PHI_SIZES, f_sizes=F_SIZES)
+                             phi_sizes=phi_sizes, f_sizes=f_sizes)
     model.load_weights(weights)
     batch_size = args.batch_size or int(cfg(config, "batch_size", 8))
 

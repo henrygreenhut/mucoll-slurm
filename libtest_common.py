@@ -234,6 +234,52 @@ def build_pfn_energyflow(input_dim, phi_sizes=(200, 200, 256),
                F_sizes=f_sizes).model
 
 
+def build_pfn_energyflow_scaled(input_dim, latent_scale,
+                                phi_sizes=(200, 200, 256),
+                                f_sizes=(200, 200, 200)):
+    """The scaled-sum PFN using energyflow.archs.EFN's actual aggregation
+    graph, not a local reimplementation.
+
+    EFN computes F(sum_i z_i * Phi(p_i)) for an arbitrary per-particle
+    weight z_i (its intended use is z_i = an IRC-safe energy fraction; we
+    are not using it that way, so this is officially a "weighted PFN built
+    on EFN's architecture", not a physical EFN). Setting z_i = latent_scale
+    for every real particle and 0 for padding gives
+    latent_scale * sum_i Phi(p_i) -- exactly build_pfn's scaled sum.
+    Verified bitwise-identical (0.0 max diff, weight-transplant, variable-
+    length padded batches) to build_pfn(latent_scale=...) by
+    pfn_arch_equivalence_check.py.
+
+    Requires tf_keras explicitly (not tensorflow.keras/Keras 3): EFN's
+    .model is a tf_keras Functional model, and wrapping it inside a Keras-3
+    functional graph fails with a KerasTensor-incompatibility error. The
+    returned model is plain tf_keras throughout, safe to use with
+    train_on_batch/predict_on_batch/get_weights/set_weights as usual.
+    """
+    import tensorflow as tf
+    import tf_keras
+
+    try:
+        from energyflow.archs import EFN
+    except ImportError:
+        raise SystemExit(
+            "energyflow is not installed in this environment; "
+            "`pip install --user energyflow` or use --arch local")
+
+    efn_model = EFN(input_dim=input_dim, Phi_sizes=phi_sizes,
+                    F_sizes=f_sizes).model
+    inp = tf_keras.layers.Input(shape=(None, input_dim), name="particles")
+    z = tf_keras.layers.Lambda(
+        lambda x: tf.cast(tf.reduce_any(tf.not_equal(x, 0.0), axis=-1),
+                          tf.float32) * latent_scale,
+        name="scaled_mask")(inp)
+    out = efn_model([z, inp])
+    model = tf_keras.Model(inp, out, name="efn_scaled_wrapped")
+    model.compile(optimizer=tf_keras.optimizers.Adam(learning_rate=0.001),
+                  loss="categorical_crossentropy", metrics=["acc"])
+    return model
+
+
 def build_pfn(input_dim, latent_scale, phi_sizes=(200, 200, 256),
               f_sizes=(200, 200, 200), lr=0.001, n_classes=2):
     """PFN (per-particle Phi MLP -> masked sum -> F MLP) in plain Keras.
