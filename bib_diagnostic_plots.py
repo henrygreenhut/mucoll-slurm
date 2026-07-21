@@ -11,6 +11,8 @@ Usage (on a NERSC login node, after module load tensorflow):
     python bib_diagnostic_plots.py
 """
 
+import os
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -26,7 +28,7 @@ STORES = {
 N_SAMPLE_FILES = 150
 SEED = 7
 CLONE_FACTOR = 42
-OUT_PNG = "bib_diagnostic_plots.png"
+OUT_PNG = "plots/bib_diagnostic_plots.png"
 
 
 def sample_particles(path, n_sample_files, rng):
@@ -117,6 +119,7 @@ def main():
     ax.legend(fontsize=9)
 
     fig.tight_layout()
+    os.makedirs(os.path.dirname(OUT_PNG), exist_ok=True)
     fig.savefig(OUT_PNG, dpi=150)
     print(f"saved {OUT_PNG}")
 
