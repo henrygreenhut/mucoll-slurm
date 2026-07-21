@@ -5,9 +5,8 @@
 #SBATCH -A m5197_g
 #SBATCH -N 1
 #SBATCH --ntasks-per-node=2
-#SBATCH -c 16
+#SBATCH --cpus-per-task=32
 #SBATCH --gpus-per-task=1
-#SBATCH --mem=100G
 #SBATCH -t 07:00:00
 #SBATCH --output=phi_half_long_%x_%j.out
 #SBATCH --error=phi_half_long_%x_%j.err
@@ -44,14 +43,18 @@
 # (confirmed empirically -- first submission attempt failed on exactly
 # this). --gpus-per-task=1 alone is sufficient; SLURM handles the binding.
 #
-# --mem=100G: shared QOS jobs need memory requested explicitly for
-# accounting (exclusive queues default to "whole node," shared ones
-# don't). Real need is non-trivial here: libtest_common.Store eagerly
-# loads the FULL norm42 store into host RAM per task (~30GB, all 9 raw
-# fields x ~835M particles), and each of the 2 tasks on this node loads
-# its own independent copy -- roughly 65-70GB combined before any
-# TF/Python overhead. 100G leaves margin; not empirically verified yet,
-# watch the first job for an OOM-kill if it's still too tight.
+# --cpus-per-task=32, no explicit --mem: gpu_shared quantizes allocation
+# in fixed units of (1 GPU, 32 cores, a proportional memory slice) --
+# confirmed empirically ("Logical queue gpu_shared_ss11 requires you to
+# request 32.0 cores per GPU" after the first attempt used -c 16 +
+# --mem=100G, which SLURM converted into a mismatched effective core
+# count). With cores fixed at exactly 32/GPU, memory should auto-scale
+# to that GPU-share's proportional slice of the node's RAM (Perlmutter
+# GPU nodes: 128 cores / 4 GPUs -> a 32-core/1-GPU share is 1/4 of the
+# node, so ~1/4 of system RAM too). Real need per task is non-trivial --
+# libtest_common.Store eagerly loads the FULL norm42 store into host RAM
+# (~30GB, all 9 raw fields x ~835M particles) -- so watch the first job
+# for an OOM-kill if the auto-scaled slice turns out too tight.
 #
 # Lightweight logging: one line per epoch (~240s/epoch observed in the
 # debug scan), same format as before. Check progress live with:
