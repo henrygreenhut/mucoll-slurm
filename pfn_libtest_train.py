@@ -102,6 +102,13 @@ def parse_args():
                              "(textbook raw sum; requires --latent-scale none); "
                              "'local' is the equivalence-checked Keras build "
                              "with the optional latent scale")
+    parser.add_argument("--jit", action="store_true",
+                        help="compile with XLA JIT (model.compile(jit_compile="
+                             "True)). Experimental: may sidestep the TF/XLA "
+                             "int32 overflow bug (different codegen path than "
+                             "the legacy GPU kernels that hit it), but our "
+                             "particle count N varies every batch, so watch "
+                             "per-epoch seconds for recompilation overhead")
     parser.add_argument("--eval-point-units", type=int, default=300,
                         help="overlapping held-out events per class for the "
                              "primary (automatic) test AUC")
@@ -322,7 +329,8 @@ def main():
         if latent_scale == 1.0:
             model = lc.build_pfn_energyflow(n_features,
                                             phi_sizes=args.phi_sizes,
-                                            f_sizes=args.f_sizes)
+                                            f_sizes=args.f_sizes,
+                                            jit_compile=args.jit)
         else:
             # energyflow.archs.EFN's actual weighted-aggregation graph with
             # z_i = latent_scale (real particles) / 0 (padding), verified
@@ -331,10 +339,12 @@ def main():
             # for the scaled variant too, not a local reimplementation.
             model = lc.build_pfn_energyflow_scaled(
                 n_features, latent_scale,
-                phi_sizes=args.phi_sizes, f_sizes=args.f_sizes)
+                phi_sizes=args.phi_sizes, f_sizes=args.f_sizes,
+                jit_compile=args.jit)
     else:
         model = lc.build_pfn(n_features, latent_scale,
-                             phi_sizes=args.phi_sizes, f_sizes=args.f_sizes)
+                             phi_sizes=args.phi_sizes, f_sizes=args.f_sizes,
+                             jit_compile=args.jit)
     # Materialize Adam slot variables before restoring so its moments and
     # iteration counter are included, rather than silently resetting at each
     # Slurm window.

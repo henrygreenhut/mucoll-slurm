@@ -214,7 +214,7 @@ def should_early_stop(state, patience, min_epochs, metric_epoch_key="best_epoch"
 
 
 def build_pfn_energyflow(input_dim, phi_sizes=(200, 200, 256),
-                         f_sizes=(200, 200, 200)):
+                         f_sizes=(200, 200, 200), jit_compile=False):
     """The textbook PFN straight from the energyflow package (raw sum).
 
     Identical computation to build_pfn with latent_scale=1 (verified by
@@ -230,13 +230,22 @@ def build_pfn_energyflow(input_dim, phi_sizes=(200, 200, 256),
             raise SystemExit(
                 "energyflow is not installed in this environment; "
                 "`pip install --user energyflow` or use --arch local")
-    return PFN(input_dim=input_dim, Phi_sizes=phi_sizes,
+    model = PFN(input_dim=input_dim, Phi_sizes=phi_sizes,
                F_sizes=f_sizes).model
+    if jit_compile:
+        # PFN() already compiled this model with its own optimizer/loss;
+        # recompile with the SAME optimizer/loss, only adding XLA JIT, so
+        # training behavior is unchanged apart from the compilation path.
+        # (model.metrics isn't reused here -- it includes internal trackers
+        # like the loss metric itself, unsafe to pass back into metrics=.)
+        model.compile(optimizer=model.optimizer, loss=model.loss,
+                      metrics=["acc"], jit_compile=True)
+    return model
 
 
 def build_pfn_energyflow_scaled(input_dim, latent_scale,
                                 phi_sizes=(200, 200, 256),
-                                f_sizes=(200, 200, 200)):
+                                f_sizes=(200, 200, 200), jit_compile=False):
     """The scaled-sum PFN using energyflow.archs.EFN's actual aggregation
     graph, not a local reimplementation.
 
@@ -276,12 +285,14 @@ def build_pfn_energyflow_scaled(input_dim, latent_scale,
     out = efn_model([z, inp])
     model = tf_keras.Model(inp, out, name="efn_scaled_wrapped")
     model.compile(optimizer=tf_keras.optimizers.Adam(learning_rate=0.001),
-                  loss="categorical_crossentropy", metrics=["acc"])
+                  loss="categorical_crossentropy", metrics=["acc"],
+                  jit_compile=jit_compile)
     return model
 
 
 def build_pfn(input_dim, latent_scale, phi_sizes=(200, 200, 256),
-              f_sizes=(200, 200, 200), lr=0.001, n_classes=2):
+              f_sizes=(200, 200, 200), lr=0.001, n_classes=2,
+              jit_compile=False):
     """PFN (per-particle Phi MLP -> masked sum -> F MLP) in plain Keras.
 
     Zero-padded particles (all features exactly 0) are masked out. The
@@ -309,7 +320,8 @@ def build_pfn(input_dim, latent_scale, phi_sizes=(200, 200, 256),
     out = layers.Dense(n_classes, activation="softmax", name="output")(g)
     model = Model(inp, out)
     model.compile(optimizer=optimizers.Adam(learning_rate=lr),
-                  loss="categorical_crossentropy", metrics=["acc"])
+                  loss="categorical_crossentropy", metrics=["acc"],
+                  jit_compile=jit_compile)
     return model
 
 
