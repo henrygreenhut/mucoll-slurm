@@ -25,6 +25,7 @@ STORES = {
 
 N_SAMPLE_FILES = 150
 SEED = 7
+CLONE_FACTOR = 42
 OUT_PNG = "bib_diagnostic_plots.png"
 
 
@@ -56,7 +57,7 @@ def main():
               f"full store: {len(mult)} files, multiplicity min={mult.min()} "
               f"median={int(np.median(mult))} mean={mult.mean():.1f} max={mult.max()}")
 
-    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+    fig, axes = plt.subplots(1, 4, figsize=(24, 5))
     colors = {"norm1 (standard)": "#1f77b4", "norm42 (rotated/cloned 42.64x)": "#d62728"}
 
     ax = axes[0]
@@ -96,6 +97,23 @@ def main():
     ax.set_xlabel("particles per file (per cycle)")
     ax.set_ylabel("density")
     ax.set_title("Per-file particle multiplicity\n(full store, not sampled)")
+    ax.legend(fontsize=9)
+
+    ax = axes[3]
+    norm1_mult = data["norm1 (standard)"]["mult"]
+    norm42_scaled = data["norm42 (rotated/cloned 42.64x)"]["mult"] / CLONE_FACTOR
+    both = np.concatenate([norm1_mult, norm42_scaled])
+    bins = np.logspace(np.log10(both.min()), np.log10(both.max()), 60)
+    ax.hist(norm1_mult, bins=bins, histtype="step", density=True, linewidth=1.8,
+            color=colors["norm1 (standard)"], label="norm1 (standard)")
+    ax.hist(norm42_scaled, bins=bins, histtype="step", density=True, linewidth=1.8,
+            color=colors["norm42 (rotated/cloned 42.64x)"],
+            label=f"norm42 / {CLONE_FACTOR}")
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel(f"particles per file (norm42 divided by {CLONE_FACTOR})")
+    ax.set_ylabel("density")
+    ax.set_title("Multiplicity, norm42 normalized to\nper-mother scale (full store)")
     ax.legend(fontsize=9)
 
     fig.tight_layout()
