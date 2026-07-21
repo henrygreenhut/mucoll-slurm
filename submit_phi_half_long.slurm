@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -J phi_half_long
-#SBATCH -q regular
+#SBATCH -q shared
 #SBATCH -C gpu
 #SBATCH -A m5197_g
 #SBATCH -N 1
@@ -31,12 +31,12 @@
 # crash, just resubmit. Dropping hbm80g trades that small risk for a much
 # larger node pool and shorter queue wait on the regular QOS.
 #
-# Unlike the debug queue (exclusive-node billing regardless of GPU count
-# requested), the regular queue's GPU QOS is expected to bill for what's
-# actually requested here -- 2 GPUs, not a full 4-GPU node. Flagging this
-# as the expected behavior; not independently re-verified this session
-# against current NERSC billing policy, so sanity-check the first sacct/
-# sreport accounting entry against expectations.
+# -q shared (not regular): verified directly against `sacctmgr show qos`
+# -- "regular" + -C gpu resolves to the gpu_regular QOS, which is the
+# FULL-NODE queue (exclusive access to all 4 GPUs regardless of how many
+# are actually requested). "shared" + -C gpu resolves to gpu_shared
+# (MaxNodes=1), the QOS actually meant for partial-node requests like
+# this one (2 of 4 GPUs) -- bills for what's requested, not a full node.
 #
 # Lightweight logging: one line per epoch (~240s/epoch observed in the
 # debug scan), same format as before. Check progress live with:
