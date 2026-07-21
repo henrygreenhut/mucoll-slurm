@@ -39,6 +39,21 @@ SEED = 7
 CLONE_FACTOR = 42
 OUT_PNG = "plots/bib_diagnostic_plots.png"
 
+# Current training config (config #1 baseline: phi_sizes=(200,200,256),
+# batch_size=4, n_files=420, clone_factor=42). The TF/XLA int32 overflow
+# bug requires batch_size * N * widest_Phi_layer_width < 2**31, where N is
+# the padded sequence length of whichever single unit is largest in a
+# batch -- F-layers only see the pooled (batch, width) tensor after the
+# sum, so only Phi's widest layer matters, not F's. A norm42 ("classB")
+# unit concatenates n_files // clone_factor = 10 files, so a per-file cap
+# X is worst-case-safe (guaranteed, even if all 10 files in a unit hit the
+# cap simultaneously) when batch_size * width * 10 * X < 2**31.
+BATCH_SIZE = 4
+WIDEST_PHI_LAYER = 256
+N_FILES_PER_UNIT_NORM42 = 420 // CLONE_FACTOR
+INT32_CEILING = 2**31 - 1
+X_CAP = INT32_CEILING // (BATCH_SIZE * WIDEST_PHI_LAYER * N_FILES_PER_UNIT_NORM42)
+
 
 def sample_particles(path, n_target_particles, rng):
     """Sample as many randomly-ordered files as needed to pool roughly
@@ -72,6 +87,26 @@ def full_store_multiplicity(path):
     return np.diff(offsets)
 
 
+def sample_excluded_energy(path, x_cap, n_sample_files, rng):
+    """Energy of particles living in files that exceed x_cap -- the
+    particles a per-file cap at x_cap would force us to disclude. Samples
+    up to n_sample_files of the over-cap files (there may be far too many
+    over-cap particles to pool all of them), reporting how many exist and
+    how many were actually sampled."""
+    with h5py.File(path, "r") as f:
+        offsets = f["offsets"][:]
+        per_file = np.diff(offsets)
+        over_cap_positions = np.flatnonzero(per_file > x_cap)
+        n_over_files = len(over_cap_positions)
+        n_over_particles = int(per_file[over_cap_positions].sum())
+        chosen = rng.choice(over_cap_positions,
+                            size=min(n_sample_files, n_over_files), replace=False)
+        chosen.sort()
+        e_parts = [f["particles"]["E"][offsets[p]:offsets[p + 1]] for p in chosen]
+    energy = np.concatenate(e_parts) if e_parts else np.array([])
+    return energy, n_over_files, n_over_particles, len(chosen)
+
+
 def main():
     rng = np.random.default_rng(SEED)
     data = {}
@@ -84,7 +119,10 @@ def main():
               f"multiplicity min={mult.min()} median={int(np.median(mult))} "
               f"mean={mult.mean():.1f} max={mult.max()}")
 
-    fig, axes = plt.subplots(1, 4, figsize=(24, 5))
+    print(f"int32-safe per-file cap (batch={BATCH_SIZE}, phi_width={WIDEST_PHI_LAYER}, "
+          f"{N_FILES_PER_UNIT_NORM42} files/norm42-unit): X_CAP={X_CAP} particles/file")
+
+    fig, axes = plt.subplots(1, 6, figsize=(36, 5))
     colors = {"norm1 (standard)": "#1f77b4", "norm42 (rotated/cloned 42x)": "#d62728"}
 
     ax = axes[0]
@@ -144,6 +182,44 @@ def main():
     ax.set_ylabel("density")
     ax.set_title("Multiplicity, norm42 normalized to\nper-mother scale (full store)")
     ax.legend(fontsize=9)
+
+    ax = axes[4]
+    mult_bins = np.logspace(np.log10(m_all.min()), np.log10(m_all.max()), 60)
+    for label, d in data.items():
+        ax.hist(d["mult"], bins=mult_bins, histtype="step", density=True,
+                linewidth=1.8, color=colors[label], label=label)
+    ax.axvline(X_CAP, color="black", linestyle="--", linewidth=1.5,
+               label=f"int32-safe cap = {X_CAP:,}/file")
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel("particles per file (per cycle)")
+    ax.set_ylabel("density")
+    ax.set_title(f"Multiplicity with int32-safe cap\n(batch={BATCH_SIZE}, "
+                 f"phi_width={WIDEST_PHI_LAYER}, current config)")
+    ax.legend(fontsize=8)
+
+    ax = axes[5]
+    norm42_path = STORES["norm42 (rotated/cloned 42x)"]
+    excl_energy, n_over_files, n_over_particles, n_files_sampled = \
+        sample_excluded_energy(norm42_path, X_CAP, 300, rng)
+    n_total_files = len(data["norm42 (rotated/cloned 42x)"]["mult"])
+    n_total_particles = int(data["norm42 (rotated/cloned 42x)"]["mult"].sum())
+    print(f"excluded (over-cap) norm42 files: {n_over_files}/{n_total_files} "
+          f"({100*n_over_files/n_total_files:.2f}%) | excluded particles: "
+          f"{n_over_particles}/{n_total_particles} "
+          f"({100*n_over_particles/n_total_particles:.2f}%) | "
+          f"sampled {n_files_sampled} of those files -> {len(excl_energy)} "
+          f"particles pooled for this panel")
+    excl_pos = excl_energy[excl_energy > 0]
+    bins = np.logspace(np.log10(excl_pos.min()), np.log10(excl_pos.max()), 80)
+    ax.hist(excl_pos, bins=bins, histtype="step", density=True, linewidth=1.8,
+            color="#d62728")
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel("particle energy E [GeV]")
+    ax.set_ylabel("density")
+    ax.set_title(f"Energy of particles in norm42 files\nover the cap "
+                 f"({100*n_over_particles/n_total_particles:.1f}% of norm42)")
 
     fig.tight_layout()
     os.makedirs(os.path.dirname(OUT_PNG), exist_ok=True)
