@@ -3,88 +3,80 @@
 #SBATCH -q shared
 #SBATCH -C gpu
 #SBATCH -A m5197_g
-#SBATCH -N 1
-#SBATCH --ntasks-per-node=2
-#SBATCH --cpus-per-task=32
+#SBATCH -n 1
+#SBATCH -c 32
 #SBATCH --gpus-per-task=1
 #SBATCH -t 07:00:00
 #SBATCH --output=phi_half_long_%x_%j.out
 #SBATCH --error=phi_half_long_%x_%j.err
 
-# Longer continuation of raw_large + scaled_large (halved Phi) on the
-# regular/shared GPU queue -- the debug queue's 30-min cap doesn't allow
-# a real training window. 7-hour first window; if training hasn't
-# early-stopped (--patience 15, default) or hit the 200-epoch cap by
-# then, just resubmit this same script -- checkpoint/resume is automatic
-# via the shared --label (see phi_half_long_task.sh).
+# Single-GPU shared-QOS job for ONE config (raw_large or scaled_large),
+# matching NERSC's own documented example exactly (-n 1 -c 32
+# --gpus-per-task=1: https://docs.nersc.gov/jobs/policy/) rather than
+# bundling both configs into one 2-task job. Bundling via
+# --ntasks-per-node=2 hit a persistent "requires 32.0 cores per GPU...
+# for 1 GPUs" mismatch from the account's gpu_shared_ss11 logical queue,
+# even after matching the 32-cores/GPU ratio exactly -- the validator
+# doesn't seem to distribute a multi-task GPU request correctly. A
+# single task/single GPU job sidesteps that entirely.
 #
-# -C gpu (not gpu&hbm80g): the ~3800-4300 B/particle memory constant was
-# measured for the ORIGINAL full-width Phi (200,200,256); halved Phi
-# (100,100,128, summed layer widths 328 vs 656) should cost roughly half
-# that per particle, since Phi's retained-for-backprop activations
-# dominate this cost. Even a pessimistic worst-case-tail batch (N~2.5-3M,
-# beyond anything observed in the 30-draw sample so far) lands around
-# 19-22 GB -- comfortably under 40GB. Not directly benchmarked for this
-# specific halved config, so a rare extreme-N batch OOMing on a 40GB node
-# is possible; recoverable via the same checkpoint/resume as any other
-# crash, just resubmit. Dropping hbm80g trades that small risk for a much
-# larger node pool and shorter queue wait on the regular QOS.
+# Submit twice, once per config -- shared QOS bills only for resources
+# actually used, so two separate 1-GPU jobs cost the same as one bundled
+# 2-GPU job, just as two job IDs instead of one:
+#   sbatch submit_phi_half_long.slurm raw_large
+#   sbatch submit_phi_half_long.slurm scaled_large
 #
-# -q shared (not regular): verified directly against `sacctmgr show qos`
-# -- "regular" + -C gpu resolves to the gpu_regular QOS, which is the
-# FULL-NODE queue (exclusive access to all 4 GPUs regardless of how many
-# are actually requested). "shared" + -C gpu resolves to gpu_shared
-# (MaxNodes=1), the QOS actually meant for partial-node requests like
-# this one (2 of 4 GPUs) -- bills for what's requested, not a full node.
-#
-# No --gpu-bind=single:1 under -q shared: that binding mode is documented
-# for EXCLUSIVE-node GPU jobs and produced "Invalid generic resource (gres)
-# specification" when combined with the shared QOS's sub-node GRES model
-# (confirmed empirically -- first submission attempt failed on exactly
-# this). --gpus-per-task=1 alone is sufficient; SLURM handles the binding.
-#
-# --cpus-per-task=32, no explicit --mem: gpu_shared quantizes allocation
-# in fixed units of (1 GPU, 32 cores, a proportional memory slice) --
-# confirmed empirically ("Logical queue gpu_shared_ss11 requires you to
-# request 32.0 cores per GPU" after the first attempt used -c 16 +
-# --mem=100G, which SLURM converted into a mismatched effective core
-# count). With cores fixed at exactly 32/GPU, memory should auto-scale
-# to that GPU-share's proportional slice of the node's RAM (Perlmutter
-# GPU nodes: 128 cores / 4 GPUs -> a 32-core/1-GPU share is 1/4 of the
-# node, so ~1/4 of system RAM too). Real need per task is non-trivial --
-# libtest_common.Store eagerly loads the FULL norm42 store into host RAM
-# (~30GB, all 9 raw fields x ~835M particles) -- so watch the first job
-# for an OOM-kill if the auto-scaled slice turns out too tight.
+# Resumable: SAME labels as the original debug scan (job 56272947), so
+# each resumes from its existing epoch-3 checkpoint. --max-minutes
+# leaves a buffer under the 7-hour wall time for store loading + TF/CUDA
+# startup + the final checkpoint write; resubmit the same command to
+# continue past this window if training hasn't early-stopped or hit the
+# 200-epoch cap yet.
 #
 # Lightweight logging: one line per epoch (~240s/epoch observed in the
-# debug scan), same format as before. Check progress live with:
-#   tail -f phi_half_long_halfphi_raw_large_<jobid>.out
-#   tail -f phi_half_long_halfphi_scaled_large_<jobid>.out
+# debug scan). Check progress live with:
+#   tail -f phi_half_long_<jobid>.out
 # or watch history.csv update every epoch:
-#   watch -n 30 'tail -3 pfn_results/halfphi_raw_large/history.csv \
-#                pfn_results/halfphi_scaled_large/history.csv'
+#   watch -n 30 tail -3 pfn_results/halfphi_raw_large/history.csv
 
 set -e
 cd "$SLURM_SUBMIT_DIR"
 module load tensorflow
 
+CONFIG=$1
+if [ "$CONFIG" != "raw_large" ] && [ "$CONFIG" != "scaled_large" ]; then
+    echo "usage: sbatch submit_phi_half_long.slurm {raw_large|scaled_large}"
+    exit 1
+fi
+
+if [ "$CONFIG" == "raw_large" ]; then
+    LABEL=halfphi_raw_large
+    LATENT=none
+else
+    LABEL=halfphi_scaled_large
+    LATENT=auto
+fi
+
 export N_FILES=${N_FILES:-420}
 export UNITS_PER_EPOCH=${UNITS_PER_EPOCH:-500}
 export MAX_MINUTES=${MAX_MINUTES:-400}
 
-# --kill-on-bad-exit=0: one rank crashing must not take the other,
-# still-informative rank down with it.
-srun --cpu-bind=cores --kill-on-bad-exit=0 bash phi_half_long_task.sh || \
-    echo "one or more ranks exited non-zero; check individual .out files"
+srun --cpu-bind=cores python -u pfn_libtest_train.py \
+    --label "$LABEL" \
+    --n-files "$N_FILES" \
+    --units-per-epoch "$UNITS_PER_EPOCH" \
+    --batch-size 4 \
+    --max-minutes "$MAX_MINUTES" \
+    --latent-scale "$LATENT" \
+    --phi-sizes 100,100,128 \
+    --f-sizes 200,200,200 \
+    --arch energyflow
 
 echo ""
-echo "=== per-rank history tail (last 5 epochs) ==="
-for label in halfphi_raw_large halfphi_scaled_large; do
-    hist="pfn_results/${label}/history.csv"
-    if [ -f "$hist" ]; then
-        echo "-- $label --"
-        tail -5 "$hist"
-    else
-        echo "-- $label -- NO history.csv"
-    fi
-done
+echo "=== history tail ($LABEL) ==="
+hist="pfn_results/${LABEL}/history.csv"
+if [ -f "$hist" ]; then
+    tail -5 "$hist"
+else
+    echo "NO history.csv yet"
+fi
