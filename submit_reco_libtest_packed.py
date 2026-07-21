@@ -12,14 +12,12 @@ from pathlib import Path
 SPLIT_EVENTS = {
     "train": 2000,
     "val": 400,
-    "test_a": 400,
-    "test_b": 400,
+    "test": 800,
 }
 JOB_ID_BASE = {
     "train": 0,
     "val": 100_000,
-    "test_a": 200_000,
-    "test_b": 300_000,
+    "test": 200_000,
 }
 LIBRARY = {"U": "norm1", "R": "norm42", "null_b": "norm1"}
 DIGI_OFFSET = {"U": 0, "R": 0, "null_b": 1_000_000}
@@ -34,9 +32,9 @@ def parse_args():
     parser.add_argument("--qos", default="debug")
     parser.add_argument("--time", default="00:30:00")
     parser.add_argument("--account", default="m5197")
-    parser.add_argument("--pools", default=(scratch + "/mucoll/libtest/bib_pools_v2")
+    parser.add_argument("--pools", default=(scratch + "/mucoll/libtest/bib_pools_simple")
                         if scratch else None, required=not bool(scratch))
-    parser.add_argument("--outdir", default=(scratch + "/mucoll/libtest/reco_n420_pfn_v2")
+    parser.add_argument("--outdir", default=(scratch + "/mucoll/libtest/reco_n420_pfn_simple")
                         if scratch else None, required=not bool(scratch))
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--dry-run", action="store_true")

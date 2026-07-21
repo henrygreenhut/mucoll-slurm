@@ -20,10 +20,13 @@ FEATURES = (
     "log_pt", "eta", "sin_phi", "cos_phi", "log_energy", "charge",
     "is_charged", "is_photon", "is_neutral",
 )
-RAW = {name: i for i, name in enumerate(
-    ("pt", "eta", "phi", "energy", "mass", "charge", "type", "px", "py", "pz"))}
+RAW_FEATURES = (
+    "pt", "eta", "phi", "energy", "mass", "charge", "pdg", "px", "py", "pz",
+)
+RAW = {name: i for i, name in enumerate(RAW_FEATURES)}
 N_FILES = 420
-EXPECTED_EVENTS = {"train": 2000, "val": 400, "test_a": 400, "test_b": 400}
+EXPECTED_EVENTS = {"train": 2000, "val": 400, "test": 800}
+TRAINING_SEED = 12345
 
 
 def parse_args():
@@ -36,12 +39,18 @@ def parse_args():
     parser.add_argument("--epochs", type=int, default=150)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--patience", type=int, default=20)
-    parser.add_argument("--seed", type=int, default=1)
     return parser.parse_args()
 
 
 def load_store(path):
     with h5py.File(path, "r") as h5:
+        feature_names = h5.attrs.get("features", "")
+        if isinstance(feature_names, bytes):
+            feature_names = feature_names.decode()
+        if tuple(feature_names.split(",")) != RAW_FEATURES:
+            raise ValueError(
+                "{} has unexpected features {!r}; expected {!r}".format(
+                    path, feature_names, ",".join(RAW_FEATURES)))
         particles = h5["particles"][:].astype(np.float32)
         source_file = h5["source_file"][:]
         source_event = h5["source_event"][:]
@@ -64,7 +73,7 @@ def pfn_features(raw):
     phi = raw[:, :, RAW["phi"]]
     energy = np.maximum(raw[:, :, RAW["energy"]], 0)
     charge = raw[:, :, RAW["charge"]]
-    pfo_type = np.abs(raw[:, :, RAW["type"]]).astype(np.int64)
+    pfo_type = np.abs(raw[:, :, RAW["pdg"]]).astype(np.int64)
     charged = np.abs(charge) > 0.1
     photon = (~charged) & (pfo_type == 22)
     neutral = (~charged) & (~photon)
@@ -182,16 +191,16 @@ def save_roc(path, y, scores, auc):
 
 def main():
     args = parse_args()
-    np.random.seed(args.seed)
+    np.random.seed(TRAINING_SEED)
     import tensorflow as tf
-    tf.random.set_seed(args.seed)
+    tf.random.set_seed(TRAINING_SEED)
 
     store_dir = Path(args.store_dir).resolve()
     pairs = {
         split: load_pair(
             store_dir, N_FILES, args.class_a, args.class_b, split,
             EXPECTED_EVENTS[split])
-        for split in ("train", "val", "test_a", "test_b")
+        for split in ("train", "val", "test")
     }
     width = max(item[0].shape[1] for pair in pairs.values() for item in pair)
     data = {split: combine_pair(pair, width) for split, pair in pairs.items()}
@@ -200,7 +209,7 @@ def main():
 
     x_train, y_train, _ = data["train"]
     x_val, y_val, _ = data["val"]
-    rng = np.random.default_rng(args.seed)
+    rng = np.random.default_rng(TRAINING_SEED)
     train_order = rng.permutation(len(y_train))
     val_order = rng.permutation(len(y_val))
 
@@ -227,23 +236,11 @@ def main():
     scores_path = result_dir / "test_scores.csv"
     if scores_path.exists():
         scores_path.unlink()
-    results = {}
-    combined_y = []
-    combined_scores = []
-    for split in ("test_a", "test_b"):
-        x, y, metadata = data[split]
-        auc, scores = auc_and_scores(model, x, y, args.batch_size)
-        results[split] = {"auc": auc, "events": int(len(y))}
-        combined_y.append(y)
-        combined_scores.append(scores)
-        write_scores(scores_path, split, y, scores, metadata)
-        print("{} AUC = {:.6f}".format(split, auc))
-
-    combined_y = np.concatenate(combined_y)
-    combined_scores = np.concatenate(combined_scores)
-    combined_auc = float(roc_auc_score(combined_y, combined_scores))
-    results["combined"] = {"auc": combined_auc, "events": int(len(combined_y))}
-    save_roc(result_dir / "roc.pdf", combined_y, combined_scores, combined_auc)
+    x_test, y_test, test_metadata = data["test"]
+    test_auc, test_scores = auc_and_scores(
+        model, x_test, y_test, args.batch_size)
+    write_scores(scores_path, "test", y_test, test_scores, test_metadata)
+    save_roc(result_dir / "roc.pdf", y_test, test_scores, test_auc)
 
     summary = {
         "label": args.label,
@@ -265,18 +262,17 @@ def main():
             "patience": args.patience,
             "early_stopping_monitor": "val_loss",
         },
-        "seed": args.seed,
+        "seed": TRAINING_SEED,
         "epochs_run": len(history.history["loss"]),
-        "results": results,
+        "results": {"test": {"auc": test_auc, "events": int(len(y_test))}},
         "uncertainty_note": (
-            "test_a and test_b use disjoint source-cycle pools; events within "
-            "each cohort may reuse files and are therefore correlated"
+            "held-out events may reuse source files and are therefore correlated"
         ),
     }
     with open(result_dir / "summary.json", "w") as handle:
         json.dump(summary, handle, indent=2)
         handle.write("\n")
-    print("combined AUC = {:.6f}".format(combined_auc))
+    print("test AUC = {:.6f}".format(test_auc))
     print("results -> {}".format(result_dir))
 
 

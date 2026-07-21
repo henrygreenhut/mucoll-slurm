@@ -12,16 +12,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-RUNS = {
-    1: ("U_vs_R_seed1", "null_seed1"),
-    2: ("U_vs_R_seed2", "null_seed2"),
-}
+RUNS = ("reco_n420_simple_U_vs_R", "reco_n420_simple_null")
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--input-dir", default="plots/reco_n420_energyflow_histories")
+    parser.add_argument("--input-dir", default="reco_pfn_results")
     parser.add_argument("--output-dir", default="plots")
     return parser.parse_args()
 
@@ -37,7 +33,7 @@ def read_history(path):
 
 def read_auc(path):
     with path.open() as handle:
-        return json.load(handle)["results"]["combined"]["auc"]
+        return json.load(handle)["results"]["test"]["auc"]
 
 
 def finish_axis(axis):
@@ -57,45 +53,40 @@ def save(fig, output_dir, stem):
 
 
 def validation_plot(input_dir, output_dir):
-    for seed in sorted(RUNS):
-        fig, axis = plt.subplots(figsize=(5.2, 4.0))
-        main_name, null_name = RUNS[seed]
-        main = read_history(input_dir / (main_name + ".csv"))
-        null = read_history(input_dir / (null_name + ".csv"))
-        main_auc = read_auc(input_dir / (main_name + ".json"))
-        null_auc = read_auc(input_dir / (null_name + ".json"))
-        axis.plot(main["epoch"], main["val_loss"], color="#0072B2", lw=2,
-                  label="unique vs 42x reuse (AUC {:.3f})".format(main_auc))
-        axis.plot(null["epoch"], null["val_loss"], color="#D55E00", lw=2,
-                  ls="--", label="null (AUC {:.3f})".format(null_auc))
-        finish_axis(axis)
-        axis.set_title("N=420 RECO EnergyFlow PFN validation loss\nseed {}".format(seed))
-        axis.set_ylabel("validation loss")
-        axis.legend(frameon=False, fontsize=8)
-        save(fig, output_dir,
-             "reco_n420_energyflow_validation_loss_seed{}".format(seed))
+    fig, axis = plt.subplots(figsize=(5.2, 4.0))
+    main_name, null_name = RUNS
+    main = read_history(input_dir / main_name / "history.csv")
+    null = read_history(input_dir / null_name / "history.csv")
+    main_auc = read_auc(input_dir / main_name / "summary.json")
+    null_auc = read_auc(input_dir / null_name / "summary.json")
+    axis.plot(main["epoch"], main["val_loss"], color="#0072B2", lw=2,
+              label="unique vs 42x reuse (AUC {:.3f})".format(main_auc))
+    axis.plot(null["epoch"], null["val_loss"], color="#D55E00", lw=2,
+              ls="--", label="null (AUC {:.3f})".format(null_auc))
+    finish_axis(axis)
+    axis.set_title("N=420 RECO EnergyFlow PFN validation loss")
+    axis.set_ylabel("validation loss")
+    axis.legend(frameon=False, fontsize=8)
+    save(fig, output_dir, "reco_n420_simple_validation_loss")
 
 
 def diagnostic_plot(input_dir, output_dir):
-    for seed in sorted(RUNS):
-        fig, axes = plt.subplots(1, 2, figsize=(8.2, 3.7), sharex=True,
-                                 sharey=True)
-        for axis, (name, title) in zip(axes, zip(
-                RUNS[seed], ("unique vs 42x reuse", "null"))):
-            history = read_history(input_dir / (name + ".csv"))
-            auc = read_auc(input_dir / (name + ".json"))
-            axis.plot(history["epoch"], history["loss"], color="#0072B2",
-                      lw=2, label="training")
-            axis.plot(history["epoch"], history["val_loss"], color="#D55E00",
-                      lw=2, label="validation")
-            finish_axis(axis)
-            axis.set_title("{}; seed {}; test AUC {:.3f}".format(
-                title, seed, auc), fontsize=10)
-            axis.legend(frameon=False, fontsize=8)
-        axes[0].set_ylabel("loss")
-        fig.suptitle("N=420 RECO EnergyFlow PFN training history — seed {}".format(seed))
-        save(fig, output_dir,
-             "reco_n420_energyflow_training_history_seed{}".format(seed))
+    fig, axes = plt.subplots(1, 2, figsize=(8.2, 3.7), sharex=True,
+                             sharey=True)
+    for axis, (name, title) in zip(
+            axes, zip(RUNS, ("unique vs 42x reuse", "null"))):
+        history = read_history(input_dir / name / "history.csv")
+        auc = read_auc(input_dir / name / "summary.json")
+        axis.plot(history["epoch"], history["loss"], color="#0072B2",
+                  lw=2, label="training")
+        axis.plot(history["epoch"], history["val_loss"], color="#D55E00",
+                  lw=2, label="validation")
+        finish_axis(axis)
+        axis.set_title("{}; test AUC {:.3f}".format(title, auc), fontsize=10)
+        axis.legend(frameon=False, fontsize=8)
+    axes[0].set_ylabel("loss")
+    fig.suptitle("N=420 RECO EnergyFlow PFN training history")
+    save(fig, output_dir, "reco_n420_simple_training_history")
 
 
 def main():

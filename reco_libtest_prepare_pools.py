@@ -4,8 +4,12 @@
 import argparse
 import json
 import os
+import random
 import re
 from pathlib import Path
+
+
+SPLIT_SEED = 12345
 
 
 def parse_args():
@@ -53,19 +57,16 @@ def assign_cycle_ids(paths):
 
 
 def split_cycles(cycles):
+    cycles = list(cycles)
+    random.Random(SPLIT_SEED).shuffle(cycles)
     n_cycles = len(cycles)
     n_train = round(0.60 * n_cycles)
     n_val = round(0.15 * n_cycles)
-    splits = {
+    return {
         "train": cycles[:n_train],
         "val": cycles[n_train:n_train + n_val],
         "test": cycles[n_train + n_val:],
     }
-    test = splits["test"]
-    midpoint = len(test) // 2
-    splits["test_a"] = test[:midpoint]
-    splits["test_b"] = test[midpoint:]
-    return splits
 
 
 def link_file(source, destination, force=False):
@@ -159,6 +160,7 @@ def main():
         "excluded_cycles": sorted(excluded),
         "n_paired_cycles": len(cycles),
         "cycles": cycles,
+        "split_seed": SPLIT_SEED,
         "splits": {name: values for name, values in splits.items()},
         "null_construction": (
             "null_b shares every norm1 source cycle with U and uses an "

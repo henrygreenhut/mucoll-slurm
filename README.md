@@ -52,7 +52,7 @@ trainer. The important ones are:
 | Simulation chain | `chains/run_chain_pgun.sh` |
 | Batch entry points | `submit_*.slurm` |
 | Result plotting | `pfn_libtest_compare.py`, `plot_gen_trials.py` |
-| Software invariants | `test_libtest_training.py`, `test_variable_reuse_common.py` |
+| Software invariants | `test_libtest_training.py`, `test_variable_reuse_common.py`, `test_reco_libtest.py` |
 
 Generated logs, plots, stores, and results are ignored. HDF5 stores and EDM4hep
 outputs belong under `$PSCRATCH/mucoll/libtest`; compact model results are
@@ -130,8 +130,9 @@ This fixed study overlays, per beam polarity and reconstructed event:
 
 All classes use the same invisible 100 GeV PDG-14 particle gun. The signal is
 there only to drive the simulation chain; reconstructed PFOs come from BIB.
-The dataset contains 2,000 train, 400 validation, and two 400-event test
-cohorts per class.
+The dataset contains 2,000 train, 400 validation, and 800 test events per
+class. Source cycles are deterministically shuffled with seed 12345 before the
+60/15/25 train/validation/test split.
 
 Prepare immutable source pools:
 
@@ -140,7 +141,7 @@ source config.sh
 python3 reco_libtest_prepare_pools.py \
   --norm1-sim "$DATA_GROUP_DIR/bib-v3p0-fmt2-norm1/SIM" \
   --norm42-sim "$DATA_GROUP_DIR/bib-v3p0-fmt2-norm42-RandomRot/SIM" \
-  --outdir "$PSCRATCH/mucoll/libtest/bib_pools_v2" \
+  --outdir "$PSCRATCH/mucoll/libtest/bib_pools_simple" \
   --exclude-cycle 6291 --force
 ```
 
@@ -153,8 +154,8 @@ python3 submit_reco_libtest_packed.py
 ```
 
 Rerun that command after a timeout until it reports that nothing remains.
-Then build the twelve PFO stores and fill a four-GPU node with two model seeds
-for the main comparison and two for the null:
+Then build the nine PFO stores and train one main comparison followed by one
+null on a single shared-QOS GPU, both with the fixed, predeclared seed 12345:
 
 ```bash
 sbatch submit_reco_libtest_stores.slurm
@@ -162,17 +163,17 @@ sbatch submit_reco_libtest_train.slurm
 ```
 
 Each PFO contributes `log(pT)`, `eta`, `sin(phi)`, `cos(phi)`, `log(E)`,
-charge, and charged/photon/neutral indicators. The RECO PFN uses a raw sum: at
+charge, and charged/photon/neutral indicators derived from
+`PandoraPFOs.PDG`. Missing required PFO branches are fatal rather than being
+silently replaced by zeros. The RECO PFN uses a raw sum: at
 roughly O(10) PFOs per event, the large GEN-level sum-saturation issue is not
 present. The trainer imports the standard `energyflow.archs.PFN`; do not replace
 it with the local GEN builder under an existing result label. `summary.json`
-records the EnergyFlow and TensorFlow versions and reports test A, test B, and
-combined AUC. Test A and B have disjoint source pools, although events within
-either cohort may share sources.
+records the fixed seed, EnergyFlow and TensorFlow versions, and one held-out
+test AUC. Test events may share sources and are therefore correlated.
 
-The `_v2` pool, RECO, store, and result names intentionally prevent corrected
-shared-pool null data from being mixed with earlier alternating-cycle null
-outputs.
+The `_simple` pool, RECO, store, and result names prevent this data from being
+mixed with earlier, incompatible outputs.
 
 ## Checks
 

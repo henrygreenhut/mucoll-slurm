@@ -13,19 +13,19 @@ import uproot
 
 
 SAMPLES = ("U", "R", "null_b")
-SPLITS = ("train", "val", "test_a", "test_b")
+SPLITS = ("train", "val", "test")
 N_FILES = 420
 PFO_FEATURES = (
-    "pt", "eta", "phi", "energy", "mass", "charge", "type", "px", "py", "pz",
+    "pt", "eta", "phi", "energy", "mass", "charge", "pdg", "px", "py", "pz",
 )
 
 
 def parse_args():
     scratch = os.environ.get("PSCRATCH", "")
     parser = argparse.ArgumentParser()
-    parser.add_argument("--reco-dir", default=(scratch + "/mucoll/libtest/reco_n420_pfn_v2")
+    parser.add_argument("--reco-dir", default=(scratch + "/mucoll/libtest/reco_n420_pfn_simple")
                         if scratch else None, required=not bool(scratch))
-    parser.add_argument("--outdir", default=(scratch + "/mucoll/libtest/reco_n420_pfn_stores_v2")
+    parser.add_argument("--outdir", default=(scratch + "/mucoll/libtest/reco_n420_pfn_stores_simple")
                         if scratch else None, required=not bool(scratch))
     return parser.parse_args()
 
@@ -35,13 +35,6 @@ def find_root_files(directory):
     return [Path(path).resolve() for path in sorted(glob.glob(pattern))]
 
 
-def pfo_branch(pfos, name, like):
-    try:
-        return pfos["PandoraPFOs." + name].array()
-    except Exception:
-        return ak.zeros_like(like)
-
-
 def read_root_file(path):
     events = uproot.open(path)["events"]
     pfos = events["PandoraPFOs"]
@@ -49,15 +42,15 @@ def read_root_file(path):
     py = pfos["PandoraPFOs.momentum.y"].array()
     pz = pfos["PandoraPFOs.momentum.z"].array()
     pt = np.sqrt(px * px + py * py)
-    energy = pfo_branch(pfos, "energy", pt)
-    mass = pfo_branch(pfos, "mass", pt)
-    charge = pfo_branch(pfos, "charge", pt)
-    pfo_type = pfo_branch(pfos, "type", pt)
+    energy = pfos["PandoraPFOs.energy"].array()
+    mass = pfos["PandoraPFOs.mass"].array()
+    charge = pfos["PandoraPFOs.charge"].array()
+    pdg = pfos["PandoraPFOs.PDG"].array()
 
     vectors = []
     for i in range(events.num_entries):
-        columns = [pt[i], px[i], py[i], pz[i], energy[i], mass[i], charge[i], pfo_type[i]]
-        pt_i, px_i, py_i, pz_i, energy_i, mass_i, charge_i, type_i = [
+        columns = [pt[i], px[i], py[i], pz[i], energy[i], mass[i], charge[i], pdg[i]]
+        pt_i, px_i, py_i, pz_i, energy_i, mass_i, charge_i, pdg_i = [
             ak.to_numpy(column).astype(np.float32) for column in columns
         ]
         good = (
@@ -68,9 +61,9 @@ def read_root_file(path):
         if not np.any(good):
             vectors.append(np.zeros((0, len(PFO_FEATURES)), dtype=np.float32))
             continue
-        pt_i, px_i, py_i, pz_i, energy_i, mass_i, charge_i, type_i = [
+        pt_i, px_i, py_i, pz_i, energy_i, mass_i, charge_i, pdg_i = [
             column[good] for column in
-            (pt_i, px_i, py_i, pz_i, energy_i, mass_i, charge_i, type_i)
+            (pt_i, px_i, py_i, pz_i, energy_i, mass_i, charge_i, pdg_i)
         ]
         event = np.stack(
             [
@@ -80,7 +73,7 @@ def read_root_file(path):
                 energy_i,
                 mass_i,
                 charge_i,
-                type_i,
+                pdg_i,
                 px_i,
                 py_i,
                 pz_i,
