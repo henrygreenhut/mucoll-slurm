@@ -7,7 +7,7 @@
 #SBATCH --ntasks-per-node=2
 #SBATCH -c 16
 #SBATCH --gpus-per-task=1
-#SBATCH --gpu-bind=single:1
+#SBATCH --mem=100G
 #SBATCH -t 07:00:00
 #SBATCH --output=phi_half_long_%x_%j.out
 #SBATCH --error=phi_half_long_%x_%j.err
@@ -37,6 +37,21 @@
 # are actually requested). "shared" + -C gpu resolves to gpu_shared
 # (MaxNodes=1), the QOS actually meant for partial-node requests like
 # this one (2 of 4 GPUs) -- bills for what's requested, not a full node.
+#
+# No --gpu-bind=single:1 under -q shared: that binding mode is documented
+# for EXCLUSIVE-node GPU jobs and produced "Invalid generic resource (gres)
+# specification" when combined with the shared QOS's sub-node GRES model
+# (confirmed empirically -- first submission attempt failed on exactly
+# this). --gpus-per-task=1 alone is sufficient; SLURM handles the binding.
+#
+# --mem=100G: shared QOS jobs need memory requested explicitly for
+# accounting (exclusive queues default to "whole node," shared ones
+# don't). Real need is non-trivial here: libtest_common.Store eagerly
+# loads the FULL norm42 store into host RAM per task (~30GB, all 9 raw
+# fields x ~835M particles), and each of the 2 tasks on this node loads
+# its own independent copy -- roughly 65-70GB combined before any
+# TF/Python overhead. 100G leaves margin; not empirically verified yet,
+# watch the first job for an OOM-kill if it's still too tight.
 #
 # Lightweight logging: one line per epoch (~240s/epoch observed in the
 # debug scan), same format as before. Check progress live with:
