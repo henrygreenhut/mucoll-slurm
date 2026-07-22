@@ -8,5 +8,6 @@ plots/
 pfn_results/
 variable_k_results/
 reco_pfn_results/
+stores_oscar/
 *.out
 *.err
