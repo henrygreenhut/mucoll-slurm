@@ -9,8 +9,20 @@ trainer) and the SAME feature builder the network actually sees
 not the z-scored network input, since raw values are what's interpretable
 here.
 
-Usage (on a NERSC login node, after module load tensorflow):
+Usage (Perlmutter, on a login node, after module load tensorflow):
     python bib_example_unit_feature_plots.py
+
+Usage (OSCAR, no GPU/container needed -- UnitSampler/Store have no
+tensorflow import):
+    module load python/3.11.11-5e66
+    source ~/envs/mucoll/bin/activate
+    python bib_example_unit_feature_plots.py
+
+Store paths/n_files below match whichever OSCAR training job is under
+investigation (currently: the n42 reference config, oscar_n42_paper_rawsum,
+which showed epoch-0-then-collapse-to-chance -- checking whether the class
+separation the network is trained on looks sane before suspecting the
+training loop itself).
 """
 
 import os
@@ -24,16 +36,16 @@ import numpy as np
 import libtest_common as lc
 from pfn_libtest_train import UnitSampler
 
-NORM1_STORE = "/pscratch/sd/h/hgreen/mucoll/libtest/stores/gen_norm1_MUPLUS.h5"
-NORM42_STORE = "/pscratch/sd/h/hgreen/mucoll/libtest/stores/gen_norm42_MUPLUS.h5"
-N_FILES = 420
+NORM1_STORE = os.path.expanduser("~/mucoll/stores/gen_norm1_reconstructed_MUPLUS.h5")
+NORM42_STORE = f"/oscar/scratch/{os.environ.get('USER', '')}/mucoll/stores/gen_norm42_MUPLUS.h5"
+N_FILES = 42
 CLONE_FACTOR = 42
 SPLIT_FRACS = (0.50, 0.25, 0.25)
 SPLIT = "train"
 
 N_EXAMPLES = 20
 SEED = 11
-OUT_PNG = "plots/bib_example_unit_feature_plots.png"
+OUT_PNG = "plots/oscar_n42_example_unit_feature_plots.png"
 
 LABEL0 = "class 0 (norm1, standard)"
 LABEL1 = "class 1 (norm42, rotated/cloned)"
