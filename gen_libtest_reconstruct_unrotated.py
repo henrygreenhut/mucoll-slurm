@@ -128,12 +128,29 @@ def read_and_dedup_file(task):
             want.append(mass_branch)
         arrays = tree.arrays(want, library="ak")
 
-    raw = {}
+    # Read at full (float64) precision for the dedup key -- casting to
+    # float32 BEFORE computing p/theta (as the stored-output path does)
+    # loses precision right before an arctan2, which can amplify that
+    # error enough to push a genuine clone's rounded key across a
+    # boundary and falsely split a clean 42-group. Confirmed empirically:
+    # diagnose_group_anomalies.py (full float64 throughout) found zero
+    # anomalies on files where this function's original float32-first
+    # version reported singletons.
+    raw64 = {}
     for key, br in branches.items():
         flat = ak.to_numpy(ak.flatten(arrays[br], axis=None))
-        raw[key] = flat.astype(np.int32 if key == "pdg" else np.float32)
-    p2 = raw["px"].astype(np.float64) ** 2 + raw["py"].astype(np.float64) ** 2 \
-        + raw["pz"].astype(np.float64) ** 2
+        raw64[key] = flat.astype(np.int64 if key == "pdg" else np.float64)
+
+    p2 = raw64["px"] ** 2 + raw64["py"] ** 2 + raw64["pz"] ** 2
+    p = np.sqrt(p2)
+    pt = np.hypot(raw64["px"], raw64["py"])
+    theta = np.arctan2(pt, raw64["pz"])
+
+    # Float32 copies for the actual stored output (matches
+    # gen_libtest_make_store.py's dtypes) -- built AFTER the key, from the
+    # same float64 source, not from a separately-truncated intermediate.
+    raw = {key: (val.astype(np.int32) if key == "pdg" else val.astype(np.float32))
+          for key, val in raw64.items()}
     if mass_branch in want:
         m = ak.to_numpy(ak.flatten(arrays[mass_branch], axis=None)).astype(np.float64)
         raw["E"] = np.sqrt(p2 + m ** 2).astype(np.float32)
@@ -143,15 +160,12 @@ def read_and_dedup_file(task):
     # Rotation-invariant dedup key: pdg (exact) + |p|, theta, vz, t
     # (rounded). A pure rotation about the beam axis only touches
     # (px,py)/(vx,vy) -- everything else here is exactly preserved.
-    p = np.sqrt(p2)
-    pt = np.hypot(raw["px"].astype(np.float64), raw["py"].astype(np.float64))
-    theta = np.arctan2(pt, raw["pz"].astype(np.float64))
     key_arr = np.stack([
-        raw["pdg"].astype(np.float64),
+        raw64["pdg"].astype(np.float64),
         np.round(p, DECIMALS),
         np.round(theta, DECIMALS),
-        np.round(raw["vz"].astype(np.float64), DECIMALS),
-        np.round(raw["t"].astype(np.float64), DECIMALS),
+        np.round(raw64["vz"], DECIMALS),
+        np.round(raw64["t"], DECIMALS),
     ], axis=1)
     _, first_idx, group_sizes = np.unique(
         key_arr, axis=0, return_index=True, return_counts=True)
