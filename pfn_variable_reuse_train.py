@@ -13,7 +13,8 @@ import libtest_common as lc
 from variable_reuse_common import MotherStore, cycle_split_mothers, sample_definition
 
 
-PHI_SIZES = (200, 200, 256)
+PHI_SIZES = (100, 100, 128)  # halved: validated crash-free at batch=4/8
+                              # this session (phi_half_scan, job 56272947)
 F_SIZES = (200, 200, 200)
 SOURCE_SPLIT = (0.50, 0.25, 0.25)
 NORM_PARTICLES_PER_CLASS = 100000
@@ -56,7 +57,12 @@ def parse_args():
     parser.add_argument("--max-minutes", type=float, default=25.0)
     args = parser.parse_args()
     args.split_fracs = SOURCE_SPLIT
-    args.norm_stat_units = 1
+    # Was 1 (a single sampled unit set latent_scale for the whole run --
+    # checked the resulting value for the collapsed run and it happened to
+    # be reasonable, ~1.18M implied typical particles vs our own ~1.25M,
+    # so it wasn't the smoking gun there, but a 1-sample estimate is still
+    # a real fragility given how much per-unit particle count varies).
+    args.norm_stat_units = 100
     args.norm_particles_per_unit = NORM_PARTICLES_PER_CLASS
     return args
 
