@@ -5,7 +5,7 @@
 #SBATCH -C l40s
 #SBATCH -n 1
 #SBATCH -c 8
-#SBATCH --mem=32g
+#SBATCH --mem=56g
 #SBATCH -t 00:30:00
 #SBATCH -o oscar_train_%x_%j.out
 #SBATCH -e oscar_train_%x_%j.err
@@ -28,6 +28,13 @@
 # $PSCRATCH (a Perlmutter-only env var), so on OSCAR both --norm1-store and
 # --norm42-store MUST be given explicitly or it silently falls back to
 # looking in the current directory.
+#
+# --mem=56g (was 32g): libtest_common.Store eagerly loads the FULL store
+# into RAM on construction -- norm42 alone is ~29GB (matching Perlmutter's
+# gen_norm42_MUPLUS.h5), plus ~0.7GB norm1, plus TF/Apptainer/Python
+# overhead. 32g OOM-killed the job right after "loading stores", before
+# training even started (confirmed via sacct: OUT_OF_MEMORY, 1:56 elapsed,
+# SLURM's own "Detected 1 oom_kill event" message). 56g leaves real margin.
 
 set -e
 cd "$SLURM_SUBMIT_DIR"
