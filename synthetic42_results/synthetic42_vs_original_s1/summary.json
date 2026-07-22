@@ -1,0 +1,51 @@
+{
+  "label": "synthetic42_vs_original_s1",
+  "class_0": "synthetic42",
+  "class_1": "original_norm42",
+  "null_test": false,
+  "cycles_per_unit": 10,
+  "clone_factor": 42,
+  "test_auc": 0.5016666666666667,
+  "paired_bootstrap_std": 0.01011781438361243,
+  "paired_bootstrap_95pct": [
+    0.48444444444444446,
+    0.5255555555555556
+  ],
+  "test_pairs": 30,
+  "test_cycles_mutually_disjoint": true,
+  "best_val_auc": 0.51,
+  "best_epoch": 0,
+  "epochs_run": 11,
+  "config": {
+    "mother_store": "/pscratch/sd/h/hgreen/mucoll/libtest/stores/gen_split_mothers_MUPLUS.h5",
+    "original_store": "/pscratch/sd/h/hgreen/mucoll/libtest/stores/gen_norm42_MUPLUS.h5",
+    "label": "synthetic42_vs_original_s1",
+    "outdir": "synthetic42_results",
+    "cycles_per_unit": 10,
+    "clone_factor": 42,
+    "units_per_epoch": 20,
+    "val_units": 10,
+    "test_units": 30,
+    "batch_size": 1,
+    "epochs": 100,
+    "patience": 10,
+    "seed": 1,
+    "model_seed": 1,
+    "split_fracs": [
+      0.5,
+      0.25,
+      0.25
+    ],
+    "features": "rotation",
+    "drop_phi": false,
+    "e_min": 0.0,
+    "t_abs_max": 0.0,
+    "latent_scale": "auto",
+    "norm_stat_pairs": 1,
+    "norm_particles_per_unit": 100000,
+    "null_test": false,
+    "audit_cycles": 3,
+    "bootstrap": 1000,
+    "max_minutes": 25.0
+  }
+}
