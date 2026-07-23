@@ -75,17 +75,30 @@ def assign_cycle_ids(paths):
 #              2203.06773 -- a pure z-axis rotation preserves time and
 #              vertex exactly, same as |p|/theta, so these carry more of
 #              the same exact-duplicate reuse signature, not a different
-#              kind of signal), and charge. Deliberately NOT trying to be
-#              "realistic" (reconstructed quantities would be smeared,
-#              these are MC truth) -- this tier's job is to establish how
-#              separable norm1-vs-norm42 is with maximum GEN-level
-#              sensitivity; the reco-level classifier is what answers
-#              whether any of this actually survives detector resolution.
+#              kind of signal). Deliberately NOT trying to be "realistic"
+#              (reconstructed quantities would be smeared, these are MC
+#              truth) -- this tier's job is to establish how separable
+#              norm1-vs-norm42 is with maximum GEN-level sensitivity; the
+#              reco-level classifier is what answers whether any of this
+#              actually survives detector resolution.
+#
+#   Deliberately excludes "charge": it's the one field not already in the
+#   original stores (E/t/vx/vy/vz were there from the start), so it's the
+#   sole reason a store rebuild (_v2, +15% size/RAM) would be needed --
+#   and its marginal information is small (PDG one-hot on |pdg| already
+#   fixes charge for photons/neutrons; charge only adds the e/mu particle-
+#   vs-antiparticle sign on top, nothing like the exact-invariant vz/t
+#   signal above). Not worth a ~4.5GB RAM/store-rebuild cost for that --
+#   confirmed the hard way: oscar_n420_full (job 4228090) thrashed at its
+#   memory ceiling using the charge-including _v2 stores where every
+#   earlier, charge-free n420 run fit comfortably in the same --mem.
+#   build_features still supports "charge" as a column (see `columns`
+#   below) for anyone who wants to opt into it explicitly later.
 PDG_ONEHOT = ["pdg_gamma", "pdg_n", "pdg_e", "pdg_mu", "pdg_other"]
 FEATURE_SETS = {
     "paper": ["logpt", "theta", "cosphi", "sinphi"] + PDG_ONEHOT,
     "expanded": ["logpt", "theta", "cosphi", "sinphi", "loge",
-                 "asinh_t", "asinh_vz", "asinh_vr", "charge"] + PDG_ONEHOT,
+                 "asinh_t", "asinh_vz", "asinh_vr"] + PDG_ONEHOT,
 }
 # Back-compat for callers that predate feature tiers (pfn_variable_reuse_train.py,
 # bib_example_unit_feature_plots.py) and always want the "paper" set.

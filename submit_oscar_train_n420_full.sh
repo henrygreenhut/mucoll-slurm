@@ -15,11 +15,18 @@
 # once deliberately, as a single headline comparison point against
 # submit_oscar_train_n420_variant_long.sh's plain warmup+clip test:
 #
-#   features:      expanded (paper + loge/asinh_t/asinh_vz/asinh_vr/
-#                  charge) -- needs the _v2 stores (charge only exists
-#                  there); run submit_make_norm42_store.sh MUPLUS and
-#                  submit_reconstruct_unrotated.sh MUPLUS first if they
-#                  don't exist yet.
+#   features:      expanded (paper + loge/asinh_t/asinh_vz/asinh_vr) --
+#                  all four fields (E/t/vx/vy/vz) were already in the
+#                  ORIGINAL stores from day one, so this uses those, not
+#                  the _v2 ones. "expanded" originally also included
+#                  charge, the one field that needed the _v2 rebuild --
+#                  dropped (see libtest_common.py's FEATURE_SETS comment):
+#                  charge's marginal info over the existing PDG one-hot is
+#                  small (only the e/mu particle-vs-antiparticle sign),
+#                  not worth the _v2 stores' extra ~15% size/RAM -- which
+#                  is exactly what thrashed this job (4228090) at its
+#                  --mem ceiling the first time, where every charge-free
+#                  n420 run before it fit comfortably in the same budget.
 #   validation:    --val-units 1000 (vs 300), --select-metric loss (self-
 #                  calibrating SEM-based selection instead of the fixed
 #                  --min-delta, which is known to sit below val_auc's
@@ -61,17 +68,15 @@ fi
 
 module load ngc-tensorflow-container/25.02-tf2-py3-j4zj
 
-NORM1_STORE="$HOME/mucoll/stores/gen_norm1_reconstructed_MUPLUS_v2.h5"
-NORM42_STORE="/oscar/scratch/$USER/mucoll/stores/gen_norm42_MUPLUS_v2.h5"
+NORM1_STORE="$HOME/mucoll/stores/gen_norm1_reconstructed_MUPLUS.h5"
+NORM42_STORE="/oscar/scratch/$USER/mucoll/stores/gen_norm42_MUPLUS.h5"
 
 if [ ! -f "$NORM1_STORE" ]; then
-    echo "ERROR: _v2 norm1 store not found at $NORM1_STORE"
-    echo "  (run: sbatch submit_reconstruct_unrotated.sh MUPLUS)"
+    echo "ERROR: norm1 store not found at $NORM1_STORE"
     exit 1
 fi
 if [ ! -f "$NORM42_STORE" ]; then
-    echo "ERROR: _v2 norm42 store not found at $NORM42_STORE"
-    echo "  (run: sbatch submit_make_norm42_store.sh MUPLUS)"
+    echo "ERROR: norm42 store not found at $NORM42_STORE"
     exit 1
 fi
 
