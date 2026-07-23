@@ -39,6 +39,7 @@ here changes what a bare `pfn_libtest_train.py --label X` run does.
 import argparse
 import csv
 import json
+import math
 import os
 import time
 
@@ -156,7 +157,7 @@ def parse_args():
     # the training collapse this project has spent a lot of time
     # characterizing: the pooled latent's magnitude scales with however
     # many particles are in a unit, which can push early activations/
-    # gradients to extremes. See --warmup-steps/--clipnorm below, and
+    # gradients to extremes. See --warmup-epochs/--clipnorm below, and
     # arXiv:2206.11925 (Set Norm) on why normalizing sum-pooled Deep-Sets-
     # style architectures isn't just "add BatchNorm" -- naive normalization
     # here can also destroy real signal, so it isn't done reflexively.
@@ -223,10 +224,17 @@ def parse_args():
     parser.add_argument("--lr", type=float, default=0.001,
                         help="Adam base/target learning rate (default 0.001, "
                              "unchanged from the original hardcoded value)")
-    parser.add_argument("--warmup-steps", type=int, default=0,
+    parser.add_argument("--warmup-epochs", type=float, default=0.0,
                         help="linear LR warmup from 0 to --lr over this many "
-                             "gradient steps (batches), then held constant "
-                             "(0 = off, the original fixed-lr behavior). "
+                             "epochs' worth of gradient steps, then held "
+                             "constant (0 = off, the original fixed-lr "
+                             "behavior). Epochs, not a raw step count, so it "
+                             "stays correct automatically if --units-per-"
+                             "epoch/--batch-size change -- the actual step "
+                             "count (steps/epoch = ceil(2*units_per_epoch/"
+                             "batch_size), matching make_batches' chunking) "
+                             "is computed once args are known, logged, and "
+                             "recorded in config.json for exact reproduction. "
                              "Targets the raw-sum instability specifically: "
                              "with --latent-scale none, early loss/gradients "
                              "can be enormous (observed 70,000+ at n420) "
@@ -234,7 +242,7 @@ def parse_args():
     parser.add_argument("--clipnorm", type=float, default=0.0,
                         help="clip each gradient's global norm to this value "
                              "(0 = off, the original unclipped behavior). "
-                             "Complementary to --warmup-steps, not "
+                             "Complementary to --warmup-epochs, not "
                              "redundant: bounds the worst case if a single "
                              "batch's gradient is still huge despite warmup")
     parser.add_argument("--latent-dropout", type=float, default=0.0,
@@ -387,6 +395,20 @@ def main():
         raise SystemExit("--overlap-test-units must be non-negative")
     if args.min_epochs < 0 or args.min_epochs > args.epochs:
         raise SystemExit("--min-epochs must be between 0 and --epochs")
+    # Steps/epoch matches make_batches' own chunking exactly: it shuffles
+    # the 2*units_per_epoch (both classes) unit list, then walks it in
+    # batch_size chunks -- ceil, since a final partial batch still counts
+    # as one training step. Resolving --warmup-epochs to an exact step
+    # count here (once, from this run's own config) means no one -- not
+    # the user, not whoever reads the command later -- has to hand-compute
+    # or guess it; it's also recorded in config.json below for exact
+    # reproduction even if --units-per-epoch/--batch-size defaults change
+    # later.
+    steps_per_epoch = math.ceil(2 * args.units_per_epoch / args.batch_size)
+    args.warmup_steps = round(args.warmup_epochs * steps_per_epoch)
+    if args.warmup_epochs > 0:
+        print(f"  warmup: {args.warmup_epochs} epoch(s) = "
+              f"{args.warmup_steps} steps ({steps_per_epoch} steps/epoch)")
     with open(os.path.join(outdir, "config.json"), "w") as f:
         json.dump(vars(args), f, indent=1)
 

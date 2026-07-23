@@ -31,8 +31,24 @@
 # partition), so submitting all 6 (raw/scaled x seed 1-3) back to back
 # just queues them serially -- no downside to submitting all of them now.
 #
-# Resume per (variant, seed) -- same usage as the short version:
+# Optional --warmup-epochs/--clipnorm (args 3/4, both default 0 = off,
+# reproducing the exact original behavior/label if omitted): when set,
+# the label gets a _wN_cM suffix rather than resuming the plain
+# oscar_n420_halfphi_{raw,scaled}_seed<N> checkpoint from the earlier
+# short run. That's required, not just tidy -- this label's checkpoint
+# already has ~1500+ optimizer steps in it (6 epochs from the 25-min
+# run), so resuming it with warmup newly enabled would read the RESTORED
+# iterations count into the warmup schedule, which is already well past
+# any sane warmup window -- warmup would silently do nothing.
+#
+# warmup_epochs, not a raw step count: pfn_libtest_train.py resolves it to
+# an exact step count itself from THIS run's own --units-per-epoch/
+# --batch-size (logged, and recorded in that run's config.json) -- nobody
+# has to hand-compute steps/epoch to pick this number.
+#
+# Resume per (variant, seed[, warmup_epochs, clipnorm]):
 #   sbatch submit_oscar_train_n420_variant_long.sh pfn 1
+#   sbatch submit_oscar_train_n420_variant_long.sh pfn 1 1 1.0
 #   sbatch submit_oscar_train_n420_variant_long.sh efn 1
 
 set -e
@@ -40,12 +56,14 @@ cd "$SLURM_SUBMIT_DIR"
 
 VARIANT=$1
 SEED=$2
+WARMUP_EPOCHS=${3:-0}
+CLIPNORM=${4:-0}
 if [ "$VARIANT" != "pfn" ] && [ "$VARIANT" != "efn" ]; then
-    echo "usage: sbatch submit_oscar_train_n420_variant_long.sh {pfn|efn} <seed>"
+    echo "usage: sbatch submit_oscar_train_n420_variant_long.sh {pfn|efn} <seed> [warmup_epochs] [clipnorm]"
     exit 1
 fi
 if [ -z "$SEED" ]; then
-    echo "usage: sbatch submit_oscar_train_n420_variant_long.sh {pfn|efn} <seed>"
+    echo "usage: sbatch submit_oscar_train_n420_variant_long.sh {pfn|efn} <seed> [warmup_epochs] [clipnorm]"
     exit 1
 fi
 
@@ -70,6 +88,9 @@ else
     LATENT_SCALE="auto"
     LABEL="oscar_n420_halfphi_scaled_seed${SEED}"
 fi
+if [ "$WARMUP_EPOCHS" != "0" ] || [ "$CLIPNORM" != "0" ]; then
+    LABEL="${LABEL}_w${WARMUP_EPOCHS}_c${CLIPNORM}"
+fi
 
 apptainer exec --nv "$NGC_TENSORFLOW_CONTAINER" python -u pfn_libtest_train.py \
     --label "$LABEL" \
@@ -83,6 +104,8 @@ apptainer exec --nv "$NGC_TENSORFLOW_CONTAINER" python -u pfn_libtest_train.py \
     --phi-sizes 100,100,128 \
     --f-sizes 200,200,200 \
     --arch energyflow \
+    --warmup-epochs "$WARMUP_EPOCHS" \
+    --clipnorm "$CLIPNORM" \
     --seed "$SEED"
 
 echo ""
