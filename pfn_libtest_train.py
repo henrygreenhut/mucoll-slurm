@@ -532,7 +532,20 @@ def main():
         checkpoint, os.path.join(outdir, "resume_checkpoint"), max_to_keep=1)
     if checkpoint_manager.latest_checkpoint:
         status = checkpoint.restore(checkpoint_manager.latest_checkpoint)
-        status.assert_existing_objects_matched()
+        # expect_partial(), not assert_existing_objects_matched(): the
+        # latter turns out to hard-fail (not silently tolerate, despite
+        # its docstring suggesting otherwise) whenever the CURRENT Python
+        # object graph has a trackable with no match in an OLDER
+        # checkpoint file -- exactly what happens whenever a new
+        # checkpointed variable (like best_val_loss, added for
+        # --select-metric loss) gets added and someone resumes a run
+        # whose checkpoint predates it. expect_partial() is TF's own
+        # idiom for "the object graph evolved since this was saved, and
+        # that's fine" -- confirmed safe here because the restored values
+        # are printed immediately below, so a genuinely bad mismatch
+        # (wrong epoch count, nonsensical AUC) would be visible, not
+        # silently swallowed.
+        status.expect_partial()
         state["epoch"] = int(checkpoint_epoch.numpy())
         state["best_val_auc"] = float(checkpoint_best_auc.numpy())
         state["best_val_loss"] = float(checkpoint_best_loss.numpy())
