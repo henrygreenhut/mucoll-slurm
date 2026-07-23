@@ -22,6 +22,14 @@
 # a complete non-issue. Move into the group data directory later once
 # write access there is confirmed, if that's preferred long-term.
 #
+# _v2 suffix: gen_libtest_reconstruct_unrotated.py now also reads
+# "charge" (needed for --features expanded), so this store's schema
+# differs from the original gen_norm1_reconstructed_${POLARITY}.h5 --
+# writing to a new path instead of overwriting it in place, for the same
+# reason as submit_make_norm42_store.sh's _v2 (avoid racing the
+# currently-running n420 long jobs that read the original file). The old
+# file stays valid for --features paper.
+#
 # Submit once per polarity:
 #   sbatch submit_reconstruct_unrotated.sh MUPLUS
 #   sbatch submit_reconstruct_unrotated.sh MUMINUS
@@ -42,8 +50,8 @@ mkdir -p ~/mucoll/stores
 
 python gen_libtest_reconstruct_unrotated.py \
     --input-dir /oscar/data/mleblan6/mucoll/bib/bib-v3p0-fmt2-norm42-RandomRot/GEN/${POLARITY} \
-    --output ~/mucoll/stores/gen_norm1_reconstructed_${POLARITY}.h5 \
+    --output ~/mucoll/stores/gen_norm1_reconstructed_${POLARITY}_v2.h5 \
     --workers 16
 
-echo "done -> ~/mucoll/stores/gen_norm1_reconstructed_${POLARITY}.h5"
-ls -lh ~/mucoll/stores/gen_norm1_reconstructed_${POLARITY}.h5
+echo "done -> ~/mucoll/stores/gen_norm1_reconstructed_${POLARITY}_v2.h5"
+ls -lh ~/mucoll/stores/gen_norm1_reconstructed_${POLARITY}_v2.h5

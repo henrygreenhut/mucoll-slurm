@@ -48,7 +48,7 @@ import time
 import h5py
 import numpy as np
 
-FLOAT_KEYS = ["px", "py", "pz", "E", "t", "vx", "vy", "vz"]
+FLOAT_KEYS = ["px", "py", "pz", "E", "t", "vx", "vy", "vz", "charge"]
 DECIMALS = 6
 
 
@@ -121,6 +121,7 @@ def read_and_dedup_file(task):
             "vx": f"{collection}.vertex.x",
             "vy": f"{collection}.vertex.y",
             "vz": f"{collection}.vertex.z",
+            "charge": f"{collection}.charge",
         }
         mass_branch = f"{collection}.mass"
         want = list(branches.values())

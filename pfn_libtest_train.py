@@ -13,13 +13,27 @@ checkpointed every epoch, and the process exits cleanly at --max-minutes.
 Resubmit with the same --label to resume. Test evaluation (disjoint blocked
 units + unit bootstrap) runs automatically once training finishes.
 
-Needs only numpy, h5py, tensorflow (no sklearn, no energyflow); the PFN
-architecture (Phi=(200,200,256), masked scaled sum, F=(200,200,200)) is
-built in plain Keras in libtest_common.build_pfn. On Perlmutter GPU nodes:
-`module load tensorflow`.
+Needs numpy, h5py, tensorflow; --arch energyflow additionally needs the
+energyflow package + tf_keras. The PFN architecture (Phi=(200,200,256),
+masked scaled sum, F=(200,200,200) by default) is built in plain Keras in
+libtest_common.build_pfn, or via the real energyflow.archs.PFN/EFN classes
+-- see --arch below. On Perlmutter GPU nodes: `module load tensorflow`.
 
-Fixed analysis choices are declared below. Command-line options are reserved
-for event size, compute budget, random seeds, and the scaled/raw sum test.
+Command-line flags are grouped below by what they control, roughly in the
+order a reader would want to reason about them:
+    data/unit construction   --norm1-store .. --n-files, --split-fracs
+    validation & stopping    --val-units .. --min-delta-sigma
+    reproducibility          --seed, --model-seed
+    runtime/resume           --max-minutes
+    what the model sees      --null-test, --features
+    architecture             --latent-scale, --arch, --jit, --phi-sizes,
+                             --f-sizes
+    training dynamics        --lr .. --f-l2 (warmup/clipping/dropout/L2 --
+                             all off by default, reproducing the original
+                             fixed-lr/unregularized behavior exactly)
+    test evaluation          --eval-point-units .. --eval-bootstrap-units
+Every flag defaults to the original, already-validated behavior; nothing
+here changes what a bare `pfn_libtest_train.py --label X` run does.
 """
 
 import argparse
@@ -50,6 +64,7 @@ def parse_args():
     scratch = os.environ.get("PSCRATCH", ".")
     store_dir = os.path.join(scratch, "mucoll/libtest/stores")
     parser = argparse.ArgumentParser()
+    # --- data / unit construction -------------------------------------
     parser.add_argument("--norm1-store", default=os.path.join(store_dir, "gen_norm1_MUPLUS.h5"))
     parser.add_argument("--norm42-store", default=os.path.join(store_dir, "gen_norm42_MUPLUS.h5"))
     parser.add_argument("--label", required=True, help="run name; also resume key")
@@ -57,6 +72,12 @@ def parse_args():
     parser.add_argument("--n-files", type=int, default=42,
                         help="norm1 files per unit (must be multiple of clone factor)")
     parser.add_argument("--units-per-epoch", type=int, default=2000, help="per class")
+    # --- validation & early stopping ----------------------------------
+    # A fresh random draw of --units-per-epoch/class every epoch (not the
+    # same batch reused), since the true "dataset" here -- every possible
+    # n_files-file combination -- is far too large to enumerate; val_defs
+    # below is the opposite: drawn ONCE and held fixed for the whole run,
+    # so early-stopping is judged against a stable target.
     parser.add_argument("--val-units", type=int, default=300, help="per class, fixed")
     parser.add_argument(
         "--overlap-test-units", type=int, default=0, metavar="N",
@@ -86,13 +107,59 @@ def parse_args():
     parser.add_argument("--min-epochs", type=int, default=0,
                         help="do not apply early stopping before this many "
                              "epochs have completed")
+    parser.add_argument("--select-metric", default="auc", choices=["auc", "loss"],
+                        help="metric that drives 'improved'/early-stopping/"
+                             "best-checkpoint selection. 'auc' (default, the "
+                             "original behavior) uses the fixed --min-delta "
+                             "threshold above. 'loss' uses a self-"
+                             "calibrating criterion instead: improved iff "
+                             "val_loss drops by more than --min-delta-sigma "
+                             "standard errors of the per-unit val loss (SEM "
+                             "= std/sqrt(2*val_units)) -- automatically "
+                             "compatible with whatever --val-units is "
+                             "chosen, unlike a hand-picked --min-delta which "
+                             "needs re-deriving every time val_units changes")
+    parser.add_argument("--min-delta-sigma", type=float, default=1.0,
+                        help="only used by --select-metric loss: required "
+                             "val_loss improvement, in standard errors of "
+                             "the per-unit val loss, to count as a new best "
+                             "(default 1.0)")
+    # --- reproducibility -----------------------------------------------
+    # --seed controls weight init AND every data-sampling RNG (which units
+    # get drawn each epoch, which units land in the fixed val set, which
+    # test/bootstrap units get evaluated) -- a genuinely different run, not
+    # just a different starting point. --model-seed lets you decouple init
+    # from data sampling if you ever need to isolate which one a result
+    # depends on (not yet exercised in practice: every sweep so far has
+    # varied both together via --seed alone).
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--model-seed", type=int,
                         help="TensorFlow initialization seed (default: --seed)")
+    # --- runtime / resume ------------------------------------------------
     parser.add_argument("--max-minutes", type=float, default=0.0,
                         help="checkpoint and exit after this wall time (0 = off)")
+    # --- what the model sees --------------------------------------------
     parser.add_argument("--null-test", action="store_true",
                         help="norm1-vs-norm1 control (expect AUC 0.5)")
+    parser.add_argument("--features", default="paper",
+                        choices=list(lc.FEATURE_SETS),
+                        help="'paper' = momentum direction/magnitude + PDG "
+                             "one-hot only (arXiv:1810.05165 recipe, adapted "
+                             "for BIB). 'expanded' = paper + log energy, "
+                             "asinh time/vertex-z/vertex-radius, and charge "
+                             "-- maximum GEN-level truth sensitivity, not "
+                             "meant to be realistic (reco-level features "
+                             "would be smeared); see FEATURE_SETS in "
+                             "libtest_common.py")
+    # --- architecture ----------------------------------------------------
+    # latent_scale=none (raw, unnormalized sum) is the one most prone to
+    # the training collapse this project has spent a lot of time
+    # characterizing: the pooled latent's magnitude scales with however
+    # many particles are in a unit, which can push early activations/
+    # gradients to extremes. See --warmup-steps/--clipnorm below, and
+    # arXiv:2206.11925 (Set Norm) on why normalizing sum-pooled Deep-Sets-
+    # style architectures isn't just "add BatchNorm" -- naive normalization
+    # here can also destroy real signal, so it isn't done reflexively.
     parser.add_argument("--latent-scale", default="auto",
                         help="constant multiplying the summed latent: 'auto' = "
                              "1/median unit multiplicity (default), 'none' = raw "
@@ -109,6 +176,7 @@ def parse_args():
                              "the legacy GPU kernels that hit it), but our "
                              "particle count N varies every batch, so watch "
                              "per-epoch seconds for recompilation overhead")
+    # --- test evaluation ---------------------------------------------
     parser.add_argument("--eval-point-units", type=int, default=300,
                         help="overlapping held-out events per class for the "
                              "primary (automatic) test AUC")
@@ -122,6 +190,12 @@ def parse_args():
                              "estimate test_auc with no uncertainty)")
     parser.add_argument("--eval-bootstrap-units", type=int, default=100,
                         help="regenerated events per class per bootstrap pool")
+    # --- architecture, continued (layer widths) -----------------------
+    # Widest Phi layer matters for the TF/XLA int32 kernel-launch overflow
+    # bug: batch_size * N * widest_Phi_width must stay under 2^31. Halving
+    # Phi width (200,200,256 -> 100,100,128) doubles the safe N ceiling --
+    # this is why the n420-scale runs use a halved network, not a
+    # capacity/accuracy choice.
     parser.add_argument("--phi-sizes", type=parse_size_list,
                         default=PHI_SIZES,
                         help=f"comma-separated Phi (per-particle) layer "
@@ -137,6 +211,48 @@ def parse_args():
                         help=f"cycle-level train/val/test fractions, must "
                              f"sum to 1 (default: {SOURCE_SPLIT[0]} "
                              f"{SOURCE_SPLIT[1]} {SOURCE_SPLIT[2]})")
+    # --- training dynamics ----------------------------------------------
+    # All off by default (reproduces the original fixed-lr, unregularized
+    # Adam exactly). Warmup and clipping are complementary responses to
+    # the same raw-sum instability, not alternatives to each other: warmup
+    # keeps EARLY steps small while Adam's moment estimates are still
+    # noisy (the documented mechanism behind why Adam needs warmup at all
+    # -- arXiv:1908.03265 RAdam, arXiv:1910.04209); clipping bounds the
+    # worst case for ANY step, early or late, if a single batch's gradient
+    # is still huge despite that.
+    parser.add_argument("--lr", type=float, default=0.001,
+                        help="Adam base/target learning rate (default 0.001, "
+                             "unchanged from the original hardcoded value)")
+    parser.add_argument("--warmup-steps", type=int, default=0,
+                        help="linear LR warmup from 0 to --lr over this many "
+                             "gradient steps (batches), then held constant "
+                             "(0 = off, the original fixed-lr behavior). "
+                             "Targets the raw-sum instability specifically: "
+                             "with --latent-scale none, early loss/gradients "
+                             "can be enormous (observed 70,000+ at n420) "
+                             "while Adam's moment estimates are still noisy")
+    parser.add_argument("--clipnorm", type=float, default=0.0,
+                        help="clip each gradient's global norm to this value "
+                             "(0 = off, the original unclipped behavior). "
+                             "Complementary to --warmup-steps, not "
+                             "redundant: bounds the worst case if a single "
+                             "batch's gradient is still huge despite warmup")
+    parser.add_argument("--latent-dropout", type=float, default=0.0,
+                        help="dropout on the pooled per-event latent vector, "
+                             "post-sum (0 = off). Maps directly to "
+                             "energyflow's own latent_dropout hyperparameter "
+                             "for --arch energyflow")
+    parser.add_argument("--f-dropout", type=float, default=0.0,
+                        help="dropout on the F (event-level) dense layers "
+                             "(0 = off). Maps to energyflow's F_dropouts")
+    parser.add_argument("--phi-l2", type=float, default=0.0,
+                        help="L2 regularization strength on the Phi "
+                             "(per-particle) dense layers (0 = off). Maps "
+                             "to energyflow's Phi_l2_regs")
+    parser.add_argument("--f-l2", type=float, default=0.0,
+                        help="L2 regularization strength on the F "
+                             "(event-level) dense layers (0 = off). Maps "
+                             "to energyflow's F_l2_regs")
     args = parser.parse_args()
     if abs(sum(args.split_fracs) - 1.0) > 1e-6:
         raise SystemExit(f"--split-fracs must sum to 1, got {args.split_fracs}")
@@ -161,14 +277,15 @@ def parse_args():
 class UnitSampler:
     """Builds (features, label) units for one class from one store."""
 
-    def __init__(self, store, positions_by_split, files_per_unit):
+    def __init__(self, store, positions_by_split, files_per_unit, feature_set="paper"):
         self.store = store
         self.positions = positions_by_split
         self.files_per_unit = files_per_unit
+        self.feature_set = feature_set
 
     def build(self, file_positions, mean, std):
         raw = self.store.file_arrays(file_positions)
-        feats = lc.build_features(raw)
+        feats = lc.build_features(raw, feature_set=self.feature_set)
         return (feats - mean) / std
 
     def random_unit(self, rng, split):
@@ -202,19 +319,31 @@ def predict_units(model, unit_defs, samplers, mean, std, batch_size):
     return np.asarray(labels), np.asarray(scores)
 
 
-def binary_cross_entropy(labels, scores):
-    """Mean two-class cross entropy from PFN class-1 probabilities."""
+def per_unit_cross_entropy(labels, scores):
+    """Per-unit two-class cross entropy from PFN class-1 probabilities."""
     scores = np.clip(np.asarray(scores, dtype=np.float64), 1e-7, 1.0 - 1e-7)
     labels = np.asarray(labels, dtype=np.int32)
     probabilities = np.where(labels == 1, scores, 1.0 - scores)
-    return float(-np.mean(np.log(probabilities)))
+    return -np.log(probabilities)
+
+
+def binary_cross_entropy(labels, scores):
+    """Mean two-class cross entropy from PFN class-1 probabilities.
+
+    Thin wrapper kept for test_libtest_training.py's coverage of the mean-
+    loss formula; main()'s training loop calls per_unit_cross_entropy
+    directly instead, since it also needs the per-unit values (not just
+    the mean) to compute val_loss_sem for --select-metric loss.
+    """
+    return float(np.mean(per_unit_cross_entropy(labels, scores)))
 
 
 def load_state(path):
     if os.path.isfile(path):
         with open(path) as f:
             return json.load(f)
-    return {"epoch": 0, "best_val_auc": -1.0, "best_epoch": -1, "done": False}
+    return {"epoch": 0, "best_val_auc": -1.0, "best_val_loss": float("inf"),
+            "best_epoch": -1, "done": False}
 
 
 def save_state(path, state):
@@ -284,8 +413,8 @@ def main():
         files_b = args.n_files // args.clone_factor
 
     samplers = [
-        UnitSampler(store1, split_a, args.n_files),   # class 0: unique
-        UnitSampler(store_b, split_b, files_b),       # class 1: reuse
+        UnitSampler(store1, split_a, args.n_files, args.features),   # class 0: unique
+        UnitSampler(store_b, split_b, files_b, args.features),       # class 1: reuse
     ]
     for cls, sampler in enumerate(samplers):
         for split_name, positions in sampler.positions.items():
@@ -297,8 +426,17 @@ def main():
                         sampler.files_per_unit))
 
     # --- feature normalization + latent scale from train-split units -----
+    expected_names = lc.feature_names(args.features)
     if os.path.isfile(stats_path):
         mean, std, latent_scale = lc.load_norm_stats(stats_path)
+        with open(stats_path) as f:
+            cached_names = json.load(f).get("names")
+        if cached_names != expected_names:
+            raise SystemExit(
+                f"{stats_path} was computed for feature set {cached_names}, "
+                f"but --features {args.features!r} expects {expected_names}; "
+                "this label was likely started with a different --features "
+                "value. Use a new --label for a different feature set.")
     else:
         rng = np.random.default_rng(args.seed)
         sample_feats = []
@@ -306,7 +444,7 @@ def main():
             for _ in range(args.norm_stat_units):
                 pos = samplers[cls].random_unit(rng, "train")
                 raw = samplers[cls].store.file_arrays(pos)
-                sample_feats.append(lc.build_features(raw))
+                sample_feats.append(lc.build_features(raw, feature_set=args.features))
         mean, std = lc.compute_norm_stats(sample_feats)
         if args.latent_scale == "auto":
             latent_scale = 1.0 / float(np.median([len(f) for f in sample_feats]))
@@ -314,10 +452,11 @@ def main():
             latent_scale = 1.0
         else:
             latent_scale = float(args.latent_scale)
-        lc.save_norm_stats(stats_path, mean, std, lc.FEATURE_NAMES, latent_scale)
+        lc.save_norm_stats(stats_path, mean, std, expected_names, latent_scale)
         del sample_feats
     n_features = len(mean)
-    print(f"  features: {n_features} | latent scale 1/{1.0 / latent_scale:.0f}")
+    print(f"  features: {n_features} ('{args.features}')"
+          f" | latent scale 1/{1.0 / latent_scale:.0f}")
 
     # --- fixed validation units ------------------------------------------
     rng_val = np.random.default_rng(args.seed + 999)
@@ -325,12 +464,17 @@ def main():
                 for c in (0, 1) for _ in range(args.val_units)]
 
     # --- model -------------------------------------------------------------
+    train_kwargs = dict(
+        lr=args.lr, warmup_steps=args.warmup_steps, clipnorm=args.clipnorm,
+        latent_dropout=args.latent_dropout, f_dropouts=args.f_dropout,
+        phi_l2=args.phi_l2, f_l2=args.f_l2)
     if args.arch == "energyflow":
         if latent_scale == 1.0:
             model = lc.build_pfn_energyflow(n_features,
                                             phi_sizes=args.phi_sizes,
                                             f_sizes=args.f_sizes,
-                                            jit_compile=args.jit)
+                                            jit_compile=args.jit,
+                                            **train_kwargs)
         else:
             # energyflow.archs.EFN's actual weighted-aggregation graph with
             # z_i = latent_scale (real particles) / 0 (padding), verified
@@ -340,22 +484,28 @@ def main():
             model = lc.build_pfn_energyflow_scaled(
                 n_features, latent_scale,
                 phi_sizes=args.phi_sizes, f_sizes=args.f_sizes,
-                jit_compile=args.jit)
+                jit_compile=args.jit, **train_kwargs)
     else:
         model = lc.build_pfn(n_features, latent_scale,
                              phi_sizes=args.phi_sizes, f_sizes=args.f_sizes,
-                             jit_compile=args.jit)
+                             jit_compile=args.jit, **train_kwargs)
     # Materialize Adam slot variables before restoring so its moments and
     # iteration counter are included, rather than silently resetting at each
     # Slurm window.
     if hasattr(model.optimizer, "build"):
         model.optimizer.build(model.trainable_variables)
+    # Both best_val_auc and best_val_loss are tracked regardless of which
+    # one --select-metric actually uses to decide "improved" -- so a run's
+    # summary always shows what the other metric was doing too, even
+    # though only one of them drove checkpoint selection.
     checkpoint_epoch = tf.Variable(0, dtype=tf.int64, trainable=False)
     checkpoint_best_auc = tf.Variable(-1.0, dtype=tf.float64, trainable=False)
+    checkpoint_best_loss = tf.Variable(float("inf"), dtype=tf.float64, trainable=False)
     checkpoint_best_epoch = tf.Variable(-1, dtype=tf.int64, trainable=False)
     checkpoint = tf.train.Checkpoint(
         model=model, optimizer=model.optimizer, epoch=checkpoint_epoch,
-        best_val_auc=checkpoint_best_auc, best_epoch=checkpoint_best_epoch)
+        best_val_auc=checkpoint_best_auc, best_val_loss=checkpoint_best_loss,
+        best_epoch=checkpoint_best_epoch)
     checkpoint_manager = tf.train.CheckpointManager(
         checkpoint, os.path.join(outdir, "resume_checkpoint"), max_to_keep=1)
     if checkpoint_manager.latest_checkpoint:
@@ -363,9 +513,11 @@ def main():
         status.assert_existing_objects_matched()
         state["epoch"] = int(checkpoint_epoch.numpy())
         state["best_val_auc"] = float(checkpoint_best_auc.numpy())
+        state["best_val_loss"] = float(checkpoint_best_loss.numpy())
         state["best_epoch"] = int(checkpoint_best_epoch.numpy())
         print(f"  resumed model + Adam from epoch {state['epoch']}"
-              f" (best val AUC {state['best_val_auc']:.4f})")
+              f" (best val AUC {state['best_val_auc']:.4f},"
+              f" best val loss {state['best_val_loss']:.4f})")
     elif state["epoch"] > 0 and os.path.isfile(last_w):
         # Backward compatibility for pre-fix runs. New labels immediately use
         # the full TensorFlow checkpoint above.
@@ -392,27 +544,41 @@ def main():
         y_val, s_val = predict_units(model, val_defs, samplers, mean, std,
                                      args.batch_size)
         val_auc = lc.auc_score(y_val, s_val)
-        val_loss = binary_cross_entropy(y_val, s_val)
+        per_unit_losses = per_unit_cross_entropy(y_val, s_val)
+        val_loss = float(np.mean(per_unit_losses))
+        val_loss_sem = float(np.std(per_unit_losses, ddof=1)
+                             / np.sqrt(len(per_unit_losses)))
 
         state["epoch"] = epoch + 1
-        improved = val_auc > state["best_val_auc"] + args.min_delta
+        # "loss": noise-relative and self-calibrating (compares the drop to
+        # this epoch's own SEM, so it stays correctly calibrated whatever
+        # --val-units is). "auc": the original fixed-threshold rule --
+        # kept only for old-configuration comparability, since --min-delta
+        # is known to sit below val_auc's actual sampling noise floor at
+        # small --val-units (see --min-delta's help text for the formula).
+        if args.select_metric == "loss":
+            improved = val_loss < state["best_val_loss"] - args.min_delta_sigma * val_loss_sem
+        else:
+            improved = val_auc > state["best_val_auc"] + args.min_delta
         if improved:
             state["best_val_auc"] = val_auc
+            state["best_val_loss"] = val_loss
             state["best_epoch"] = epoch
             model.save_weights(best_w)
         model.save_weights(last_w)
         checkpoint_epoch.assign(state["epoch"])
         checkpoint_best_auc.assign(state["best_val_auc"])
+        checkpoint_best_loss.assign(state["best_val_loss"])
         checkpoint_best_epoch.assign(state["best_epoch"])
         checkpoint_manager.save(checkpoint_number=state["epoch"])
         append_history(history_path, {
             "epoch": epoch, "train_loss": float(np.mean(losses)),
-            "val_loss": val_loss, "val_auc": val_auc,
+            "val_loss": val_loss, "val_loss_sem": val_loss_sem, "val_auc": val_auc,
             "seconds": round(train_time, 1),
         })
         save_state(state_path, state)
         print(f"epoch {epoch}: loss {np.mean(losses):.4f} | val loss {val_loss:.4f}"
-              f" | val AUC {val_auc:.4f}"
+              f" (SEM {val_loss_sem:.4f}) | val AUC {val_auc:.4f}"
               f"{' *' if improved else ''} | {train_time:.0f}s", flush=True)
 
         if lc.should_early_stop(state, args.patience, args.min_epochs):
@@ -551,7 +717,9 @@ def main():
             "near_constant_test_scores": point["score_std"] < 1e-3,
             "disjoint_check": {"auc": disjoint_auc, "bootstrap_std": disjoint_std,
                                "n_units": len(disjoint_defs)},
+            "select_metric": args.select_metric,
             "best_val_auc": state["best_val_auc"],
+            "best_val_loss": state["best_val_loss"],
             "best_epoch": state["best_epoch"], "epochs_run": state["epoch"],
             "uncertainty_note": (
                 "two-level nonparametric bootstrap over matched held-out "

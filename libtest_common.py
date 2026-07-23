@@ -14,6 +14,14 @@ A "unit" (pseudo-crossing) is a list of file positions into one store:
     reuse  class = n_files / clone_factor norm42 cycles
 Both represent the same decay statistics; splits are by cycle so no mother
 appears in more than one of train/val/test.
+
+Sections in this file, roughly in the order data flows through them:
+    data I/O       Store, common_positions, split_indices, sample/blocked_
+                   unit_positions
+    features       FEATURE_SETS, build_features, compute_norm_stats,
+                   {save,load,validate}_norm_stats
+    model           make_optimizer, build_pfn / build_pfn_energyflow[_scaled]
+    training math   should_early_stop, auc_score, bootstrap_auc
 """
 
 import json
@@ -23,12 +31,21 @@ import re
 import h5py
 import numpy as np
 
-RAW_KEYS = ["px", "py", "pz", "E", "t", "vx", "vy", "vz", "pdg"]
+# Every field Store will try to load, if present -- see Store.__init__ for
+# why "if present" (not "must have").
+RAW_KEYS = ["px", "py", "pz", "E", "t", "vx", "vy", "vz", "pdg", "charge"]
 
 
 def assign_cycle_ids(paths):
     """Cycle id per file: the integer token in the basename that VARIES
     across the directory (constant tokens like version tags are skipped).
+
+    Why "most distinct", not just "the last token": filenames can carry
+    several integers (a format-version tag, a date, the actual cycle
+    number, ...), and the cycle number is whichever one is different in
+    every file -- picking the token position with the most distinct values
+    across the batch finds it automatically instead of hand-parsing a
+    naming convention per BIB library.
 
     Returns (ids, token_pos_from_end, n_distinct). Callers should require
     n_distinct == len(paths); anything less means the naming convention is
@@ -46,30 +63,59 @@ def assign_cycle_ids(paths):
     ids = [int(t[-best_pos]) for t in tokens]
     return ids, best_pos, best_distinct
 
-# PFN-ID inputs, adapted for BIB: theta instead of rapidity for forward
-# particles, absolute phi because there is no jet axis, and log pT for the
-# six-decade momentum spectrum.
+# Feature tiers:
+#   paper    = PFN-ID inputs (pT, angle, ID) per arXiv:1810.05165, adapted
+#              for BIB: theta instead of rapidity (forward particles),
+#              absolute angles via cos/sin phi (no jet axis to center on),
+#              log pT (six-decade spectrum). Momentum direction/magnitude
+#              + coarse particle type only.
+#   expanded = paper + every other cheap truth-level field sitting in the
+#              GEN stores: log energy, asinh-compressed time/vertex-z/
+#              vertex-radius (the BIB discriminants of arXiv:2105.09116 /
+#              2203.06773 -- a pure z-axis rotation preserves time and
+#              vertex exactly, same as |p|/theta, so these carry more of
+#              the same exact-duplicate reuse signature, not a different
+#              kind of signal), and charge. Deliberately NOT trying to be
+#              "realistic" (reconstructed quantities would be smeared,
+#              these are MC truth) -- this tier's job is to establish how
+#              separable norm1-vs-norm42 is with maximum GEN-level
+#              sensitivity; the reco-level classifier is what answers
+#              whether any of this actually survives detector resolution.
 PDG_ONEHOT = ["pdg_gamma", "pdg_n", "pdg_e", "pdg_mu", "pdg_other"]
-FEATURE_NAMES = ["logpt", "theta", "cosphi", "sinphi"] + PDG_ONEHOT
+FEATURE_SETS = {
+    "paper": ["logpt", "theta", "cosphi", "sinphi"] + PDG_ONEHOT,
+    "expanded": ["logpt", "theta", "cosphi", "sinphi", "loge",
+                 "asinh_t", "asinh_vz", "asinh_vr", "charge"] + PDG_ONEHOT,
+}
+# Back-compat for callers that predate feature tiers (pfn_variable_reuse_train.py,
+# bib_example_unit_feature_plots.py) and always want the "paper" set.
+FEATURE_NAMES = FEATURE_SETS["paper"]
 
 
 class Store:
-    """In-RAM view of a particle store."""
+    """In-RAM view of a particle store.
+
+    Loads whatever of RAW_KEYS the file actually has -- older stores built
+    before a field was added (e.g. "charge") simply won't have it, and
+    that's fine as long as no requested feature set needs it. A feature
+    set that DOES need a missing field fails loudly inside build_features
+    (KeyError on raw[...]), not silently here.
+    """
 
     def __init__(self, path):
         self.path = path
         with h5py.File(path, "r") as f:
             self.offsets = f["offsets"][:]
             self.cycle_ids = f["cycle_ids"][:]
-            self.raw = {k: f["particles"][k][:] for k in RAW_KEYS}
+            available = set(f["particles"].keys())
+            self.raw = {k: f["particles"][k][:] for k in RAW_KEYS if k in available}
         self.n_files = len(self.cycle_ids)
 
     def file_arrays(self, positions):
         """Concatenated raw arrays for the given file positions."""
         segs = [(self.offsets[p], self.offsets[p + 1]) for p in positions]
         out = {}
-        for key in RAW_KEYS:
-            arr = self.raw[key]
+        for key, arr in self.raw.items():
             out[key] = np.concatenate([arr[a:b] for a, b in segs])
         return out
 
@@ -94,8 +140,19 @@ def split_indices(n_common, fracs=(0.60, 0.15, 0.25)):
     }
 
 
-def build_features(raw):
-    """(N, F) float32 feature array from raw particle arrays."""
+def feature_names(feature_set="paper"):
+    return list(FEATURE_SETS[feature_set])
+
+
+def build_features(raw, feature_set="paper"):
+    """(N, F) float32 feature array from raw particle arrays.
+
+    raw must contain every field feature_names(feature_set) needs -- for
+    "expanded" that includes "charge", which older stores built before it
+    was added won't have (Store loads whatever RAW_KEYS the file actually
+    has); requesting "expanded" against such a store fails here with a
+    plain KeyError on raw["charge"], not silently.
+    """
     px, py = raw["px"], raw["py"]
     pt = np.hypot(px, py)
     phi = np.arctan2(py, px)
@@ -114,9 +171,14 @@ def build_features(raw):
         "theta": lambda: np.arctan2(pt, raw["pz"]),
         "cosphi": lambda: np.cos(phi),
         "sinphi": lambda: np.sin(phi),
+        "loge": lambda: np.log10(np.maximum(raw["E"], 1e-9)),
+        "asinh_t": lambda: np.arcsinh(raw["t"]),
+        "asinh_vz": lambda: np.arcsinh(raw["vz"]),
+        "asinh_vr": lambda: np.arcsinh(np.hypot(raw["vx"], raw["vy"])),
+        "charge": lambda: raw["charge"],
     }
     cols = []
-    for name in FEATURE_NAMES:
+    for name in feature_names(feature_set):
         if name in PDG_ONEHOT:
             cols.append(onehot[name])
         else:
@@ -213,13 +275,71 @@ def should_early_stop(state, patience, min_epochs, metric_epoch_key="best_epoch"
     return state["epoch"] - 1 - state[metric_epoch_key] >= patience
 
 
+def _broadcast(value, n):
+    """A single float applied to all n layers, or an already-per-layer list."""
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return [value] * n
+
+
+def make_optimizer(optimizers_module, schedules_module, lr, warmup_steps, clipnorm):
+    """Adam, optionally with a linear-warmup learning-rate schedule and/or
+    gradient-norm clipping -- both off (warmup_steps=0, clipnorm=0) by
+    default, reproducing the original fixed-lr/unclipped behavior exactly.
+
+    Motivation (raw-sum instability, the subject of the whole reuse-
+    pressure investigation): with --latent-scale none the pooled latent's
+    magnitude scales with however many particles are in a unit, so early
+    train_loss/gradients can be enormous (observed: 70,000+ at n420).
+    Warmup keeps early Adam steps small while its moment estimates are
+    still noisy (the mechanism behind why Adam needs warmup at all --
+    arXiv:1908.03265, arXiv:1910.04209); clipping bounds the worst case if
+    a single batch's gradient is still huge despite that. Complementary,
+    not redundant.
+
+    Uses the library's own PolynomialDecay for the warmup ramp rather than
+    a hand-rolled schedule: with initial_learning_rate=0, end_learning_rate
+    =lr, power=1 (linear) it computes lr * step/warmup_steps -- and
+    PolynomialDecay clips step at decay_steps by default (cycle=False), so
+    past warmup_steps it just holds flat at lr indefinitely. Exactly
+    "linear warmup then constant" with no custom class.
+
+    schedules_module/optimizers_module let callers pass either
+    tensorflow.keras's or tf_keras's namespace -- the two Keras
+    implementations in play across build_pfn/build_pfn_energyflow*
+    (see build_pfn_energyflow_scaled's docstring for why that split
+    exists) aren't guaranteed cross-compatible, so the schedule is built
+    against whichever namespace will actually consume it.
+    """
+    learning_rate = lr
+    if warmup_steps and warmup_steps > 0:
+        learning_rate = schedules_module.PolynomialDecay(
+            initial_learning_rate=0.0, decay_steps=warmup_steps,
+            end_learning_rate=lr, power=1.0)
+    kwargs = {}
+    if clipnorm and clipnorm > 0:
+        kwargs["clipnorm"] = clipnorm
+    return optimizers_module.Adam(learning_rate=learning_rate, **kwargs)
+
+
 def build_pfn_energyflow(input_dim, phi_sizes=(200, 200, 256),
-                         f_sizes=(200, 200, 200), jit_compile=False):
+                         f_sizes=(200, 200, 200), jit_compile=False,
+                         lr=0.001, warmup_steps=0, clipnorm=0.0,
+                         latent_dropout=0.0, f_dropouts=0.0,
+                         phi_l2=0.0, f_l2=0.0):
     """The textbook PFN straight from the energyflow package (raw sum).
 
     Identical computation to build_pfn with latent_scale=1 (verified by
-    pfn_arch_equivalence_check.py); use this when package provenance is
+    pfn_arch_equivalence_check.py) when warmup_steps/clipnorm/dropout/l2
+    are all at their off defaults; use this when package provenance is
     preferred and the raw-sum optimization dynamics are acceptable.
+
+    latent_dropout/f_dropouts/phi_l2/f_l2 map directly onto energyflow's
+    own latent_dropout/F_dropouts/Phi_l2_regs/F_l2_regs constructor
+    hyperparameters (confirmed from source: both only ever apply to the
+    POOLED per-event vector and the F network, never to the per-particle
+    Phi network pre-pooling -- Phi only supports L2, not dropout -- so
+    there's no set-structure/shared-mask subtlety to worry about here).
     """
     try:
         from energyflow.archs.efn import PFN
@@ -230,8 +350,12 @@ def build_pfn_energyflow(input_dim, phi_sizes=(200, 200, 256),
             raise SystemExit(
                 "energyflow is not installed in this environment; "
                 "`pip install --user energyflow` or use --arch local")
-    model = PFN(input_dim=input_dim, Phi_sizes=phi_sizes,
-               F_sizes=f_sizes).model
+    import tf_keras
+    opt = make_optimizer(tf_keras.optimizers, tf_keras.optimizers.schedules,
+                         lr, warmup_steps, clipnorm)
+    model = PFN(input_dim=input_dim, Phi_sizes=phi_sizes, F_sizes=f_sizes,
+               optimizer=opt, latent_dropout=latent_dropout,
+               F_dropouts=f_dropouts, Phi_l2_regs=phi_l2, F_l2_regs=f_l2).model
     if jit_compile:
         # PFN() already compiled this model with its own optimizer/loss;
         # recompile with the SAME optimizer/loss, only adding XLA JIT, so
@@ -245,7 +369,10 @@ def build_pfn_energyflow(input_dim, phi_sizes=(200, 200, 256),
 
 def build_pfn_energyflow_scaled(input_dim, latent_scale,
                                 phi_sizes=(200, 200, 256),
-                                f_sizes=(200, 200, 200), jit_compile=False):
+                                f_sizes=(200, 200, 200), jit_compile=False,
+                                lr=0.001, warmup_steps=0, clipnorm=0.0,
+                                latent_dropout=0.0, f_dropouts=0.0,
+                                phi_l2=0.0, f_l2=0.0):
     """The scaled-sum PFN using energyflow.archs.EFN's actual aggregation
     graph, not a local reimplementation.
 
@@ -257,13 +384,19 @@ def build_pfn_energyflow_scaled(input_dim, latent_scale,
     latent_scale * sum_i Phi(p_i) -- exactly build_pfn's scaled sum.
     Verified bitwise-identical (0.0 max diff, weight-transplant, variable-
     length padded batches) to build_pfn(latent_scale=...) by
-    pfn_arch_equivalence_check.py.
+    pfn_arch_equivalence_check.py, at the dropout/l2/warmup/clipnorm off
+    defaults.
 
     Requires tf_keras explicitly (not tensorflow.keras/Keras 3): EFN's
     .model is a tf_keras Functional model, and wrapping it inside a Keras-3
     functional graph fails with a KerasTensor-incompatibility error. The
     returned model is plain tf_keras throughout, safe to use with
     train_on_batch/predict_on_batch/get_weights/set_weights as usual.
+
+    latent_dropout/f_dropouts/phi_l2/f_l2: passed to the INNER EFN(...)
+    constructor (they shape its internal graph); EFN's own default
+    optimizer/compile is irrelevant and discarded, since the OUTER wrapper
+    model built here gets its own fresh compile() with our optimizer.
     """
     import tensorflow as tf
     import tf_keras
@@ -275,8 +408,9 @@ def build_pfn_energyflow_scaled(input_dim, latent_scale,
             "energyflow is not installed in this environment; "
             "`pip install --user energyflow` or use --arch local")
 
-    efn_model = EFN(input_dim=input_dim, Phi_sizes=phi_sizes,
-                    F_sizes=f_sizes).model
+    efn_model = EFN(input_dim=input_dim, Phi_sizes=phi_sizes, F_sizes=f_sizes,
+                    latent_dropout=latent_dropout, F_dropouts=f_dropouts,
+                    Phi_l2_regs=phi_l2, F_l2_regs=f_l2).model
     inp = tf_keras.layers.Input(shape=(None, input_dim), name="particles")
     z = tf_keras.layers.Lambda(
         lambda x: tf.cast(tf.reduce_any(tf.not_equal(x, 0.0), axis=-1),
@@ -284,15 +418,17 @@ def build_pfn_energyflow_scaled(input_dim, latent_scale,
         name="scaled_mask")(inp)
     out = efn_model([z, inp])
     model = tf_keras.Model(inp, out, name="efn_scaled_wrapped")
-    model.compile(optimizer=tf_keras.optimizers.Adam(learning_rate=0.001),
-                  loss="categorical_crossentropy", metrics=["acc"],
-                  jit_compile=jit_compile)
+    opt = make_optimizer(tf_keras.optimizers, tf_keras.optimizers.schedules,
+                         lr, warmup_steps, clipnorm)
+    model.compile(optimizer=opt, loss="categorical_crossentropy",
+                  metrics=["acc"], jit_compile=jit_compile)
     return model
 
 
 def build_pfn(input_dim, latent_scale, phi_sizes=(200, 200, 256),
               f_sizes=(200, 200, 200), lr=0.001, n_classes=2,
-              jit_compile=False):
+              jit_compile=False, warmup_steps=0, clipnorm=0.0,
+              latent_dropout=0.0, f_dropouts=0.0, phi_l2=0.0, f_l2=0.0):
     """PFN (per-particle Phi MLP -> masked sum -> F MLP) in plain Keras.
 
     Zero-padded particles (all features exactly 0) are masked out. The
@@ -300,9 +436,23 @@ def build_pfn(input_dim, latent_scale, phi_sizes=(200, 200, 256),
     1/median particles-per-unit) so the F network sees O(1) inputs at any
     unit size. A constant scale is class-blind and linear, so relative
     multiplicity information is fully preserved.
+
+    latent_dropout/f_dropouts/phi_l2/f_l2 mirror
+    build_pfn_energyflow{,_scaled}'s equivalent hyperparameters: dropout
+    only ever applies post-pooling (on the summed latent vector and in F),
+    never inside Phi pre-pooling, matching energyflow's own placement
+    (confirmed from source) -- keeps the two --arch choices comparable
+    under the same flags.
     """
     import tensorflow as tf
-    from tensorflow.keras import layers, Model, optimizers
+    from tensorflow.keras import layers, Model, optimizers, regularizers
+
+    def l2_kwargs(strength):
+        """kernel_/bias_regularizer kwargs for Dense(...), or {} if off."""
+        if strength <= 0:
+            return {}
+        reg = regularizers.l2(strength)
+        return {"kernel_regularizer": reg, "bias_regularizer": reg}
 
     inp = layers.Input(shape=(None, input_dim), name="particles")
     mask = layers.Lambda(
@@ -310,18 +460,26 @@ def build_pfn(input_dim, latent_scale, phi_sizes=(200, 200, 256),
         name="mask")(inp)
     h = inp
     for i, width in enumerate(phi_sizes):
-        h = layers.Dense(width, activation="relu", name=f"phi_{i}")(h)
+        h = layers.Dense(width, activation="relu", name=f"phi_{i}",
+                         **l2_kwargs(phi_l2))(h)
     summed = layers.Lambda(
         lambda t: tf.reduce_sum(t[0] * t[1][..., None], axis=1) * latent_scale,
         name="scaled_sum")([h, mask])
     g = summed
+    if latent_dropout > 0:
+        g = layers.Dropout(latent_dropout, name="latent_dropout")(g)
+    f_dropout_list = _broadcast(f_dropouts, len(f_sizes))
     for i, width in enumerate(f_sizes):
-        g = layers.Dense(width, activation="relu", name=f"f_{i}")(g)
+        g = layers.Dense(width, activation="relu", name=f"f_{i}",
+                         **l2_kwargs(f_l2))(g)
+        if f_dropout_list[i] > 0:
+            g = layers.Dropout(f_dropout_list[i], name=f"f_{i}_dropout")(g)
     out = layers.Dense(n_classes, activation="softmax", name="output")(g)
     model = Model(inp, out)
-    model.compile(optimizer=optimizers.Adam(learning_rate=lr),
-                  loss="categorical_crossentropy", metrics=["acc"],
-                  jit_compile=jit_compile)
+    opt = make_optimizer(optimizers, tf.keras.optimizers.schedules,
+                         lr, warmup_steps, clipnorm)
+    model.compile(optimizer=opt, loss="categorical_crossentropy",
+                  metrics=["acc"], jit_compile=jit_compile)
     return model
 
 
@@ -337,7 +495,18 @@ def blocked_unit_positions(split_positions, n_files):
 
 
 def auc_score(y_true, scores):
-    """ROC AUC via average ranks (ties handled); no sklearn."""
+    """ROC AUC via the Mann-Whitney U / Wilcoxon rank-sum statistic (ties
+    handled by average ranks), not the ROC-curve integral -- no sklearn.
+
+    Mann-Whitney U and the ROC AUC are the same number by a standard
+    theorem: AUC = P(a random positive score > a random negative score),
+    which is exactly what the (properly tie-adjusted) rank-sum computes.
+    Deep-dived and verified correct earlier in this project against
+    brute-force pairwise comparison and sklearn cross-validation -- the
+    surprisingly-high-AUC-despite-bad-loss result that motivated that
+    check was real (ranking and calibration are different things, see
+    --select-metric in pfn_libtest_train.py), not a bug here.
+    """
     s = np.asarray(scores, dtype=np.float64)
     y = np.asarray(y_true).astype(bool)
     n_pos = int(y.sum())
@@ -355,7 +524,17 @@ def auc_score(y_true, scores):
 
 
 def bootstrap_auc(scores_class0, scores_class1, n_boot=1000, seed=7):
-    """AUC uncertainty by resampling disjoint units within each class."""
+    """AUC uncertainty by resampling disjoint units within each class.
+
+    Treats every unit as an independent draw -- fine for the disjoint
+    blocked cross-check (pfn_libtest_train.py's secondary evaluation),
+    where that's actually true by construction. NOT used for the primary
+    evaluation, where units can share source cycles across "different"
+    draws (overlapping-by-design, for statistical power) -- that one needs
+    the more careful cycle-level paired bootstrap in pfn_libtest_train.py,
+    which resamples the true independent objects (cycles) rather than the
+    derived, non-independent units built from them.
+    """
     rng = np.random.default_rng(seed)
     s0 = np.asarray(scores_class0)
     s1 = np.asarray(scores_class1)
