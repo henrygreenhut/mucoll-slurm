@@ -4,26 +4,33 @@
 #SBATCH -n 1
 #SBATCH -c 1
 #SBATCH --mem=8g
-#SBATCH -t 00:30:00
-#SBATCH --array=0-6665%64
+#SBATCH -t 04:00:00
+#SBATCH --array=0-63
 #SBATCH -o norm1_ddsim_%x_%A_%a.out
 #SBATCH -e norm1_ddsim_%x_%A_%a.err
 
-# One ddsim invocation per reconstructed norm1 GEN cycle, SLURM-native
-# throttle (%64) instead of manual sharding: unlike the GEN-write step,
-# each task here is substantial (smoke test: 114s -- 75s Geant4/geometry
-# startup + 39s/event), so per-task overhead is negligible relative to
-# the work itself, and SLURM's own array-index-to-concurrency-limit
-# mechanism is simpler than hand-rolling it. %64 matches this account's
-# normal-QOS MaxTRESPU cpu cap on the batch partition (submit_norm1_gen_
-# write.slurm's sharding hits the same ceiling from the other direction).
+# 64-way sharded array job (same pattern as submit_norm1_gen_write.slurm),
+# NOT one task per cycle (%array=0-6665%64) as originally written -- that
+# version was rejected by sbatch outright ("Invalid job array
+# specification"): this account's normal-QOS MaxSubmitPU=1000 counts each
+# array task as a separate submitted job, and 6666 > 1000. Since only 64
+# can ever run concurrently anyway (MaxTRESPU=cpu=64), 64 shards each
+# looping over ~104 cycles sequentially reaches the identical concurrency
+# ceiling while staying at 64 submitted jobs, well under the 1000 cap.
 #
-# At ~114s/task x 6666 tasks / 64 concurrent =~ 3.3h per polarity.
+# One apptainer exec + one setup_mucoll.sh/setup_config.sh source per
+# TASK (not per file): the ~75s Geant4/geometry startup cost is inherent
+# to each ddsim CLI invocation itself and unavoidable either way, but
+# avoiding ~104 separate container-startup overheads per task (instead of
+# just 1) is still worth the trivial restructuring.
 #
-# --array=0-6665 assumes exactly 6666 reconstructed GEN files exist (true
-# for the full run; will simply error out past the file-list length on a
-# --max-files-limited test sample, so run submit_norm1_gen_write.slurm's
-# FULL (non-sampled) output before this, not a partial one).
+# At ~114s/file, 104 files/shard sequentially =~ 3.2h per shard -- all 64
+# shards run concurrently, so wall-clock for the whole polarity is also
+# =~ 3.2-3.3h, same estimate as the original per-cycle-array design, just
+# reached via 64 "fat" tasks instead of 6666 "thin" ones.
+#
+# Idempotent/resumable: skips any cycle whose output file already exists,
+# so a re-submission after a partial failure only redoes missing work.
 #
 # Submit once per polarity, after submit_norm1_gen_write.slurm for that
 # polarity has fully completed:
@@ -39,6 +46,7 @@ if [ "$POLARITY" != "MUPLUS" ] && [ "$POLARITY" != "MUMINUS" ]; then
     exit 1
 fi
 
+NUM_SHARDS=64
 BENCH=/oscar/data/mleblan6/mucoll/hgreenhu/mucoll/mucoll-benchmarks
 CONTAINER=/oscar/data/mleblan6/mucoll/mucoll-sim-ubuntu24:v3.0.sif
 GEN_DIR=/oscar/data/mleblan6/mucoll/hgreenhu/mucoll/bib_norm1_reconstructed/GEN/${POLARITY}
@@ -47,34 +55,49 @@ mkdir -p "$SIM_DIR"
 
 # sort -V (version sort): handles the embedded cycle numbers naturally
 # (bib_gen_2 before bib_gen_1000), unlike a plain lexicographic sort.
-mapfile -t FILES < <(ls "$GEN_DIR"/*.edm4hep.root | sort -V)
-if [ "$SLURM_ARRAY_TASK_ID" -ge "${#FILES[@]}" ]; then
-    echo "ERROR: array index $SLURM_ARRAY_TASK_ID >= ${#FILES[@]} files in $GEN_DIR" >&2
-    echo "  (did submit_norm1_gen_write.slurm finish, and was it a full run, not --max-files-limited?)" >&2
+mapfile -t ALL_FILES < <(ls "$GEN_DIR"/*.edm4hep.root | sort -V)
+N=${#ALL_FILES[@]}
+if [ "$N" -eq 0 ]; then
+    echo "ERROR: no *.edm4hep.root files in $GEN_DIR" >&2
+    echo "  (did submit_norm1_gen_write.slurm finish for $POLARITY?)" >&2
     exit 1
 fi
-INPUT_FILE="${FILES[$SLURM_ARRAY_TASK_ID]}"
-CYCLE=$(basename "$INPUT_FILE" | sed -E 's/bib_gen_([0-9]+)\.edm4hep\.root/\1/')
-OUTPUT_FILE="$SIM_DIR/bib_sim_${CYCLE}.edm4hep.root"
 
-echo "task $SLURM_ARRAY_TASK_ID: cycle $CYCLE"
-echo "  in:  $INPUT_FILE"
-echo "  out: $OUTPUT_FILE"
+# This shard's interleaved subset: indices shard_index, shard_index+64,
+# shard_index+128, ... -- same load-balancing rationale as the GEN-write
+# script's Python-side files[shard::num_shards].
+SHARD_FILES=()
+for ((i = SLURM_ARRAY_TASK_ID; i < N; i += NUM_SHARDS)); do
+    SHARD_FILES+=("${ALL_FILES[$i]}")
+done
+echo "shard $SLURM_ARRAY_TASK_ID/$NUM_SHARDS: ${#SHARD_FILES[@]} of $N files"
 
-# Scratch workdir per task -- ddsim writes some auxiliary files alongside
-# its output; keep tasks from stepping on each other.
-WORKDIR=$(mktemp -d "/oscar/scratch/$USER/norm1_ddsim_${POLARITY}_${CYCLE}.XXXXXX")
+WORKDIR=$(mktemp -d "/oscar/scratch/$USER/norm1_ddsim_${POLARITY}_shard${SLURM_ARRAY_TASK_ID}.XXXXXX")
 trap 'rm -rf "$WORKDIR"' EXIT
 
-apptainer exec --bind /oscar:/oscar "$CONTAINER" bash -c "
-source /opt/setup_mucoll.sh
-source '$BENCH/setup_config.sh' '$BENCH' MAIA_v0
-cd '$WORKDIR'
-ddsim --steeringFile '$BENCH/simulation/steer_baseline.py' \
-    --numberOfEvents 1 \
-    --inputFiles '$INPUT_FILE' \
-    --outputFile '$OUTPUT_FILE'
-"
+# Build the in-container loop as a single script so setup is sourced once
+# and every file in this shard runs inside the same apptainer exec.
+LOOP_SCRIPT="$WORKDIR/run_shard.sh"
+{
+    echo "source /opt/setup_mucoll.sh"
+    echo "source '$BENCH/setup_config.sh' '$BENCH' MAIA_v0"
+    echo "cd '$WORKDIR'"
+    for input_file in "${SHARD_FILES[@]}"; do
+        cycle=$(basename "$input_file" | sed -E 's/bib_gen_([0-9]+)\.edm4hep\.root/\1/')
+        output_file="$SIM_DIR/bib_sim_${cycle}.edm4hep.root"
+        # Idempotent: skip cycles already done (e.g. a prior partial run).
+        echo "if [ -f '$output_file' ]; then"
+        echo "    echo 'skip (already exists): $output_file'"
+        echo "else"
+        echo "    echo '--- cycle $cycle ---'"
+        echo "    ddsim --steeringFile '$BENCH/simulation/steer_baseline.py' \\"
+        echo "        --numberOfEvents 1 \\"
+        echo "        --inputFiles '$input_file' \\"
+        echo "        --outputFile '$output_file'"
+        echo "fi"
+    done
+} > "$LOOP_SCRIPT"
 
-echo "done -> $OUTPUT_FILE"
-ls -la "$OUTPUT_FILE"
+apptainer exec --bind /oscar:/oscar "$CONTAINER" bash "$LOOP_SCRIPT"
+
+echo "shard $SLURM_ARRAY_TASK_ID done"
