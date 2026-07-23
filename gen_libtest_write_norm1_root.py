@@ -40,11 +40,16 @@ there, not in the plain uproot/awkward venv used for the HDF5-store path:
         --max-files 5"
 
 Drop --max-files (or 0) for the full run once a small sample's output has
-been sanity-checked (read back + ideally a smoke-test ddsim run).
-Deliberately serial, not multiprocessing: cppyy/ROOT's global state has
-known issues with fork-based parallelism; if this is too slow, parallelize
-at the SLURM-job level (one process per file range) instead, which
-sidesteps that entirely via OS-level process isolation.
+been sanity-checked (read back + confirmed via a smoke-test ddsim run --
+both done, see gen_libtest_write_norm1_root validation notes).
+
+Deliberately serial WITHIN one process, not multiprocessing: cppyy/ROOT's
+global state has known issues with fork-based parallelism. For the full
+6666-file production run, parallelize at the SLURM-job level instead
+(--shard-index/--num-shards below), which sidesteps that entirely via OS-
+level process isolation -- see submit_norm1_gen_write.slurm, a 64-way
+sharded array job (64 = this account's normal-QOS MaxTRESPU cpu cap on
+the batch partition).
 """
 
 import argparse
@@ -67,11 +72,23 @@ def parse_args():
     parser.add_argument("--max-files", type=int, default=0,
                         help="process only the first N files (by cycle "
                              "order) -- for validating output before "
-                             "committing to a full run (0 = all files)")
+                             "committing to a full run (0 = all files); "
+                             "applied AFTER sharding if --num-shards is set")
+    parser.add_argument("--shard-index", type=int, default=0,
+                        help="this task's shard, 0-indexed (for SLURM array "
+                             "parallelism -- see submit_norm1_gen_write.slurm)")
+    parser.add_argument("--num-shards", type=int, default=1,
+                        help="total shards; files are assigned by "
+                             "index %% num_shards, so each shard gets an "
+                             "interleaved (naturally load-balanced) subset "
+                             "rather than a contiguous block")
     parser.add_argument("--expected-group-size", type=int, default=42,
                         help="warn if a file's median group size deviates "
                              "from this (default 42, the confirmed value)")
-    return parser.parse_args()
+    args = parser.parse_args()
+    if not (0 <= args.shard_index < args.num_shards):
+        raise SystemExit("--shard-index must be in [0, --num-shards)")
+    return args
 
 
 def sorted_by_cycle(paths):
@@ -188,11 +205,19 @@ def main():
     if not files:
         sys.exit(f"no *.root files in {args.input_dir}")
     files, cycles = sorted_by_cycle(files)
+    if args.num_shards > 1:
+        # Interleaved, not a contiguous block: naturally load-balances even
+        # if particle-count-per-file (and hence dedup cost) varies across
+        # the directory, since neighboring cycle IDs aren't assumed similar.
+        files = files[args.shard_index::args.num_shards]
+        cycles = cycles[args.shard_index::args.num_shards]
     if args.max_files:
         files = files[:args.max_files]
         cycles = cycles[:args.max_files]
+    shard_note = (f" (shard {args.shard_index}/{args.num_shards})"
+                 if args.num_shards > 1 else "")
     print(f"{len(files)} files from {args.input_dir}"
-          f"{' (sampled)' if args.max_files else ''}")
+          f"{' (sampled)' if args.max_files else ''}{shard_note}")
 
     os.makedirs(args.output_dir, exist_ok=True)
 
