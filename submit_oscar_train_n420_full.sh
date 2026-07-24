@@ -37,11 +37,18 @@
 #                  calibrating SEM-based selection instead of the fixed
 #                  --min-delta, which is known to sit below val_auc's
 #                  noise floor at small val_units).
-#   training:      --warmup-epochs 1 --clipnorm 1.0 -- same values as
-#                  submit_oscar_train_n420_variant_long.sh's warmup/clip
-#                  test, so that job and this one differ by EXACTLY
-#                  "features + validation overhaul", isolating what those
-#                  two add on top of warmup+clip alone.
+#   training:      --warmup-epochs 1, --clipnorm defaults to 1.0 (matches
+#                  the original seed2 run, for backward compat / resuming
+#                  it unchanged) but is now optional $3 -- clipnorm=1.0
+#                  turned out to be far too small next to raw-sum's actual
+#                  gradient scale (train_loss starts ~100000+ vs ~0.69
+#                  baseline): the n420 warmup-only diagnostic (no clip)
+#                  climbed cleanly to AUC 0.70 by epoch 4, while seed2
+#                  (warmup+clipnorm=1.0) sat flat/declining at AUC ~0.48-
+#                  0.50 over the same epochs despite falling loss -- same
+#                  collapse signature as n42's clip/both modes. Pass 0 for
+#                  warmup-only, or a much larger value (e.g. 1000) once the
+#                  n420 clip-threshold diagnostic confirms a working one.
 #   NOT included:  --latent-dropout/--f-dropout/--phi-l2/--f-l2 all stay
 #                  at their 0 (off) defaults -- regularizers for
 #                  overfitting, which isn't the problem being diagnosed

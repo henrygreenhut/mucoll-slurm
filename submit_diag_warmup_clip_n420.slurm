@@ -28,14 +28,26 @@
 # minutes past that per-epoch baseline, not require the original 40-
 # minute wait to be sure.
 #
-# Same latent-scale none (raw/pfn, matching both jobs that hung) and
-# --phi-sizes 100,100,128 (the halved-Phi n420 config) as every other
-# n420 script -- isolates warmup/clip specifically, not the raw-vs-
-# scaled-sum question or the Phi-width/int32-overflow question.
+# Defaults to latent-scale none (raw/pfn, matching the jobs that hung) and
+# uses --phi-sizes 100,100,128 (the halved-Phi n420 config) as every other
+# n420 script -- pass efn ($2) to test the scaled-sum variant instead; see
+# below. Same --phi-sizes/--f-sizes either way, so this isolates warmup/
+# clip and raw-vs-scaled independently, not the Phi-width/int32-overflow
+# question.
 #
 # MODE: warmup | clip | both | none -- same meaning as the n42 version.
 #
-# Optional $2 (clip/both modes only): override the clipnorm threshold.
+# Optional $2: variant, pfn (default, raw sum, --latent-scale none) or efn
+# (scaled/energy-fraction-weighted sum, --latent-scale auto). Added to test
+# whether scaled-sum's instability (OSCAR halfphi_scaled_seed3's no-
+# mitigation run spiked to AUC 0.90 at epoch 5 then crashed to 0.62 next
+# epoch -- real signal, just unstable, unlike raw-sum's flat/exploding
+# no-mitigation failures) is a training problem warmup can fix, the same
+# way it fixed raw-sum, or whether EFN's energy-fraction normalization is
+# discarding information (absolute event scale/multiplicity) that this
+# discrimination task actually needs -- which warmup can't fix either way.
+#
+# Optional $3 (clip/both modes only): override the clipnorm threshold.
 # clipnorm=1.0 is tiny next to raw-sum's actual gradient scale -- n420
 # train_loss starts around 100000-130000 (vs ~0.69 baseline), several
 # orders of magnitude past where a norm-1 clip is doing anything but
@@ -48,18 +60,29 @@
 # Submit one at a time:
 #   sbatch submit_diag_warmup_clip_n420.slurm both
 #   sbatch submit_diag_warmup_clip_n420.slurm warmup
+#   sbatch submit_diag_warmup_clip_n420.slurm warmup efn
 #   sbatch submit_diag_warmup_clip_n420.slurm clip
-#   sbatch submit_diag_warmup_clip_n420.slurm clip 1000
+#   sbatch submit_diag_warmup_clip_n420.slurm clip pfn 1000
 #   sbatch submit_diag_warmup_clip_n420.slurm none
 
 set -e
 cd "$SLURM_SUBMIT_DIR"
 
 MODE=$1
-CLIPNORM_OVERRIDE=$2
+VARIANT=${2:-pfn}
+CLIPNORM_OVERRIDE=$3
 if [[ "$MODE" != "warmup" && "$MODE" != "clip" && "$MODE" != "both" && "$MODE" != "none" ]]; then
-    echo "usage: sbatch submit_diag_warmup_clip_n420.slurm {warmup|clip|both|none} [clipnorm]"
+    echo "usage: sbatch submit_diag_warmup_clip_n420.slurm {warmup|clip|both|none} [pfn|efn] [clipnorm]"
     exit 1
+fi
+if [[ "$VARIANT" != "pfn" && "$VARIANT" != "efn" ]]; then
+    echo "usage: sbatch submit_diag_warmup_clip_n420.slurm {warmup|clip|both|none} [pfn|efn] [clipnorm]"
+    exit 1
+fi
+if [ "$VARIANT" = "pfn" ]; then
+    LATENT_SCALE="none"
+else
+    LATENT_SCALE="auto"
 fi
 
 module load ngc-tensorflow-container/25.02-tf2-py3-j4zj
@@ -86,6 +109,9 @@ if [ -n "$CLIPNORM_OVERRIDE" ]; then
     CLIPNORM="$CLIPNORM_OVERRIDE"
 fi
 LABEL="diag_warmup_clip_n420_${MODE}"
+if [ "$VARIANT" != "pfn" ]; then
+    LABEL="${LABEL}_${VARIANT}"
+fi
 if [ -n "$CLIPNORM_OVERRIDE" ]; then
     LABEL="${LABEL}_c${CLIPNORM_OVERRIDE}"
 fi
@@ -98,7 +124,7 @@ apptainer exec --nv "$NGC_TENSORFLOW_CONTAINER" python -u pfn_libtest_train.py \
     --units-per-epoch 500 \
     --batch-size 4 \
     --max-minutes 18 \
-    --latent-scale none \
+    --latent-scale "$LATENT_SCALE" \
     --phi-sizes 100,100,128 \
     --f-sizes 200,200,200 \
     --arch energyflow \
