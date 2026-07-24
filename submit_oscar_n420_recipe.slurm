@@ -59,7 +59,7 @@ for store in "$NORM1_STORE" "$NORM42_STORE"; do
 done
 
 LR_LABEL=${LR/./p}
-LABEL="n420_recipe_bs4_expanded_${VARIANT}_lr${LR_LABEL}_mseed${MODEL_SEED}"
+LABEL="n420_recipe_bs4_expanded_${VARIANT}_lr${LR_LABEL}_mseed${MODEL_SEED}_pointonly"
 COMMON_ARGS=(
     --label "$LABEL"
     --norm1-store "$NORM1_STORE"
@@ -100,8 +100,8 @@ else
         --epochs 80
         --patience 15
         --eval-point-units 300
-        --eval-bootstrap-reps 200
-        --eval-bootstrap-units 100
+        --eval-bootstrap-reps 0
+        --skip-disjoint-check
         --max-minutes 1400
     )
 fi

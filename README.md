@@ -82,8 +82,9 @@ sbatch submit_oscar_n420_recipe.slurm raw 3e-4 1
 
 Each command is resumable under its immutable label. The full model, Adam
 state, learning-rate position, epoch, and validation-selection state are
-restored strictly. Held-out overlapping-event evaluation and paired
-source-cycle bootstrap run automatically after training.
+restored strictly. Production training reports the AUC on overlapping
+held-out events. Paired source-cycle uncertainty is run separately only when
+needed.
 
 ## 2. Variable reuse generated on the fly
 

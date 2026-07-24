@@ -197,6 +197,9 @@ def parse_args():
                              "estimate test_auc with no uncertainty)")
     parser.add_argument("--eval-bootstrap-units", type=int, default=100,
                         help="regenerated events per class per bootstrap pool")
+    parser.add_argument("--skip-disjoint-check", action="store_true",
+                        help="evaluate only overlapping held-out events; omit "
+                             "the secondary disjoint-block cross-check")
     # --- architecture, continued (layer widths) -----------------------
     # Widest Phi layer matters for the TF/XLA int32 kernel-launch overflow
     # bug: batch_size * N * widest_Phi_width must stay under 2^31. Halving
@@ -830,23 +833,31 @@ def main():
     pool_b = split_b["test"]
     files_per_unit = (args.n_files, files_b)
 
-    # 1) secondary: disjoint blocked cross-check (cheap, recomputed on resume)
-    blocks_a = lc.blocked_unit_positions(pool_a, args.n_files)
-    positions_b = pool_b
-    if args.null_test:
-        rng_blocks = np.random.default_rng(args.data_seed + 2027)
-        positions_b = rng_blocks.permutation(positions_b)
-    blocks_b = lc.blocked_unit_positions(positions_b, files_b)
-    disjoint_defs = [(0, b) for b in blocks_a] + [(1, b) for b in blocks_b]
-    y_dj, s_dj = predict_units(model, disjoint_defs, samplers, mean, std,
-                               args.batch_size)
-    disjoint_auc = lc.auc_score(y_dj, s_dj)
-    if args.null_test:
+    # 1) optional secondary: disjoint blocked cross-check
+    if args.skip_disjoint_check:
+        disjoint_defs = []
+        disjoint_auc = None
         disjoint_std = None
+        print("disjoint cross-check skipped")
     else:
-        _, disjoint_std = lc.bootstrap_auc(s_dj[y_dj == 0], s_dj[y_dj == 1])
-    print(f"disjoint cross-check: AUC {disjoint_auc:.4f}"
-          + (f" +- {disjoint_std:.4f}" if disjoint_std is not None else ""))
+        blocks_a = lc.blocked_unit_positions(pool_a, args.n_files)
+        positions_b = pool_b
+        if args.null_test:
+            rng_blocks = np.random.default_rng(args.data_seed + 2027)
+            positions_b = rng_blocks.permutation(positions_b)
+        blocks_b = lc.blocked_unit_positions(positions_b, files_b)
+        disjoint_defs = [(0, b) for b in blocks_a] + [(1, b) for b in blocks_b]
+        y_dj, s_dj = predict_units(model, disjoint_defs, samplers, mean, std,
+                                   args.batch_size)
+        disjoint_auc = lc.auc_score(y_dj, s_dj)
+        if args.null_test:
+            disjoint_std = None
+        else:
+            _, disjoint_std = lc.bootstrap_auc(
+                s_dj[y_dj == 0], s_dj[y_dj == 1])
+        print(f"disjoint cross-check: AUC {disjoint_auc:.4f}"
+              + (f" +- {disjoint_std:.4f}"
+                 if disjoint_std is not None else ""))
 
     # 2) primary: overlapping point estimate (cached once computed)
     point_path = os.path.join(outdir, "point_summary.json")
@@ -937,8 +948,10 @@ def main():
             "test_score_std": point["score_std"],
             "test_score_range": point["score_range"],
             "near_constant_test_scores": point["score_std"] < 1e-3,
-            "disjoint_check": {"auc": disjoint_auc, "bootstrap_std": disjoint_std,
-                               "n_units": len(disjoint_defs)},
+            "disjoint_check": (
+                None if args.skip_disjoint_check else
+                {"auc": disjoint_auc, "bootstrap_std": disjoint_std,
+                 "n_units": len(disjoint_defs)}),
             "select_metric": args.select_metric,
             "best_val_auc": state["max_val_auc"],
             "best_val_auc_epoch": state["max_val_auc_epoch"],
@@ -959,11 +972,13 @@ def main():
               f" (paired-cycle bootstrap SD {np.std(values, ddof=1):.4f},"
               f" 95% CI [{np.percentile(values, 2.5):.4f},"
               f" {np.percentile(values, 97.5):.4f}])"
-              f" | disjoint cross-check {disjoint_auc:.4f}")
+              + (f" | disjoint cross-check {disjoint_auc:.4f}"
+                 if disjoint_auc is not None else ""))
     else:
-        print(f"\nTEST AUC = {point['auc']:.4f} (point estimate only, no"
-              " bootstrap requested) | disjoint cross-check"
-              f" {disjoint_auc:.4f}")
+        print(f"\nTEST AUC = {point['auc']:.4f} (overlapping point estimate"
+              " only; no bootstrap)"
+              + (f" | disjoint cross-check {disjoint_auc:.4f}"
+                 if disjoint_auc is not None else ""))
     print(f"outputs -> {outdir}")
 
 
