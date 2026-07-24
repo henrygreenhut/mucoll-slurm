@@ -71,6 +71,7 @@ cd "$SLURM_SUBMIT_DIR"
 MODE=$1
 VARIANT=${2:-pfn}
 CLIPNORM_OVERRIDE=$3
+RUN_TAG=${RUN_TAG:-trial1}
 if [[ "$MODE" != "warmup" && "$MODE" != "clip" && "$MODE" != "both" && "$MODE" != "none" ]]; then
     echo "usage: sbatch submit_diag_warmup_clip_n420.slurm {warmup|clip|both|none} [pfn|efn] [clipnorm]"
     exit 1
@@ -108,13 +109,16 @@ esac
 if [ -n "$CLIPNORM_OVERRIDE" ]; then
     CLIPNORM="$CLIPNORM_OVERRIDE"
 fi
-LABEL="diag_warmup_clip_n420_${MODE}"
+# Fresh namespace: older labels were created while tf_keras silently enabled
+# optimizer-level JIT even though the model's --jit flag was false.
+LABEL="diag_n420_optjitoff_${MODE}"
 if [ "$VARIANT" != "pfn" ]; then
     LABEL="${LABEL}_${VARIANT}"
 fi
 if [ -n "$CLIPNORM_OVERRIDE" ]; then
     LABEL="${LABEL}_c${CLIPNORM_OVERRIDE}"
 fi
+LABEL="${LABEL}_${RUN_TAG}"
 
 apptainer exec --nv "$NGC_TENSORFLOW_CONTAINER" python -u pfn_libtest_train.py \
     --label "$LABEL" \

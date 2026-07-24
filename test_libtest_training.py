@@ -77,5 +77,31 @@ class ValidationLossTests(unittest.TestCase):
             state, patience=20, min_epochs=80))
 
 
+class OptimizerConfigurationTests(unittest.TestCase):
+    class Optimizers:
+        class Adam:
+            def __init__(self, learning_rate, **kwargs):
+                self.learning_rate = learning_rate
+                self.kwargs = kwargs
+
+    class Schedules:
+        class PolynomialDecay:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+
+    def make_optimizer(self, jit_compile):
+        return lc.make_optimizer(
+            self.Optimizers, self.Schedules, lr=1e-3,
+            warmup_steps=0, clipnorm=0, jit_compile=jit_compile)
+
+    def test_optimizer_jit_is_explicitly_disabled(self):
+        optimizer = self.make_optimizer(False)
+        self.assertIs(optimizer.kwargs["jit_compile"], False)
+
+    def test_optimizer_jit_follows_requested_model_jit(self):
+        optimizer = self.make_optimizer(True)
+        self.assertIs(optimizer.kwargs["jit_compile"], True)
+
+
 if __name__ == "__main__":
     unittest.main()

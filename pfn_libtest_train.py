@@ -171,8 +171,9 @@ def parse_args():
                              "'local' is the equivalence-checked Keras build "
                              "with the optional latent scale")
     parser.add_argument("--jit", action="store_true",
-                        help="compile with XLA JIT (model.compile(jit_compile="
-                             "True)). Experimental: may sidestep the TF/XLA "
+                        help="compile both the model and Adam optimizer updates "
+                             "with XLA JIT. By default both are explicitly "
+                             "disabled. Experimental: may sidestep the TF/XLA "
                              "int32 overflow bug (different codegen path than "
                              "the legacy GPU kernels that hit it), but our "
                              "particle count N varies every batch, so watch "
@@ -511,6 +512,9 @@ def main():
         model = lc.build_pfn(n_features, latent_scale,
                              phi_sizes=args.phi_sizes, f_sizes=args.f_sizes,
                              jit_compile=args.jit, **train_kwargs)
+    print("  XLA JIT: model requested {} | optimizer effective {}"
+          .format(args.jit,
+                  bool(getattr(model.optimizer, "jit_compile", False))))
     # Materialize Adam slot variables before restoring so its moments and
     # iteration counter are included, rather than silently resetting at each
     # Slurm window.

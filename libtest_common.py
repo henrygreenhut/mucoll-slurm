@@ -295,7 +295,8 @@ def _broadcast(value, n):
     return [value] * n
 
 
-def make_optimizer(optimizers_module, schedules_module, lr, warmup_steps, clipnorm):
+def make_optimizer(optimizers_module, schedules_module, lr, warmup_steps,
+                   clipnorm, jit_compile=False):
     """Adam, optionally with a linear-warmup learning-rate schedule and/or
     gradient-norm clipping -- both off (warmup_steps=0, clipnorm=0) by
     default, reproducing the original fixed-lr/unclipped behavior exactly.
@@ -317,6 +318,11 @@ def make_optimizer(optimizers_module, schedules_module, lr, warmup_steps, clipno
     past warmup_steps it just holds flat at lr indefinitely. Exactly
     "linear warmup then constant" with no custom class.
 
+    jit_compile is explicit because tf_keras 2.15 conditionally defaults
+    Adam's optimizer-level JIT to True when a GPU is visible.  Leaving that
+    implicit made --jit false disable model JIT while optimizer updates still
+    used XLA.  The one flag now controls both compilation paths.
+
     schedules_module/optimizers_module let callers pass either
     tensorflow.keras's or tf_keras's namespace -- the two Keras
     implementations in play across build_pfn/build_pfn_energyflow*
@@ -329,7 +335,7 @@ def make_optimizer(optimizers_module, schedules_module, lr, warmup_steps, clipno
         learning_rate = schedules_module.PolynomialDecay(
             initial_learning_rate=0.0, decay_steps=warmup_steps,
             end_learning_rate=lr, power=1.0)
-    kwargs = {}
+    kwargs = {"jit_compile": bool(jit_compile)}
     if clipnorm and clipnorm > 0:
         kwargs["clipnorm"] = clipnorm
     return optimizers_module.Adam(learning_rate=learning_rate, **kwargs)
@@ -365,7 +371,7 @@ def build_pfn_energyflow(input_dim, phi_sizes=(200, 200, 256),
                 "`pip install --user energyflow` or use --arch local")
     import tf_keras
     opt = make_optimizer(tf_keras.optimizers, tf_keras.optimizers.schedules,
-                         lr, warmup_steps, clipnorm)
+                         lr, warmup_steps, clipnorm, jit_compile)
     model = PFN(input_dim=input_dim, Phi_sizes=phi_sizes, F_sizes=f_sizes,
                optimizer=opt, latent_dropout=latent_dropout,
                F_dropouts=f_dropouts, Phi_l2_regs=phi_l2, F_l2_regs=f_l2).model
@@ -432,7 +438,7 @@ def build_pfn_energyflow_scaled(input_dim, latent_scale,
     out = efn_model([z, inp])
     model = tf_keras.Model(inp, out, name="efn_scaled_wrapped")
     opt = make_optimizer(tf_keras.optimizers, tf_keras.optimizers.schedules,
-                         lr, warmup_steps, clipnorm)
+                         lr, warmup_steps, clipnorm, jit_compile)
     model.compile(optimizer=opt, loss="categorical_crossentropy",
                   metrics=["acc"], jit_compile=jit_compile)
     return model
@@ -490,7 +496,7 @@ def build_pfn(input_dim, latent_scale, phi_sizes=(200, 200, 256),
     out = layers.Dense(n_classes, activation="softmax", name="output")(g)
     model = Model(inp, out)
     opt = make_optimizer(optimizers, tf.keras.optimizers.schedules,
-                         lr, warmup_steps, clipnorm)
+                         lr, warmup_steps, clipnorm, jit_compile)
     model.compile(optimizer=opt, loss="categorical_crossentropy",
                   metrics=["acc"], jit_compile=jit_compile)
     return model
