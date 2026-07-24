@@ -22,9 +22,15 @@
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
-VARIANT=${1:?usage: $0 {scaled|raw} {1e-4|3e-4} MODEL_SEED [train|smoke]}
-LR=${2:?usage: $0 {scaled|raw} {1e-4|3e-4} MODEL_SEED [train|smoke]}
-MODEL_SEED=${3:?usage: $0 {scaled|raw} {1e-4|3e-4} MODEL_SEED [train|smoke]}
+usage() {
+    echo "usage: $0 {scaled|raw} {1e-4|3e-4} MODEL_SEED [train|smoke]"
+    exit 2
+}
+
+[ "$#" -ge 3 ] || usage
+VARIANT=$1
+LR=$2
+MODEL_SEED=$3
 MODE=${4:-train}
 
 case "$VARIANT" in
