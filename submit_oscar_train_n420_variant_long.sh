@@ -52,10 +52,19 @@
 # --batch-size (logged, and recorded in that run's config.json) -- nobody
 # has to hand-compute steps/epoch to pick this number.
 #
-# Resume per (variant, seed[, warmup_epochs, clipnorm]):
+# Optional $5: MAX_MINUTES override (default 1400 = the ~23h20m natural-
+# stop budget above). Added for overnight multi-config queueing: since
+# only one gpu-partition job runs at a time (QOSMaxCpuPerUserLimit), the
+# default would let the first submitted job eat the entire night by
+# itself. Capping each job's --max-minutes lets several configs each get
+# real wall-clock time in sequence -- checkpointed every epoch either way,
+# so a capped job just needs the same command resubmitted to continue.
+#
+# Resume per (variant, seed[, warmup_epochs, clipnorm, max_minutes]):
 #   sbatch submit_oscar_train_n420_variant_long.sh pfn 1
 #   sbatch submit_oscar_train_n420_variant_long.sh pfn 1 1 1.0
 #   sbatch submit_oscar_train_n420_variant_long.sh efn 1
+#   sbatch submit_oscar_train_n420_variant_long.sh pfn 1 1 0 130
 
 set -e
 cd "$SLURM_SUBMIT_DIR"
@@ -64,12 +73,13 @@ VARIANT=$1
 SEED=$2
 WARMUP_EPOCHS=${3:-0}
 CLIPNORM=${4:-0}
+MAX_MINUTES=${5:-1400}
 if [ "$VARIANT" != "pfn" ] && [ "$VARIANT" != "efn" ]; then
-    echo "usage: sbatch submit_oscar_train_n420_variant_long.sh {pfn|efn} <seed> [warmup_epochs] [clipnorm]"
+    echo "usage: sbatch submit_oscar_train_n420_variant_long.sh {pfn|efn} <seed> [warmup_epochs] [clipnorm] [max_minutes]"
     exit 1
 fi
 if [ -z "$SEED" ]; then
-    echo "usage: sbatch submit_oscar_train_n420_variant_long.sh {pfn|efn} <seed> [warmup_epochs] [clipnorm]"
+    echo "usage: sbatch submit_oscar_train_n420_variant_long.sh {pfn|efn} <seed> [warmup_epochs] [clipnorm] [max_minutes]"
     exit 1
 fi
 
@@ -105,7 +115,7 @@ apptainer exec --nv "$NGC_TENSORFLOW_CONTAINER" python -u pfn_libtest_train.py \
     --n-files 420 \
     --units-per-epoch 500 \
     --batch-size 4 \
-    --max-minutes 1400 \
+    --max-minutes "$MAX_MINUTES" \
     --latent-scale "$LATENT_SCALE" \
     --phi-sizes 100,100,128 \
     --f-sizes 200,200,200 \

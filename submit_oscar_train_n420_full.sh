@@ -61,21 +61,30 @@
 # n420 run found. Pass efn explicitly if you want the scaled version
 # instead/also.
 #
-# Submit (variant defaults to pfn if omitted):
+# Optional $3/$4: clipnorm override (default 1.0, seed2's original value)
+# and max-minutes override (default 1400). clipnorm=1.0 turned out to
+# collapse training (see script header) -- pass 0 for warmup-only. Label
+# gets a _c<value> suffix when overridden so it doesn't collide with an
+# existing clipnorm=1.0 checkpoint under the same seed.
+#
+# Submit (variant defaults to pfn, clipnorm to 1.0, if omitted):
 #   sbatch submit_oscar_train_n420_full.sh 1
 #   sbatch submit_oscar_train_n420_full.sh 1 efn
+#   sbatch submit_oscar_train_n420_full.sh 3 pfn 0 130   # warmup only, capped, for overnight queueing
 
 set -e
 cd "$SLURM_SUBMIT_DIR"
 
 SEED=$1
 VARIANT=${2:-pfn}
+CLIPNORM=${3:-1.0}
+MAX_MINUTES=${4:-1400}
 if [ -z "$SEED" ]; then
-    echo "usage: sbatch submit_oscar_train_n420_full.sh <seed> [pfn|efn]"
+    echo "usage: sbatch submit_oscar_train_n420_full.sh <seed> [pfn|efn] [clipnorm] [max_minutes]"
     exit 1
 fi
 if [ "$VARIANT" != "pfn" ] && [ "$VARIANT" != "efn" ]; then
-    echo "usage: sbatch submit_oscar_train_n420_full.sh <seed> [pfn|efn]"
+    echo "usage: sbatch submit_oscar_train_n420_full.sh <seed> [pfn|efn] [clipnorm] [max_minutes]"
     exit 1
 fi
 
@@ -99,6 +108,9 @@ else
     LATENT_SCALE="auto"
 fi
 LABEL="oscar_n420_full_${VARIANT}_seed${SEED}"
+if [ "$CLIPNORM" != "1.0" ]; then
+    LABEL="${LABEL}_c${CLIPNORM}"
+fi
 
 apptainer exec --nv "$NGC_TENSORFLOW_CONTAINER" python -u pfn_libtest_train.py \
     --label "$LABEL" \
@@ -107,7 +119,7 @@ apptainer exec --nv "$NGC_TENSORFLOW_CONTAINER" python -u pfn_libtest_train.py \
     --n-files 420 \
     --units-per-epoch 500 \
     --batch-size 4 \
-    --max-minutes 1400 \
+    --max-minutes "$MAX_MINUTES" \
     --latent-scale "$LATENT_SCALE" \
     --phi-sizes 100,100,128 \
     --f-sizes 200,200,200 \
@@ -116,7 +128,7 @@ apptainer exec --nv "$NGC_TENSORFLOW_CONTAINER" python -u pfn_libtest_train.py \
     --val-units 1000 \
     --select-metric loss \
     --warmup-epochs 1 \
-    --clipnorm 1.0 \
+    --clipnorm "$CLIPNORM" \
     --seed "$SEED"
 
 echo ""
