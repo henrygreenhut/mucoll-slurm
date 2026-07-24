@@ -35,18 +35,30 @@
 #
 # MODE: warmup | clip | both | none -- same meaning as the n42 version.
 #
+# Optional $2 (clip/both modes only): override the clipnorm threshold.
+# clipnorm=1.0 is tiny next to raw-sum's actual gradient scale -- n420
+# train_loss starts around 100000-130000 (vs ~0.69 baseline), several
+# orders of magnitude past where a norm-1 clip is doing anything but
+# crushing the early corrective gradients raw-sum needs. warmup-only
+# (4242219) got past epoch 0 fine at n420; clip/both are the ones that
+# hung/collapsed, so this tests whether it's the *threshold* (too small)
+# rather than clipping itself that's the problem. Label gets a _c<value>
+# suffix to avoid colliding with the original clipnorm=1.0 label/checkpoint.
+#
 # Submit one at a time:
 #   sbatch submit_diag_warmup_clip_n420.slurm both
 #   sbatch submit_diag_warmup_clip_n420.slurm warmup
 #   sbatch submit_diag_warmup_clip_n420.slurm clip
+#   sbatch submit_diag_warmup_clip_n420.slurm clip 1000
 #   sbatch submit_diag_warmup_clip_n420.slurm none
 
 set -e
 cd "$SLURM_SUBMIT_DIR"
 
 MODE=$1
+CLIPNORM_OVERRIDE=$2
 if [[ "$MODE" != "warmup" && "$MODE" != "clip" && "$MODE" != "both" && "$MODE" != "none" ]]; then
-    echo "usage: sbatch submit_diag_warmup_clip_n420.slurm {warmup|clip|both|none}"
+    echo "usage: sbatch submit_diag_warmup_clip_n420.slurm {warmup|clip|both|none} [clipnorm]"
     exit 1
 fi
 
@@ -70,7 +82,13 @@ case "$MODE" in
     both)   WARMUP_EPOCHS=1;   CLIPNORM=1.0 ;;
     none)   WARMUP_EPOCHS=0;   CLIPNORM=0 ;;
 esac
+if [ -n "$CLIPNORM_OVERRIDE" ]; then
+    CLIPNORM="$CLIPNORM_OVERRIDE"
+fi
 LABEL="diag_warmup_clip_n420_${MODE}"
+if [ -n "$CLIPNORM_OVERRIDE" ]; then
+    LABEL="${LABEL}_c${CLIPNORM_OVERRIDE}"
+fi
 
 apptainer exec --nv "$NGC_TENSORFLOW_CONTAINER" python -u pfn_libtest_train.py \
     --label "$LABEL" \

@@ -37,14 +37,25 @@
 #
 # MODE:
 #   warmup -> --warmup-epochs 1, no clipnorm
-#   clip   -> --clipnorm 1.0, no warmup
+#   clip   -> --clipnorm 1.0 (or $2 if given), no warmup
 #   both   -> both (reproduces the exact hung configuration)
 #   none   -> neither (control -- expected to behave like every prior
 #             successful n42 raw run, i.e. NOT hang)
 #
+# Optional $2 (clip/both modes only): override the clipnorm threshold.
+# Motivation: raw-sum's train_loss starts in the 100000+ range (vs ~0.69
+# baseline) -- clipnorm=1.0 is many orders of magnitude below that, so
+# clip/both mode's observed collapse to near-random (val_auc ~0.52, loss
+# flat at ln(2)) may just be the threshold crushing away the large early
+# corrective gradients raw-sum actually needs, not evidence that clipping
+# itself is unworkable. A much larger threshold (100, 1000, ...) tests
+# that directly. Label gets a _c<value> suffix so this doesn't collide
+# with (or accidentally resume) the original clipnorm=1.0 run's checkpoint.
+#
 # Submit one at a time (still one GPU job at a time regardless of queue):
 #   sbatch submit_diag_warmup_clip.slurm warmup
 #   sbatch submit_diag_warmup_clip.slurm clip
+#   sbatch submit_diag_warmup_clip.slurm clip 1000
 #   sbatch submit_diag_warmup_clip.slurm both
 #   sbatch submit_diag_warmup_clip.slurm none
 
@@ -52,8 +63,9 @@ set -e
 cd "$SLURM_SUBMIT_DIR"
 
 MODE=$1
+CLIPNORM_OVERRIDE=$2
 if [[ "$MODE" != "warmup" && "$MODE" != "clip" && "$MODE" != "both" && "$MODE" != "none" ]]; then
-    echo "usage: sbatch submit_diag_warmup_clip.slurm {warmup|clip|both|none}"
+    echo "usage: sbatch submit_diag_warmup_clip.slurm {warmup|clip|both|none} [clipnorm]"
     exit 1
 fi
 
@@ -77,7 +89,13 @@ case "$MODE" in
     both)   WARMUP_EPOCHS=1;   CLIPNORM=1.0 ;;
     none)   WARMUP_EPOCHS=0;   CLIPNORM=0 ;;
 esac
+if [ -n "$CLIPNORM_OVERRIDE" ]; then
+    CLIPNORM="$CLIPNORM_OVERRIDE"
+fi
 LABEL="diag_warmup_clip_${MODE}"
+if [ -n "$CLIPNORM_OVERRIDE" ]; then
+    LABEL="${LABEL}_c${CLIPNORM_OVERRIDE}"
+fi
 
 apptainer exec --nv "$NGC_TENSORFLOW_CONTAINER" python -u pfn_libtest_train.py \
     --label "$LABEL" \
