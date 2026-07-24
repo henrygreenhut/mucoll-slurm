@@ -153,6 +153,48 @@ def split_indices(n_common, fracs=(0.60, 0.15, 0.25)):
     }
 
 
+def create_cycle_split(common_cycle_ids, fracs, seed):
+    """Deterministically shuffle paired cycle IDs into source-disjoint splits."""
+    common = np.asarray(common_cycle_ids, dtype=np.int64)
+    rng = np.random.default_rng(seed)
+    shuffled = rng.permutation(common)
+    n_train = int(round(len(common) * fracs[0]))
+    n_val = int(round(len(common) * fracs[1]))
+    return {
+        "train": shuffled[:n_train],
+        "val": shuffled[n_train:n_train + n_val],
+        "test": shuffled[n_train + n_val:],
+    }
+
+
+def load_or_create_cycle_split(path, common_cycle_ids, fracs, seed):
+    """Load an immutable saved cycle split, or create and save it once."""
+    common = np.asarray(common_cycle_ids, dtype=np.int64)
+    if os.path.isfile(path):
+        with np.load(path) as payload:
+            split = {name: np.asarray(payload[name], dtype=np.int64)
+                     for name in ("train", "val", "test")}
+    else:
+        split = create_cycle_split(common, fracs, seed)
+        np.savez(path, **split)
+
+    combined = np.concatenate([split[name] for name in ("train", "val", "test")])
+    if len(combined) != len(common) or len(np.unique(combined)) != len(common):
+        raise ValueError("saved source split is not a disjoint partition")
+    if not np.array_equal(np.sort(combined), np.sort(common)):
+        raise ValueError("saved source split does not match the common cycle pool")
+    return split
+
+
+def cycle_split_positions(common_cycle_ids, cycle_split):
+    """Map saved cycle IDs back to positions in the sorted common-cycle array."""
+    common = np.asarray(common_cycle_ids, dtype=np.int64)
+    return {
+        name: np.searchsorted(common, np.asarray(cycles, dtype=np.int64))
+        for name, cycles in cycle_split.items()
+    }
+
+
 def feature_names(feature_set="paper"):
     return list(FEATURE_SETS[feature_set])
 
@@ -296,7 +338,7 @@ def _broadcast(value, n):
 
 
 def make_optimizer(optimizers_module, schedules_module, lr, warmup_steps,
-                   clipnorm, jit_compile=False):
+                   clipnorm, jit_compile=False, decay_steps=0, min_lr=0.0):
     """Adam, optionally with a linear-warmup learning-rate schedule and/or
     gradient-norm clipping -- both off (warmup_steps=0, clipnorm=0) by
     default, reproducing the original fixed-lr/unclipped behavior exactly.
@@ -311,12 +353,11 @@ def make_optimizer(optimizers_module, schedules_module, lr, warmup_steps,
     a single batch's gradient is still huge despite that. Complementary,
     not redundant.
 
-    Uses the library's own PolynomialDecay for the warmup ramp rather than
-    a hand-rolled schedule: with initial_learning_rate=0, end_learning_rate
-    =lr, power=1 (linear) it computes lr * step/warmup_steps -- and
-    PolynomialDecay clips step at decay_steps by default (cycle=False), so
-    past warmup_steps it just holds flat at lr indefinitely. Exactly
-    "linear warmup then constant" with no custom class.
+    When decay_steps > 0, uses Keras' own CosineDecay with its built-in
+    linear warmup: 0 -> lr over warmup_steps, then cosine decay to min_lr.
+    The schedule reads the checkpointed optimizer iteration, so a resumed
+    run continues at exactly the same learning rate. With no decay, the
+    historical PolynomialDecay warmup-then-constant behavior is retained.
 
     jit_compile is explicit because tf_keras 2.15 conditionally defaults
     Adam's optimizer-level JIT to True when a GPU is visible.  Leaving that
@@ -331,7 +372,16 @@ def make_optimizer(optimizers_module, schedules_module, lr, warmup_steps,
     against whichever namespace will actually consume it.
     """
     learning_rate = lr
-    if warmup_steps and warmup_steps > 0:
+    if decay_steps and decay_steps > 0:
+        if not 0.0 <= min_lr <= lr:
+            raise ValueError("min_lr must be between zero and lr")
+        learning_rate = schedules_module.CosineDecay(
+            initial_learning_rate=(0.0 if warmup_steps > 0 else lr),
+            decay_steps=decay_steps,
+            alpha=(min_lr / lr if lr > 0 else 0.0),
+            warmup_target=(lr if warmup_steps > 0 else None),
+            warmup_steps=warmup_steps)
+    elif warmup_steps and warmup_steps > 0:
         learning_rate = schedules_module.PolynomialDecay(
             initial_learning_rate=0.0, decay_steps=warmup_steps,
             end_learning_rate=lr, power=1.0)
@@ -344,6 +394,7 @@ def make_optimizer(optimizers_module, schedules_module, lr, warmup_steps,
 def build_pfn_energyflow(input_dim, phi_sizes=(200, 200, 256),
                          f_sizes=(200, 200, 200), jit_compile=False,
                          lr=0.001, warmup_steps=0, clipnorm=0.0,
+                         decay_steps=0, min_lr=0.0,
                          latent_dropout=0.0, f_dropouts=0.0,
                          phi_l2=0.0, f_l2=0.0):
     """The textbook PFN straight from the energyflow package (raw sum).
@@ -371,7 +422,8 @@ def build_pfn_energyflow(input_dim, phi_sizes=(200, 200, 256),
                 "`pip install --user energyflow` or use --arch local")
     import tf_keras
     opt = make_optimizer(tf_keras.optimizers, tf_keras.optimizers.schedules,
-                         lr, warmup_steps, clipnorm, jit_compile)
+                         lr, warmup_steps, clipnorm, jit_compile,
+                         decay_steps, min_lr)
     model = PFN(input_dim=input_dim, Phi_sizes=phi_sizes, F_sizes=f_sizes,
                optimizer=opt, latent_dropout=latent_dropout,
                F_dropouts=f_dropouts, Phi_l2_regs=phi_l2, F_l2_regs=f_l2).model
@@ -389,6 +441,7 @@ def build_pfn_energyflow_scaled(input_dim, latent_scale,
                                 phi_sizes=(200, 200, 256),
                                 f_sizes=(200, 200, 200), jit_compile=False,
                                 lr=0.001, warmup_steps=0, clipnorm=0.0,
+                                decay_steps=0, min_lr=0.0,
                                 latent_dropout=0.0, f_dropouts=0.0,
                                 phi_l2=0.0, f_l2=0.0):
     """The scaled-sum PFN using energyflow.archs.EFN's actual aggregation
@@ -437,7 +490,8 @@ def build_pfn_energyflow_scaled(input_dim, latent_scale,
     out = efn_model([z, inp])
     model = tf_keras.Model(inp, out, name="efn_scaled_wrapped")
     opt = make_optimizer(tf_keras.optimizers, tf_keras.optimizers.schedules,
-                         lr, warmup_steps, clipnorm, jit_compile)
+                         lr, warmup_steps, clipnorm, jit_compile,
+                         decay_steps, min_lr)
     model.compile(optimizer=opt, loss="categorical_crossentropy",
                   metrics=["acc"], jit_compile=jit_compile)
     return model
@@ -446,6 +500,7 @@ def build_pfn_energyflow_scaled(input_dim, latent_scale,
 def build_pfn(input_dim, latent_scale, phi_sizes=(200, 200, 256),
               f_sizes=(200, 200, 200), lr=0.001, n_classes=2,
               jit_compile=False, warmup_steps=0, clipnorm=0.0,
+              decay_steps=0, min_lr=0.0,
               latent_dropout=0.0, f_dropouts=0.0, phi_l2=0.0, f_l2=0.0):
     """PFN (per-particle Phi MLP -> masked sum -> F MLP) in plain Keras.
 
@@ -495,7 +550,8 @@ def build_pfn(input_dim, latent_scale, phi_sizes=(200, 200, 256),
     out = layers.Dense(n_classes, activation="softmax", name="output")(g)
     model = Model(inp, out)
     opt = make_optimizer(optimizers, tf.keras.optimizers.schedules,
-                         lr, warmup_steps, clipnorm, jit_compile)
+                         lr, warmup_steps, clipnorm, jit_compile,
+                         decay_steps, min_lr)
     model.compile(optimizer=opt, loss="categorical_crossentropy",
                   metrics=["acc"], jit_compile=jit_compile)
     return model

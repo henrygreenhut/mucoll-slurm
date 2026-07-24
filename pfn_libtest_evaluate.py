@@ -7,10 +7,10 @@ events drawn from the held-out test pool.  Target-2 uncertainty is estimated
 with a two-level bootstrap: resample matched norm1/norm42 test-cycle pairs,
 then regenerate events from that bootstrap pool and score them.
 
-Bootstrap duplicate cycles are retained as distinct pool entries.  An event
-samples entries without replacement, so the same empirical cycle can occur
-twice when it was selected twice by the outer bootstrap.  This is the usual
-nonparametric-bootstrap analogue of drawing new cycles from the population.
+The outer bootstrap is represented as multiplicity weights on the original
+cycle IDs. Events sample distinct physical cycles without replacement, with
+probability proportional to those weights. Thus the bootstrap represents
+source uncertainty without introducing forbidden within-event duplicates.
 """
 
 import argparse
@@ -79,13 +79,16 @@ def load_bootstrap(path):
         return [float(row["auc"]) for row in csv.DictReader(handle)]
 
 
-def random_defs(rng, pools, files_per_unit, n_units):
+def random_defs(rng, pools, files_per_unit, n_units, weights=None):
     definitions = []
     for class_id in (0, 1):
         pool = pools[class_id]
         size = files_per_unit[class_id]
         for _ in range(n_units):
-            slots = rng.choice(len(pool), size=size, replace=False)
+            probability = None if weights is None else weights / weights.sum()
+            if weights is not None and np.count_nonzero(weights) < size:
+                raise ValueError("bootstrap has too few distinct cycles for a unit")
+            slots = rng.choice(len(pool), size=size, replace=False, p=probability)
             definitions.append((class_id, pool[slots]))
     return definitions
 
@@ -123,7 +126,14 @@ def main():
     store1 = lc.Store(config["norm1_store"])
     store_b = store1 if null_test else lc.Store(config["norm42_store"])
     common, pos1, pos_b = lc.common_positions(store1, store_b)
-    splits = lc.split_indices(len(common), split_fracs)
+    split_path = os.path.join(source_dir, "source_split.npz")
+    if os.path.isfile(split_path):
+        cycle_split = lc.load_or_create_cycle_split(
+            split_path, common, split_fracs,
+            int(cfg(config, "data_seed", cfg(config, "seed", 1))))
+        splits = lc.cycle_split_positions(common, cycle_split)
+    else:
+        splits = lc.split_indices(len(common), split_fracs)
     test_indices = splits["test"]
     pool_a = pos1[test_indices]
     pool_b = pos1[test_indices] if null_test else pos_b[test_indices]
@@ -133,8 +143,10 @@ def main():
     dummy_splits_a = {"test": pool_a}
     dummy_splits_b = {"test": pool_b}
     samplers = [
-        UnitSampler(store1, dummy_splits_a, n_files),
-        UnitSampler(store_b, dummy_splits_b, files_b),
+        UnitSampler(store1, dummy_splits_a, n_files,
+                    cfg(config, "features", "paper")),
+        UnitSampler(store_b, dummy_splits_b, files_b,
+                    cfg(config, "features", "paper")),
     ]
     mean, std, latent_scale = lc.load_norm_stats(stats_path)
     # Read the actual architecture used for this checkpoint, not the
@@ -201,9 +213,10 @@ def main():
         rng = np.random.default_rng(args.seed + 1000003 * (replicate + 1))
         # Jointly resample indices of matched norm1/norm42 cycle pairs.
         slots = rng.integers(0, len(test_indices), size=len(test_indices))
-        bootstrap_pools = (pool_a[slots], pool_b[slots])
+        weights = np.bincount(slots, minlength=len(test_indices)).astype(float)
         definitions = random_defs(
-            rng, bootstrap_pools, files_per_unit, args.bootstrap_units)
+            rng, (pool_a, pool_b), files_per_unit, args.bootstrap_units,
+            weights=weights)
         y_boot, s_boot = predict_units(
             model, definitions, samplers, mean, std, batch_size)
         auc = lc.auc_score(y_boot, s_boot)

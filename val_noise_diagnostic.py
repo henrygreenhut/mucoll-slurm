@@ -82,14 +82,22 @@ def main():
     store1 = lc.Store(config["norm1_store"])
     store_b = store1 if null_test else lc.Store(config["norm42_store"])
     common, pos1, pos_b = lc.common_positions(store1, store_b)
-    splits = lc.split_indices(len(common), split_fracs)
+    split_path = os.path.join(source_dir, "source_split.npz")
+    if os.path.isfile(split_path):
+        cycle_split = lc.load_or_create_cycle_split(
+            split_path, common, split_fracs,
+            config.get("data_seed", config.get("seed", 1)))
+        splits = lc.cycle_split_positions(common, cycle_split)
+    else:
+        splits = lc.split_indices(len(common), split_fracs)
     val_idx = splits["val"]
 
     files_b = n_files if null_test else n_files // clone_factor
     samplers = [
-        UnitSampler(store1, {"val": pos1[val_idx]}, n_files),
+        UnitSampler(store1, {"val": pos1[val_idx]}, n_files,
+                    config.get("features", "paper")),
         UnitSampler(store_b, {"val": (pos1 if null_test else pos_b)[val_idx]},
-                   files_b),
+                   files_b, config.get("features", "paper")),
     ]
 
     if arch == "energyflow":

@@ -7,7 +7,14 @@ import unittest
 import numpy as np
 
 import libtest_common as lc
-from pfn_libtest_train import binary_cross_entropy
+from pfn_libtest_train import (
+    balanced_chunks,
+    binary_cross_entropy,
+    initial_state,
+    load_or_create_validation_units,
+    update_validation_state,
+    write_or_validate_config,
+)
 
 
 class LibtestNormalizationTests(unittest.TestCase):
@@ -89,6 +96,10 @@ class OptimizerConfigurationTests(unittest.TestCase):
             def __init__(self, **kwargs):
                 self.kwargs = kwargs
 
+        class CosineDecay:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+
     def make_optimizer(self, jit_compile):
         return lc.make_optimizer(
             self.Optimizers, self.Schedules, lr=1e-3,
@@ -101,6 +112,86 @@ class OptimizerConfigurationTests(unittest.TestCase):
     def test_optimizer_jit_follows_requested_model_jit(self):
         optimizer = self.make_optimizer(True)
         self.assertIs(optimizer.kwargs["jit_compile"], True)
+
+    def test_cosine_schedule_contains_warmup_and_floor(self):
+        optimizer = lc.make_optimizer(
+            self.Optimizers, self.Schedules, lr=3e-4,
+            warmup_steps=250, clipnorm=0, decay_steps=5000, min_lr=1e-6)
+        schedule = optimizer.learning_rate
+        self.assertIsInstance(schedule, self.Schedules.CosineDecay)
+        self.assertEqual(schedule.kwargs["warmup_steps"], 250)
+        self.assertEqual(schedule.kwargs["decay_steps"], 5000)
+        self.assertAlmostEqual(schedule.kwargs["warmup_target"], 3e-4)
+        self.assertAlmostEqual(schedule.kwargs["alpha"], 1e-6 / 3e-4)
+
+
+class SourceSplitTests(unittest.TestCase):
+    def test_saved_split_is_shuffled_disjoint_and_reused(self):
+        cycles = np.arange(1000, 1100)
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "source_split.npz")
+            first = lc.load_or_create_cycle_split(
+                path, cycles, (0.5, 0.25, 0.25), seed=17)
+            second = lc.load_or_create_cycle_split(
+                path, cycles, (0.5, 0.25, 0.25), seed=999)
+            for name in ("train", "val", "test"):
+                np.testing.assert_array_equal(first[name], second[name])
+            self.assertFalse(np.array_equal(first["train"], cycles[:50]))
+            combined = np.concatenate(list(first.values()))
+            np.testing.assert_array_equal(np.sort(combined), cycles)
+
+    def test_validation_units_are_fixed_and_unique_within_event(self):
+        cycles = np.arange(100)
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "validation_units.npz")
+            first = load_or_create_validation_units(
+                path, cycles, (12, 3), n_units=20, seed=8)
+            second = load_or_create_validation_units(
+                path, cycles, (12, 3), n_units=20, seed=999)
+            for a, b in zip(first, second):
+                np.testing.assert_array_equal(a, b)
+                self.assertTrue(all(len(np.unique(row)) == len(row)
+                                    for row in a))
+
+
+class BalancedBatchTests(unittest.TestCase):
+    def test_each_batch_has_equal_classes(self):
+        definitions = [
+            [(class_id, np.asarray([100 * class_id + i]))
+             for i in range(12)]
+            for class_id in (0, 1)
+        ]
+        chunks = balanced_chunks(
+            definitions, batch_size=4, rng=np.random.default_rng(5))
+        self.assertEqual(len(chunks), 6)
+        for chunk in chunks:
+            self.assertEqual([class_id for class_id, _ in chunk].count(0), 2)
+            self.assertEqual([class_id for class_id, _ in chunk].count(1), 2)
+
+
+class RunMetadataTests(unittest.TestCase):
+    def test_only_runtime_config_may_change_on_resume(self):
+        base = {
+            "config_schema_version": 2, "label": "run", "lr": 1e-4,
+            "max_minutes": 2, "progress_every": 25,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "config.json")
+            write_or_validate_config(path, base)
+            changed_runtime = dict(base, max_minutes=90, progress_every=10)
+            write_or_validate_config(path, changed_runtime)
+            with self.assertRaisesRegex(SystemExit, "changed scientific"):
+                write_or_validate_config(path, dict(base, lr=3e-4))
+
+    def test_auc_and_loss_extrema_are_independent(self):
+        state = initial_state("auc")
+        self.assertTrue(update_validation_state(
+            state, 0.8, 0.7, 0.01, "auc", 1e-4, 1.0, epoch=0))
+        self.assertFalse(update_validation_state(
+            state, 0.7, 0.6, 0.01, "auc", 1e-4, 1.0, epoch=1))
+        self.assertEqual(state["max_val_auc_epoch"], 0)
+        self.assertEqual(state["min_val_loss_epoch"], 1)
+        self.assertEqual(state["best_epoch"], 0)
 
 
 if __name__ == "__main__":

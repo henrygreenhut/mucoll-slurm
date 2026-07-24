@@ -32,9 +32,9 @@ trainer. The important ones are:
 - historical clone factor: 42.
 - GEN PFN inputs: `log10(pT)`, `theta`, `cos(phi)`, `sin(phi)`, and five
   particle-ID indicators.
-- GEN PFN: local Keras implementation with per-particle MLP
-  `(200,200,256)`, masked sum, and event MLP `(200,200,200)`; this preserves
-  the implementation used for the existing GEN results.
+- Current N=420 GEN PFN: official EnergyFlow PFN/weighted-EFN implementation,
+  with per-particle MLP `(100,100,128)`, event MLP `(200,200,200)`, and
+  balanced batches of four (two U and two R events).
 - RECO PFN: `energyflow.archs.PFN` with `Phi_sizes=(64,64,64)` and
   `F_sizes=(64,64,64)`, matching the original RECO training run.
 - every classifier has a matched null test.
@@ -66,32 +66,23 @@ Build compact stores once:
 sbatch submit_libtest_convert.slurm
 ```
 
-The following is the N=420 production comparison. `auto` scales the summed
-latent vector by the median particle multiplicity; use `none` for the raw-sum
-comparison. A new label is required whenever scientific settings change.
+The current OSCAR recipe uses fixed shuffled source splits, fixed validation
+events, batch size 4, one epoch of warmup, cosine learning-rate decay, and
+separate data/model seeds. `scaled` scales the summed latent vector by the
+median particle multiplicity; `raw` is the raw-sum comparison. A new label is
+required whenever scientific settings change.
 
 ```bash
-sbatch --export=ALL,LABEL=gen_n420_scaled_v2,TRAIN_ARGS="--n-files 420 --units-per-epoch 500 --val-units 300 --overlap-test-units 300 --batch-size 1 --patience 20 --min-epochs 80 --latent-scale auto" submit_libtest_train.slurm
-
-sbatch --export=ALL,LABEL=gen_n420_null_v2,TRAIN_ARGS="--n-files 420 --units-per-epoch 500 --val-units 300 --overlap-test-units 300 --batch-size 1 --patience 20 --min-epochs 80 --latent-scale auto --null-test" submit_libtest_train.slurm
+sbatch submit_oscar_n420_recipe.slurm scaled 1e-4 1
+sbatch submit_oscar_n420_recipe.slurm scaled 3e-4 1
+sbatch submit_oscar_n420_recipe.slurm raw 1e-4 1
+sbatch submit_oscar_n420_recipe.slurm raw 3e-4 1
 ```
 
-Each shared-QOS job is one resumable 25-minute training window. If `state.json`
-does not say `done: true`, submit the identical command again. The model,
-optimizer, epoch, and best-validation state are restored from the checkpoint.
-New histories record both training and validation cross entropy. Older results
-recorded training loss and validation AUC only; they cannot support a genuine
-validation-loss curve retroactively.
-
-After the main model finishes, estimate its held-out AUC with paired
-source-cycle resampling:
-
-```bash
-sbatch --export=ALL,LABEL=gen_n420_scaled_eval_v2,TRAIN_ARGS="--source-label gen_n420_scaled_v2 --point-units 500 --bootstrap-reps 200 --bootstrap-units 100 --batch-size 1" submit_libtest_evaluate.slurm
-```
-
-That evaluation is also resumable. Its primary products are
-`point_summary.json` and `paired_cycle_bootstrap.csv`.
+Each command is resumable under its immutable label. The full model, Adam
+state, learning-rate position, epoch, and validation-selection state are
+restored strictly. Held-out overlapping-event evaluation and paired
+source-cycle bootstrap run automatically after training.
 
 ## 2. Variable reuse generated on the fly
 
