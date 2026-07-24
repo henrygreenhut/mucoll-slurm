@@ -7,8 +7,14 @@
 #SBATCH -c 8
 #SBATCH --mem=56g
 #SBATCH -t 24:00:00
+#SBATCH --exclude=gpu3005
 #SBATCH -o oscar_train_n420_full_%x_%j.out
 #SBATCH -e oscar_train_n420_full_%x_%j.err
+
+# --exclude=gpu3005: that node has hit CUDA_ERROR_ILLEGAL_ADDRESS on every
+# job that's landed there so far (4+ occurrences across different configs/
+# labels) -- baked in here rather than relying on remembering the CLI flag
+# every time, since forgetting it once already wasted two job slots.
 
 # The "everything new, except L2/dropout" n420 preset -- a named config
 # (not another parametrized wrapper) since it bundles several axes at

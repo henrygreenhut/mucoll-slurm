@@ -7,8 +7,13 @@
 #SBATCH -c 8
 #SBATCH --mem=56g
 #SBATCH -t 00:15:00
+#SBATCH --exclude=gpu3005
 #SBATCH -o diag_warmup_clip_%x_%j.out
 #SBATCH -e diag_warmup_clip_%x_%j.err
+
+# --exclude=gpu3005: that node has hit CUDA_ERROR_ILLEGAL_ADDRESS on every
+# job that's landed there so far (it's part of gpu-debug too, not just
+# gpu) -- one of this script's own two failed attempts was exactly this.
 
 # Isolates WHICH of --warmup-epochs / --clipnorm is responsible for the
 # hang seen in oscar_train_n420_full (job 4228090) and oscar_train_n420_

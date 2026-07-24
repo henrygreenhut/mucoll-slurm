@@ -4,7 +4,7 @@
 #SBATCH -n 1
 #SBATCH -c 1
 #SBATCH --mem=8g
-#SBATCH -t 04:00:00
+#SBATCH -t 08:00:00
 #SBATCH --array=0-63
 #SBATCH -o norm1_ddsim_%x_%A_%a.out
 #SBATCH -e norm1_ddsim_%x_%A_%a.err
@@ -24,13 +24,16 @@
 # avoiding ~104 separate container-startup overheads per task (instead of
 # just 1) is still worth the trivial restructuring.
 #
-# At ~114s/file, 104 files/shard sequentially =~ 3.2h per shard -- all 64
-# shards run concurrently, so wall-clock for the whole polarity is also
-# =~ 3.2-3.3h, same estimate as the original per-cycle-array design, just
-# reached via 64 "fat" tasks instead of 6666 "thin" ones.
+# At ~114s/file (single-file smoke test), 104 files/shard sequentially
+# implied =~3.2h/shard -- underestimated in practice: the original -t
+# 04:00:00 wasn't enough (most shards TIMEOUT'd partway through on the
+# real MUPLUS run, ending at 5530/6666 = 83% done), meaning per-file time
+# varies more across the real cycle-to-cycle particle-count spread than
+# the single cycle-0 smoke test suggested. Bumped to 8h with headroom.
 #
 # Idempotent/resumable: skips any cycle whose output file already exists,
-# so a re-submission after a partial failure only redoes missing work.
+# so a re-submission after a TIMEOUT or partial failure only redoes
+# whatever's still missing -- just resubmit the same command again.
 #
 # Submit once per polarity, after submit_norm1_gen_write.slurm for that
 # polarity has fully completed:
