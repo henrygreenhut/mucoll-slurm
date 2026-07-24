@@ -200,14 +200,7 @@ def feature_names(feature_set="paper"):
 
 
 def build_features(raw, feature_set="paper"):
-    """(N, F) float32 feature array from raw particle arrays.
-
-    raw must contain every field feature_names(feature_set) needs -- for
-    "expanded" that includes "charge", which older stores built before it
-    was added won't have (Store loads whatever RAW_KEYS the file actually
-    has); requesting "expanded" against such a store fails here with a
-    plain KeyError on raw["charge"], not silently.
-    """
+    """Build the selected per-particle feature matrix as float32."""
     px, py = raw["px"], raw["py"]
     pt = np.hypot(px, py)
     phi = np.arctan2(py, px)

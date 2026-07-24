@@ -30,8 +30,9 @@ trainer. The important ones are:
 
 - GEN source split: 50% train, 25% validation, 25% test.
 - historical clone factor: 42.
-- GEN PFN inputs: `log10(pT)`, `theta`, `cos(phi)`, `sin(phi)`, and five
-  particle-ID indicators.
+- Current GEN PFN inputs: `log10(pT)`, `theta`, `cos(phi)`, `sin(phi)`,
+  `log10(E)`, compressed production time, vertex `z`, vertex radius, and
+  five particle-ID indicators.
 - Current N=420 GEN PFN: official EnergyFlow PFN/weighted-EFN implementation,
   with per-particle MLP `(100,100,128)`, event MLP `(200,200,200)`, and
   balanced batches of four (two U and two R events).

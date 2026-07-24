@@ -59,7 +59,7 @@ for store in "$NORM1_STORE" "$NORM42_STORE"; do
 done
 
 LR_LABEL=${LR/./p}
-LABEL="n420_recipe_bs4_${VARIANT}_lr${LR_LABEL}_mseed${MODEL_SEED}"
+LABEL="n420_recipe_bs4_expanded_${VARIANT}_lr${LR_LABEL}_mseed${MODEL_SEED}"
 COMMON_ARGS=(
     --label "$LABEL"
     --norm1-store "$NORM1_STORE"
@@ -70,7 +70,7 @@ COMMON_ARGS=(
     --phi-sizes 100,100,128
     --f-sizes 200,200,200
     --arch energyflow
-    --features paper
+    --features expanded
     --lr "$LR"
     --warmup-epochs 1
     --decay-epochs 30
