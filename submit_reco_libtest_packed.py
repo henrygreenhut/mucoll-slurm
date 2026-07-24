@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Submit the complete N=420 RECO data set as one packed CPU allocation."""
+"""Submit the complete N=420 RECO data set as one packed CPU allocation.
+
+Ported from Perlmutter (whole-node shifter/srun packing, --account/--qos)
+to OSCAR: the batch partition caps this account at MaxTRESPU=cpu=64 total
+regardless of node count, so submit_reco_libtest_packed.slurm is now a
+fixed 64-way array job (see that script) instead of scaling --nodes with
+the row count. No --account/--qos on OSCAR.
+"""
 
 import argparse
 import math
@@ -26,16 +33,12 @@ EVENTS_PER_JOB = 50
 
 
 def parse_args():
-    scratch = os.environ.get("PSCRATCH", "")
+    scratch = f"/oscar/scratch/{os.environ.get('USER', '')}"
     parser = argparse.ArgumentParser()
-    parser.add_argument("--tasks-per-node", type=int, default=64)
-    parser.add_argument("--qos", default="debug")
-    parser.add_argument("--time", default="00:30:00")
-    parser.add_argument("--account", default="m5197")
-    parser.add_argument("--pools", default=(scratch + "/mucoll/libtest/bib_pools_simple")
-                        if scratch else None, required=not bool(scratch))
-    parser.add_argument("--outdir", default=(scratch + "/mucoll/libtest/reco_n420_pfn_simple")
-                        if scratch else None, required=not bool(scratch))
+    parser.add_argument("--time", default="08:00:00",
+                        help="SBATCH -t override for the 64-way array job")
+    parser.add_argument("--pools", default=scratch + "/mucoll/libtest/bib_pools_simple")
+    parser.add_argument("--outdir", default=scratch + "/mucoll/libtest/reco_n420_pfn_simple")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
@@ -43,8 +46,6 @@ def parse_args():
 
 def main():
     args = parse_args()
-    if args.tasks_per_node < 1:
-        raise SystemExit("--tasks-per-node must be positive")
 
     repo = Path(__file__).resolve().parent
     pools = Path(args.pools).resolve()
@@ -92,26 +93,16 @@ def main():
         for row in rows:
             handle.write("\t".join(row) + "\n")
 
-    nodes = math.ceil(len(rows) / args.tasks_per_node)
-    if args.qos == "debug" and nodes > 8:
-        raise SystemExit("debug permits at most 8 nodes; lower the requested data set")
-
     slurm = repo / "submit_reco_libtest_packed.slurm"
     command = [
         "sbatch", "--parsable",
-        "--account={}".format(args.account),
-        "--qos={}".format(args.qos),
         "--time={}".format(args.time),
-        "--nodes={}".format(nodes),
-        "--ntasks-per-node={}".format(args.tasks_per_node),
-        "--cpus-per-task=4",
-        "--export=ALL,TASKS_PER_NODE={}".format(args.tasks_per_node),
         str(slurm), str(manifest),
     ]
     print("manifest: {}".format(manifest))
     print("tasks: {} ({} existing outputs skipped)".format(len(rows), skipped))
-    print("allocation: {} CPU node(s), up to {} chains/node".format(
-        nodes, args.tasks_per_node))
+    print("allocation: fixed 64-way array (OSCAR batch partition MaxTRESPU=cpu=64),"
+          " each shard looping over its assigned rows")
     print(" ".join(command))
     if not args.dry_run:
         result = subprocess.run(command, check=True,
