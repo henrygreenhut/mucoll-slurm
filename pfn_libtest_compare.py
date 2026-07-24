@@ -96,14 +96,35 @@ def style_axis(ax):
 
 
 def draw_loss(ax, runs, metric="train"):
+    all_loss = []
     for i, (name, path, epochs, train_loss, _, val_loss) in enumerate(runs):
         loss = train_loss if metric == "train" else val_loss
         ax.plot(epochs, loss, "-", lw=2, color=COLORS[i % len(COLORS)], label=name)
+        all_loss.append(loss)
     ax.axhline(np.log(2), ls="--", lw=1, color="#888888")
-    ax.text(0.02, np.log(2) * 1.15, "ln 2",
+    # Raw-sum losses span several orders of magnitude (starts ~1e5), where
+    # log scale is essential -- but a run whose loss never leaves a narrow
+    # band near ln 2 (e.g. scaled-sum, which doesn't need warmup/clip to
+    # control its scale) makes log-scale's tick locator degenerate: too many
+    # major/minor ticks crammed into less than one decade, overlapping
+    # labels and breaking tight_layout entirely. Fall back to linear scale
+    # whenever the combined range across all runs spans under one decade.
+    combined = np.concatenate(all_loss + [np.array([np.log(2)])])
+    spans_decade = combined.max() / max(combined.min(), 1e-12) >= 10
+    if spans_decade:
+        ax.set_yscale("log")
+        # Proportional offset only makes sense multiplicatively on a log
+        # axis -- on a linear axis (narrow range) this same factor can land
+        # the label far outside the visible range entirely (e.g. ln2*1.15
+        # on a 0.687-0.700 range plot), which bbox_inches="tight" then
+        # faithfully expands the canvas to include, leaving a huge blank
+        # margin above the actual chart.
+        ln2_label_y = np.log(2) * 1.15
+    else:
+        ln2_label_y = np.log(2) + 0.03 * (combined.max() - combined.min())
+    ax.text(0.02, ln2_label_y, "ln 2",
             transform=ax.get_yaxis_transform(),
             fontsize=9, color="#666666", va="bottom")
-    ax.set_yscale("log")
     ax.set_xlabel("epoch")
     ax.set_ylabel("training loss" if metric == "train" else "validation loss")
     ax.legend(frameon=False, fontsize=9)
@@ -151,14 +172,21 @@ def main():
     stem, ext = os.path.splitext(args.out)
     ext = ext or ".pdf"
 
+    # bbox_inches="tight" at save time (not just tight_layout=True at
+    # figure-creation time) -- titles/suptitles are set AFTER the figure is
+    # created below, so a layout computed only at creation never accounts
+    # for their space, which is what was producing the "Tight layout not
+    # applied" warning and genuinely clipped/overlapping axis labels on
+    # narrow-range plots (e.g. scaled-sum's loss, which sits near ln 2 the
+    # whole run instead of spanning orders of magnitude like raw-sum's).
     if args.combined:
-        fig, (ax_loss, ax_auc) = plt.subplots(1, 2, figsize=(9, 3.6),
-                                              tight_layout=True)
+        fig, (ax_loss, ax_auc) = plt.subplots(1, 2, figsize=(9, 3.6))
         draw_loss(ax_loss, runs, args.loss_metric)
         draw_auc(ax_auc, runs)
         if args.title:
             fig.suptitle(args.title)
-        fig.savefig(args.out)
+        fig.tight_layout()
+        fig.savefig(args.out, bbox_inches="tight")
         print(f"chart -> {args.out}")
     else:
         default_titles = {"loss": ("PFN training loss" if args.loss_metric == "train"
@@ -166,11 +194,12 @@ def main():
                           "auc": "PFN validation AUC"}
         for tag, draw in [("loss", lambda ax, r: draw_loss(ax, r, args.loss_metric)),
                           ("auc", draw_auc)]:
-            fig, ax = plt.subplots(figsize=(4.8, 3.6), tight_layout=True)
+            fig, ax = plt.subplots(figsize=(4.8, 3.6))
             draw(ax, runs)
             ax.set_title(args.title or default_titles[tag], fontsize=11)
+            fig.tight_layout()
             out = f"{stem}_{tag}{ext}"
-            fig.savefig(out)
+            fig.savefig(out, bbox_inches="tight")
             plt.close(fig)
             print(f"chart -> {out}")
 

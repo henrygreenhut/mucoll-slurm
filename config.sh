@@ -21,6 +21,10 @@ export OUTPUT_BASE_DIR="${OUTPUT_BASE_DIR:-/oscar/scratch/$USER/mucoll/output}"
 # GEN-level dedup + ddsim, both polarities, 6666/6666 files each -- see
 # gen_libtest_write_norm1_root.py / submit_norm1_ddsim.slurm). RECO study
 # jobs override these paths with their immutable train/validation/test pools.
+# (norm42's own complete SIM library, used by reco_libtest_prepare_pools.py's
+# --norm42-sim, lives at /oscar/data/mleblan6/mucoll/bib/SIM -- NOT the
+# nested bib-v3p0-fmt2-norm42-RandomRot/SIM copy, which has an empty/
+# abandoned SIM/MUMINUS; the top-level one is complete, 6666/6655.)
 export BIB_DIR="${BIB_DIR:-/oscar/data/mleblan6/mucoll/hgreenhu/mucoll/bib_norm1_reconstructed/SIM}"
 export BIB_MUPLUS="${BIB_MUPLUS:-$BIB_DIR/MUPLUS/}"
 export BIB_MUMINUS="${BIB_MUMINUS:-$BIB_DIR/MUMINUS/}"
