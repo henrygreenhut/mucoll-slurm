@@ -375,14 +375,13 @@ def build_pfn_energyflow(input_dim, phi_sizes=(200, 200, 256),
     model = PFN(input_dim=input_dim, Phi_sizes=phi_sizes, F_sizes=f_sizes,
                optimizer=opt, latent_dropout=latent_dropout,
                F_dropouts=f_dropouts, Phi_l2_regs=phi_l2, F_l2_regs=f_l2).model
-    if jit_compile:
-        # PFN() already compiled this model with its own optimizer/loss;
-        # recompile with the SAME optimizer/loss, only adding XLA JIT, so
-        # training behavior is unchanged apart from the compilation path.
-        # (model.metrics isn't reused here -- it includes internal trackers
-        # like the loss metric itself, unsafe to pass back into metrics=.)
-        model.compile(optimizer=model.optimizer, loss=model.loss,
-                      metrics=["acc"], jit_compile=True)
+    # PFN() compiles internally with jit_compile=None. Recompile with the same
+    # optimizer/loss so --jit explicitly controls the model as well as Adam;
+    # otherwise a false flag still leaves Keras free to choose an automatic
+    # compilation path. (model.metrics includes internal loss trackers and is
+    # not safe to pass back through metrics=.)
+    model.compile(optimizer=model.optimizer, loss=model.loss,
+                  metrics=["acc"], jit_compile=bool(jit_compile))
     return model
 
 

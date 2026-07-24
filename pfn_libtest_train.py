@@ -512,8 +512,8 @@ def main():
         model = lc.build_pfn(n_features, latent_scale,
                              phi_sizes=args.phi_sizes, f_sizes=args.f_sizes,
                              jit_compile=args.jit, **train_kwargs)
-    print("  XLA JIT: model requested {} | optimizer effective {}"
-          .format(args.jit,
+    print("  XLA JIT: requested {} | model effective {} | optimizer effective {}"
+          .format(args.jit, getattr(model, "_jit_compile", None),
                   bool(getattr(model.optimizer, "jit_compile", False))))
     # Materialize Adam slot variables before restoring so its moments and
     # iteration counter are included, rather than silently resetting at each
