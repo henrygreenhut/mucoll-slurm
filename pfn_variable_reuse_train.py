@@ -256,7 +256,7 @@ def compute_normalization(store, train_pool, reuse_k, norm_units):
 
 
 def save_test_outputs(result_dir, definitions, labels, scores, reuse_k,
-                      state, args):
+                      test_units, state, args):
     predictions = (scores >= 0.5).astype(np.int32)
     accuracy = float(np.mean(predictions == labels))
     auc = lc.auc_score(labels, scores)
@@ -283,7 +283,7 @@ def save_test_outputs(result_dir, definitions, labels, scores, reuse_k,
         "test_auc": auc,
         "test_accuracy": accuracy,
         "confusion_matrix": confusion.tolist(),
-        "test_units_per_class": TEST_UNITS,
+        "test_units_per_class": test_units,
         "test_mode": "overlapping held-out events; point estimate only",
         "best_val_auc": state["max_val_auc"],
         "min_val_loss": state["min_val_loss"],
@@ -432,15 +432,13 @@ def main():
         start_time=start_time)
     if not training_complete:
         return
-    if args.smoke:
-        print("smoke training complete; test evaluation skipped")
-        return
 
     labels, scores = predict(
         model, test_definitions, store, pools["test"], mean, std,
         args.progress_every, label="test")
     save_test_outputs(
-        result_dir, test_definitions, labels, scores, reuse_k, state, args)
+        result_dir, test_definitions, labels, scores, reuse_k, test_units,
+        state, args)
     print("outputs -> {}".format(result_dir))
 
 

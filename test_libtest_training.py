@@ -442,6 +442,26 @@ class VariableReuseDefinitionTests(unittest.TestCase):
             [label for label, _, _ in main],
             [label for label, _, _ in null])
 
+    def test_test_summary_records_actual_smoke_sample_size(self):
+        definitions = [
+            (label, (1, 10)[label], seed)
+            for label in (0, 1) for seed in range(4)]
+        labels = np.asarray([definition[0] for definition in definitions])
+        scores = np.where(labels == 1, 0.8, 0.2)
+        state = engine.initial_state("loss")
+        state.update(epoch=2, best_epoch=1, max_val_auc=0.75,
+                     min_val_loss=0.6, done=True)
+        args = SimpleNamespace(label="smoke", null_test=False)
+        with tempfile.TemporaryDirectory() as directory:
+            variable_trainer.save_test_outputs(
+                directory, definitions, labels, scores, (1, 10), 4,
+                state, args)
+            with open(os.path.join(directory, "summary.json")) as handle:
+                summary = json.load(handle)
+        self.assertEqual(summary["test_units_per_class"], 4)
+        self.assertEqual(summary["test_mode"],
+                         "overlapping held-out events; point estimate only")
+
 
 if __name__ == "__main__":
     unittest.main()
