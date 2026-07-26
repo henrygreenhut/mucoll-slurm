@@ -51,6 +51,8 @@ def load_history(rundir):
 
 def load_test_auc(rundir):
     path = os.path.join(rundir, "point_summary.json")
+    if not os.path.isfile(path):
+        return None
     with open(path) as f:
         return json.load(f)["auc"]
 
@@ -105,8 +107,9 @@ def main():
     # Test AUC as its own legend entry (no error bar -- point estimate
     # only): an invisible proxy handle carries the label into the legend.
     handles, labels = ax.get_legend_handles_labels()
-    handles.append(Line2D([], [], linestyle="None"))
-    labels.append(f"test AUC = {test_auc:.3f}")
+    if test_auc is not None:
+        handles.append(Line2D([], [], linestyle="None"))
+        labels.append(f"test AUC = {test_auc:.3f}")
     ax.legend(handles, labels, frameon=False, fontsize=9)
 
     ax.set_title(args.title, fontsize=11)

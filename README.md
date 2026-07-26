@@ -111,18 +111,22 @@ angles for each, and concatenates their particles. A rotation by angle
 `alpha` applies the same two-dimensional rotation to `(px,py)` and `(vx,vy)`;
 `pz`, energy, time, `vz`, and PDG ID are unchanged.
 
-Example: compare no reuse with 10x reuse at the N=420 event scale:
+The current binary study compares 10x with 42x reuse at the N=420 event
+scale. Both classes contain 29,400 mother-equivalents: k=10 samples 2,940
+distinct mothers and k=42 samples 700. The selected recipe is the official
+EnergyFlow scaled-sum network, expanded GEN features, balanced batches of
+four, peak learning rate `1e-4`, one-epoch warmup, and cosine decay.
 
 ```bash
-sbatch --export=ALL,LABEL=variable_k1_k10,TRAIN_ARGS="--reuse-k 1 10 --mother-equivalents 29400 --units-per-epoch 20 --val-units 10 --test-units 30 --rotation-policy all-random --min-epochs 40" submit_variable_reuse_train.slurm
-
-sbatch --export=ALL,LABEL=variable_k1_k10_null,TRAIN_ARGS="--reuse-k 1 10 --mother-equivalents 29400 --units-per-epoch 20 --val-units 10 --test-units 30 --rotation-policy all-random --min-epochs 40 --null-test" submit_variable_reuse_train.slurm
+sbatch submit_oscar_variable_k10_k42.slurm main
+sbatch submit_oscar_variable_k10_k42.slurm null
 ```
 
-`all-random` rotates every copy, including `k=1`, so the label cannot be read
-from the mere presence of a rotation. `baseline-unrotated` is retained only to
-reproduce the historical unrotated `k=1` construction. The multiclass default
-is `k = 1,2,3,6,10,14,21,42`.
+The null permutes labels over the same sampled k=10 and k=42 units, removing
+the association between reuse factor and target while preserving the full
+input construction. Both evaluations use overlapping pseudo-events from the
+held-out source-cycle pool and report a point AUC; cycle-level uncertainty is
+run separately if needed.
 
 ## 3. N=420 reconstructed-PFO study
 

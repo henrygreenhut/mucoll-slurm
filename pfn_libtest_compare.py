@@ -208,7 +208,9 @@ def main():
         test_auc, test_std = result["auc"], result["std"]
         if test_auc is None:
             test = "test pending"
-        elif result["mode"] in ("overlapping", "shared-blocked"):
+        elif result["mode"] in (
+                "overlapping", "shared-blocked",
+                "overlapping-point-estimate-only"):
             marker = " *" + (" †" if result["near_constant"] else "")
             test = (f"test AUC {test_auc:.4f}{marker} "
                     "(source-correlated; no error)")
