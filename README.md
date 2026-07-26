@@ -94,6 +94,17 @@ Build one compact bank from the split-by-mother, unrotated GEN library:
 sbatch submit_variable_reuse_convert.slurm
 ```
 
+On OSCAR, the equivalent bank is built directly from the resident FLUKA
+format-2 files:
+
+```bash
+sbatch submit_oscar_mother_store.slurm
+```
+
+Format 2 records the beam-muon decay position `(x_mu, y_mu, z_mu)`. Exact
+equality of that triple defines the particles belonging to one mother decay;
+the original GEN task list preserves the cycle-number mapping.
+
 No rotated library is materialized. For reuse factor `k`, a pseudo-event with
 `M` mother-equivalents samples `M/k` distinct mothers, draws `k` independent
 angles for each, and concatenates their particles. A rotation by angle
