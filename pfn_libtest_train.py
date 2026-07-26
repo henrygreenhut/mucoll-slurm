@@ -48,14 +48,17 @@ import time
 import numpy as np
 
 import libtest_common as lc
+from pfn_training_engine import (
+    CONFIG_SCHEMA_VERSION,
+    run_binary_pfn_training,
+    write_or_validate_config,
+)
 
 PHI_SIZES = (200, 200, 256)
 F_SIZES = (200, 200, 200)
 CLONE_FACTOR = 42
 SOURCE_SPLIT = (0.50, 0.25, 0.25)
 NORM_STAT_UNITS = 100
-CONFIG_SCHEMA_VERSION = 2
-RUNTIME_CONFIG_KEYS = {"max_minutes", "progress_every"}
 
 
 def parse_size_list(text):
@@ -380,90 +383,6 @@ def predict_units(model, unit_defs, samplers, mean, std, batch_size,
     return np.asarray(labels), np.asarray(scores)
 
 
-def per_unit_cross_entropy(labels, scores):
-    """Per-unit two-class cross entropy from PFN class-1 probabilities."""
-    scores = np.clip(np.asarray(scores, dtype=np.float64), 1e-7, 1.0 - 1e-7)
-    labels = np.asarray(labels, dtype=np.int32)
-    probabilities = np.where(labels == 1, scores, 1.0 - scores)
-    return -np.log(probabilities)
-
-
-def binary_cross_entropy(labels, scores):
-    """Mean two-class cross entropy from PFN class-1 probabilities.
-
-    Thin wrapper kept for test_libtest_training.py's coverage of the mean-
-    loss formula; main()'s training loop calls per_unit_cross_entropy
-    directly instead, since it also needs the per-unit values (not just
-    the mean) to compute val_loss_sem for --select-metric loss.
-    """
-    return float(np.mean(per_unit_cross_entropy(labels, scores)))
-
-
-def initial_state(select_metric):
-    return {
-        "epoch": 0,
-        "max_val_auc": -1.0,
-        "max_val_auc_epoch": -1,
-        "min_val_loss": float("inf"),
-        "min_val_loss_epoch": -1,
-        "best_metric_value": (-1.0 if select_metric == "auc" else float("inf")),
-        "best_epoch": -1,
-        "done": False,
-    }
-
-
-def load_state(path, select_metric):
-    if os.path.isfile(path):
-        with open(path) as f:
-            return json.load(f)
-    return initial_state(select_metric)
-
-
-def save_state(path, state):
-    with open(path, "w") as f:
-        json.dump(state, f, indent=1)
-
-
-def append_history(path, row):
-    exists = os.path.isfile(path)
-    fieldnames = list(row)
-    if exists:
-        # Old runs did not record val_loss. Preserve their column layout if a
-        # user resumes one, instead of silently shifting CSV columns.
-        with open(path, newline="") as f:
-            fieldnames = next(csv.reader(f))
-    with open(path, "a", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
-        if not exists:
-            writer.writeheader()
-        writer.writerow(row)
-
-
-def write_or_validate_config(path, config):
-    """Create an immutable scientific config; permit runtime-only changes."""
-    config = json.loads(json.dumps(config))
-    if not os.path.isfile(path):
-        with open(path, "w") as f:
-            json.dump(config, f, indent=1, sort_keys=True)
-        return
-    with open(path) as f:
-        saved = json.load(f)
-    if saved.get("config_schema_version") != CONFIG_SCHEMA_VERSION:
-        raise SystemExit(
-            f"{path} is a legacy/incompatible run. Use a new --label.")
-    mismatches = []
-    for key in sorted(set(saved) | set(config)):
-        if key in RUNTIME_CONFIG_KEYS:
-            continue
-        if saved.get(key) != config.get(key):
-            mismatches.append(
-                f"  {key}: saved={saved.get(key)!r}, requested={config.get(key)!r}")
-    if mismatches:
-        raise SystemExit(
-            "Refusing to resume with a changed scientific configuration.\n"
-            + "\n".join(mismatches) + "\nUse a new --label.")
-
-
 def load_or_create_validation_units(path, val_cycles, files_per_class,
                                     n_units, seed):
     """Persist the exact fixed validation source-cycle definitions."""
@@ -502,45 +421,11 @@ def validation_defs_from_cycles(rows, stores):
     return defs
 
 
-def update_validation_state(state, val_auc, val_loss, val_loss_sem,
-                            select_metric, min_delta, min_delta_sigma, epoch):
-    """Track both extrema; separately decide whether selected metric improved."""
-    if val_auc > state["max_val_auc"]:
-        state["max_val_auc"] = val_auc
-        state["max_val_auc_epoch"] = epoch
-    if val_loss < state["min_val_loss"]:
-        state["min_val_loss"] = val_loss
-        state["min_val_loss_epoch"] = epoch
-    if select_metric == "loss":
-        improved = (val_loss
-                    < state["best_metric_value"] - min_delta_sigma * val_loss_sem)
-        candidate = val_loss
-    else:
-        improved = val_auc > state["best_metric_value"] + min_delta
-        candidate = val_auc
-    if improved:
-        state["best_metric_value"] = candidate
-        state["best_epoch"] = epoch
-    return improved
-
-
-def current_learning_rate(model):
-    schedule = getattr(model.optimizer, "_learning_rate",
-                       model.optimizer.learning_rate)
-    value = schedule(model.optimizer.iterations) if callable(schedule) else schedule
-    return float(np.asarray(value.numpy() if hasattr(value, "numpy") else value))
-
-
 def main():
     args = parse_args()
-    import tensorflow as tf
-    tf.keras.utils.set_random_seed(args.model_seed)
     start_time = time.time()
     outdir = os.path.join(args.outdir, args.label)
     os.makedirs(outdir, exist_ok=True)
-    state_path = os.path.join(outdir, "state.json")
-    last_w = os.path.join(outdir, "last.weights.h5")
-    best_w = os.path.join(outdir, "best.weights.h5")
     stats_path = os.path.join(outdir, "norm_stats.json")
 
     if args.n_files % args.clone_factor != 0:
@@ -571,7 +456,6 @@ def main():
         print(f"  cosine decay: {args.decay_epochs} epoch(s) = "
               f"{args.decay_steps} steps, ending at {args.min_lr:g}")
     write_or_validate_config(os.path.join(outdir, "config.json"), vars(args))
-    state = load_state(state_path, args.select_metric)
 
     print(f"[{args.label}] loading stores")
     store1 = lc.Store(args.norm1_store)
@@ -652,162 +536,56 @@ def main():
     val_defs = validation_defs_from_cycles(
         val_rows, (store1, store_b if not args.null_test else store1))
 
-    # --- model -------------------------------------------------------------
-    train_kwargs = dict(
-        lr=args.lr, warmup_steps=args.warmup_steps, clipnorm=args.clipnorm,
-        decay_steps=args.decay_steps, min_lr=args.min_lr,
-        latent_dropout=args.latent_dropout, f_dropouts=args.f_dropout,
-        phi_l2=args.phi_l2, f_l2=args.f_l2)
-    if args.arch == "energyflow":
-        if latent_scale == 1.0:
-            model = lc.build_pfn_energyflow(n_features,
-                                            phi_sizes=args.phi_sizes,
-                                            f_sizes=args.f_sizes,
-                                            jit_compile=args.jit,
-                                            **train_kwargs)
-        else:
-            # energyflow.archs.EFN's actual weighted-aggregation graph with
-            # z_i = latent_scale (real particles) / 0 (padding), verified
-            # bitwise-equivalent to the local scaled build by
-            # pfn_arch_equivalence_check.py -- official-package provenance
-            # for the scaled variant too, not a local reimplementation.
-            model = lc.build_pfn_energyflow_scaled(
-                n_features, latent_scale,
-                phi_sizes=args.phi_sizes, f_sizes=args.f_sizes,
-                jit_compile=args.jit, **train_kwargs)
-    else:
-        model = lc.build_pfn(n_features, latent_scale,
-                             phi_sizes=args.phi_sizes, f_sizes=args.f_sizes,
-                             jit_compile=args.jit, **train_kwargs)
-    print("  XLA JIT: requested {} | model effective {} | optimizer effective {}"
-          .format(args.jit, getattr(model, "_jit_compile", None),
-                  bool(getattr(model.optimizer, "jit_compile", False))))
-    # Materialize Adam slot variables before restoring so its moments and
-    # iteration counter are included, rather than silently resetting at each
-    # Slurm window.
-    if hasattr(model.optimizer, "build"):
-        model.optimizer.build(model.trainable_variables)
-    checkpoint_epoch = tf.Variable(0, dtype=tf.int64, trainable=False)
-    checkpoint_max_auc = tf.Variable(-1.0, dtype=tf.float64, trainable=False)
-    checkpoint_max_auc_epoch = tf.Variable(-1, dtype=tf.int64, trainable=False)
-    checkpoint_min_loss = tf.Variable(float("inf"), dtype=tf.float64,
-                                      trainable=False)
-    checkpoint_min_loss_epoch = tf.Variable(-1, dtype=tf.int64, trainable=False)
-    checkpoint_best_metric = tf.Variable(
-        -1.0 if args.select_metric == "auc" else float("inf"),
-        dtype=tf.float64, trainable=False)
-    checkpoint_best_epoch = tf.Variable(-1, dtype=tf.int64, trainable=False)
-    checkpoint = tf.train.Checkpoint(
-        model=model, optimizer=model.optimizer, epoch=checkpoint_epoch,
-        max_val_auc=checkpoint_max_auc,
-        max_val_auc_epoch=checkpoint_max_auc_epoch,
-        min_val_loss=checkpoint_min_loss,
-        min_val_loss_epoch=checkpoint_min_loss_epoch,
-        best_metric_value=checkpoint_best_metric,
-        best_epoch=checkpoint_best_epoch)
-    checkpoint_manager = tf.train.CheckpointManager(
-        checkpoint, os.path.join(outdir, "resume_checkpoint"), max_to_keep=1)
-    if checkpoint_manager.latest_checkpoint:
-        status = checkpoint.restore(checkpoint_manager.latest_checkpoint)
-        try:
-            status.assert_consumed()
-        except (AssertionError, ValueError) as exc:
-            raise SystemExit(
-                "Checkpoint does not exactly match this model, optimizer, "
-                "and state schema. Refusing a partial restore; use a new "
-                f"--label.\n{exc}")
-        state["epoch"] = int(checkpoint_epoch.numpy())
-        state["max_val_auc"] = float(checkpoint_max_auc.numpy())
-        state["max_val_auc_epoch"] = int(checkpoint_max_auc_epoch.numpy())
-        state["min_val_loss"] = float(checkpoint_min_loss.numpy())
-        state["min_val_loss_epoch"] = int(checkpoint_min_loss_epoch.numpy())
-        state["best_metric_value"] = float(checkpoint_best_metric.numpy())
-        state["best_epoch"] = int(checkpoint_best_epoch.numpy())
-        print(f"  resumed model + Adam from epoch {state['epoch']}"
-              f" (max val AUC {state['max_val_auc']:.4f},"
-              f" min val loss {state['min_val_loss']:.4f})")
-    elif state["epoch"] > 0:
-        raise SystemExit(
-            "state.json reports a resumed run but no full TensorFlow "
-            "checkpoint exists; refusing to restore weights without Adam state")
-
-    # --- training loop ------------------------------------------------------
-    history_path = os.path.join(outdir, "history.csv")
-    while not state["done"] and state["epoch"] < args.epochs:
-        epoch = state["epoch"]
+    # --- shared model/training engine --------------------------------------
+    def train_batches_for_epoch(epoch):
         rng = np.random.default_rng(args.data_seed * 100003 + epoch)
         train_defs = [
             [(c, samplers[c].random_unit(rng, "train"))
              for _ in range(args.units_per_epoch)]
             for c in (0, 1)
         ]
-        lr_value = current_learning_rate(model)
-        t0 = time.time()
-        losses = []
-        for step, (x, y, _) in enumerate(
-                make_balanced_batches(train_defs, samplers, mean, std,
-                                      args.batch_size, rng), 1):
-            out = model.train_on_batch(x, y)
-            losses.append(float(out[0] if isinstance(out, (list, tuple)) else out))
-            if (args.progress_every
-                    and (step == 1 or step % args.progress_every == 0
-                         or step == steps_per_epoch)):
-                print(f"  train batch {step}/{steps_per_epoch}: "
-                      f"mean loss {np.mean(losses):.4f}, "
-                      f"{time.time() - t0:.0f}s", flush=True)
-        train_time = time.time() - t0
+        return make_balanced_batches(
+            train_defs, samplers, mean, std, args.batch_size, rng)
 
-        val_t0 = time.time()
-        y_val, s_val = predict_units(model, val_defs, samplers, mean, std,
-                                     args.batch_size, args.progress_every)
-        val_time = time.time() - val_t0
-        val_auc = lc.auc_score(y_val, s_val)
-        per_unit_losses = per_unit_cross_entropy(y_val, s_val)
-        val_loss = float(np.mean(per_unit_losses))
-        val_loss_sem = float(np.std(per_unit_losses, ddof=1)
-                             / np.sqrt(len(per_unit_losses)))
+    def predict_validation(model):
+        return predict_units(
+            model, val_defs, samplers, mean, std, args.batch_size,
+            args.progress_every)
 
-        state["epoch"] = epoch + 1
-        improved = update_validation_state(
-            state, val_auc, val_loss, val_loss_sem, args.select_metric,
-            args.min_delta, args.min_delta_sigma, epoch)
-        if improved:
-            model.save_weights(best_w)
-        model.save_weights(last_w)
-        checkpoint_epoch.assign(state["epoch"])
-        checkpoint_max_auc.assign(state["max_val_auc"])
-        checkpoint_max_auc_epoch.assign(state["max_val_auc_epoch"])
-        checkpoint_min_loss.assign(state["min_val_loss"])
-        checkpoint_min_loss_epoch.assign(state["min_val_loss_epoch"])
-        checkpoint_best_metric.assign(state["best_metric_value"])
-        checkpoint_best_epoch.assign(state["best_epoch"])
-        checkpoint_manager.save(checkpoint_number=state["epoch"])
-        append_history(history_path, {
-            "epoch": epoch, "train_loss": float(np.mean(losses)),
-            "val_loss": val_loss, "val_loss_sem": val_loss_sem, "val_auc": val_auc,
-            "learning_rate": lr_value,
-            "train_seconds": round(train_time, 1),
-            "val_seconds": round(val_time, 1),
-            "seconds": round(train_time + val_time, 1),
-        })
-        save_state(state_path, state)
-        print(f"epoch {epoch}: loss {np.mean(losses):.4f} | val loss {val_loss:.4f}"
-              f" (SEM {val_loss_sem:.4f}) | val AUC {val_auc:.4f}"
-              f"{' *' if improved else ''} | lr {lr_value:.3g}"
-              f" | train {train_time:.0f}s + val {val_time:.0f}s", flush=True)
-
-        if lc.should_early_stop(state, args.patience, args.min_epochs):
-            print(f"early stop: no val improvement for {args.patience} epochs")
-            state["done"] = True
-            save_state(state_path, state)
-        if args.max_minutes > 0 and (time.time() - start_time) / 60 > args.max_minutes:
-            print("wall-clock limit reached -- checkpoint saved;"
-                  " resubmit with the same --label to resume")
-            return
-
-    if state["epoch"] >= args.epochs:
-        state["done"] = True
-        save_state(state_path, state)
+    training_config = {
+        "result_dir": outdir,
+        "n_features": n_features,
+        "latent_scale": latent_scale,
+        "phi_sizes": args.phi_sizes,
+        "f_sizes": args.f_sizes,
+        "arch": args.arch,
+        "jit": args.jit,
+        "lr": args.lr,
+        "warmup_steps": args.warmup_steps,
+        "decay_steps": args.decay_steps,
+        "min_lr": args.min_lr,
+        "clipnorm": args.clipnorm,
+        "latent_dropout": args.latent_dropout,
+        "f_dropout": args.f_dropout,
+        "phi_l2": args.phi_l2,
+        "f_l2": args.f_l2,
+        "model_seed": args.model_seed,
+        "select_metric": args.select_metric,
+        "min_delta": args.min_delta,
+        "min_delta_sigma": args.min_delta_sigma,
+        "epochs": args.epochs,
+        "patience": args.patience,
+        "min_epochs": args.min_epochs,
+        "units_per_epoch": args.units_per_epoch,
+        "batch_size": args.batch_size,
+        "max_minutes": args.max_minutes,
+        "progress_every": args.progress_every,
+    }
+    model, state, training_complete = run_binary_pfn_training(
+        training_config, train_batches_for_epoch, predict_validation,
+        start_time=start_time)
+    if not training_complete:
+        return
 
     if args.skip_evaluation:
         print("training complete; held-out test evaluation skipped by request")
@@ -827,8 +605,6 @@ def main():
             print(f"evaluation already complete -> {summary_path}")
             return
 
-    if os.path.isfile(best_w):
-        model.load_weights(best_w)
     pool_a = split_a["test"]
     pool_b = split_b["test"]
     files_per_unit = (args.n_files, files_b)

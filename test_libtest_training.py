@@ -1,17 +1,26 @@
 #!/usr/bin/env python3
 import json
+import inspect
 import os
+import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
+from unittest import mock
 
 import numpy as np
 
 import libtest_common as lc
+import pfn_libtest_train as file_trainer
+import pfn_training_engine as engine
+import pfn_variable_reuse_train as variable_trainer
 from pfn_libtest_train import (
     balanced_chunks,
+    load_or_create_validation_units,
+)
+from pfn_training_engine import (
     binary_cross_entropy,
     initial_state,
-    load_or_create_validation_units,
     update_validation_state,
     write_or_validate_config,
 )
@@ -192,6 +201,246 @@ class RunMetadataTests(unittest.TestCase):
         self.assertEqual(state["max_val_auc_epoch"], 0)
         self.assertEqual(state["min_val_loss_epoch"], 1)
         self.assertEqual(state["best_epoch"], 0)
+
+
+class SharedTrainingEngineTests(unittest.TestCase):
+    def test_both_entry_points_delegate_fitting_to_one_engine(self):
+        self.assertIs(file_trainer.run_binary_pfn_training,
+                      engine.run_binary_pfn_training)
+        self.assertIs(variable_trainer.run_binary_pfn_training,
+                      engine.run_binary_pfn_training)
+        self.assertNotIn("train_on_batch", inspect.getsource(file_trainer))
+        self.assertNotIn(
+            "train_on_batch", inspect.getsource(variable_trainer))
+        self.assertIn("train_on_batch", inspect.getsource(engine))
+
+    def test_variable_recipe_matches_successful_n420_scaled_run(self):
+        args = SimpleNamespace(
+            mother_store="/tmp/mothers.h5",
+            label="test",
+            reuse_k=(1, 10),
+            model_seed=1,
+            null_test=False,
+            max_minutes=1400.0,
+            progress_every=25,
+        )
+        config = variable_trainer.scientific_config(
+            args, epochs=80, patience=15, units=500, val_units=300,
+            test_units=300, norm_units=100)
+        expected = {
+            "features": "expanded",
+            "architecture": "energyflow-scaled-sum",
+            "phi_sizes": (100, 100, 128),
+            "f_sizes": (200, 200, 200),
+            "batch_size": 4,
+            "units_per_epoch_per_class": 500,
+            "val_units_per_class": 300,
+            "test_units_per_class": 300,
+            "epochs": 80,
+            "patience": 15,
+            "learning_rate": 1.0e-4,
+            "warmup_epochs": 1,
+            "warmup_steps": 250,
+            "decay_epochs": 30,
+            "decay_steps": 7500,
+            "min_learning_rate": 1.0e-6,
+            "clipnorm": 0.0,
+            "latent_dropout": 0.0,
+            "f_dropout": 0.0,
+            "phi_l2": 0.0,
+            "f_l2": 0.0,
+            "jit_compile": False,
+            "data_seed": 1701,
+            "normalization_seed": 1701,
+            "validation_definition_seed": 2700,
+            "test_definition_seed": 3727,
+            "epoch_seed_formula": "data_seed * 100003 + epoch",
+            "model_seed": 1,
+            "selection_metric": "validation loss",
+            "min_epochs": 0,
+            "min_delta": 1.0e-4,
+            "min_delta_sigma": 1.0,
+            "norm_stat_units_per_class": 100,
+            "test_events_overlap_sources": True,
+        }
+        for key, value in expected.items():
+            self.assertEqual(config[key], value, key)
+
+    def test_scaled_energyflow_model_is_built_by_shared_engine(self):
+        sentinel = object()
+        config = {
+            "n_features": 13,
+            "latent_scale": 1.0 / 1000.0,
+            "phi_sizes": (100, 100, 128),
+            "f_sizes": (200, 200, 200),
+            "arch": "energyflow",
+            "jit": False,
+            "lr": 1.0e-4,
+            "warmup_steps": 250,
+            "decay_steps": 7500,
+            "min_lr": 1.0e-6,
+            "clipnorm": 0.0,
+        }
+        with mock.patch.object(
+                lc, "build_pfn_energyflow_scaled",
+                return_value=sentinel) as builder:
+            self.assertIs(engine._build_model(config), sentinel)
+        builder.assert_called_once()
+        _, latent_scale = builder.call_args.args
+        self.assertEqual(latent_scale, config["latent_scale"])
+        self.assertFalse(builder.call_args.kwargs["jit_compile"])
+        self.assertEqual(builder.call_args.kwargs["warmup_steps"], 250)
+        self.assertEqual(builder.call_args.kwargs["decay_steps"], 7500)
+        self.assertEqual(builder.call_args.kwargs["clipnorm"], 0.0)
+
+    def test_shared_engine_executes_complete_train_validation_cycle(self):
+        class FakeVariable:
+            def __init__(self, value, **_):
+                self.value = value
+
+            def assign(self, value):
+                self.value = value
+
+            def numpy(self):
+                return self.value
+
+        class FakeOptimizer:
+            def __init__(self):
+                self.learning_rate = 1.0e-4
+                self.iterations = 0
+
+            def build(self, _):
+                pass
+
+        class FakeModel:
+            def __init__(self):
+                self.optimizer = FakeOptimizer()
+                self.trainable_variables = []
+                self.loaded = None
+
+            def train_on_batch(self, _x, _y):
+                self.optimizer.iterations += 1
+                return 0.6
+
+            def save_weights(self, path):
+                with open(path, "w") as handle:
+                    handle.write("weights")
+
+            def load_weights(self, path):
+                self.loaded = path
+
+        class FakeCheckpoint:
+            def __init__(self, **_):
+                pass
+
+            def restore(self, _):
+                return self
+
+            def assert_consumed(self):
+                pass
+
+        class FakeManager:
+            def __init__(self, *_args, **_kwargs):
+                self.latest_checkpoint = None
+
+            def save(self, **_):
+                pass
+
+        fake_tf = SimpleNamespace(
+            int64="int64",
+            float64="float64",
+            Variable=FakeVariable,
+            keras=SimpleNamespace(
+                utils=SimpleNamespace(set_random_seed=lambda _: None)),
+            train=SimpleNamespace(
+                Checkpoint=FakeCheckpoint,
+                CheckpointManager=FakeManager),
+        )
+        model = FakeModel()
+        with tempfile.TemporaryDirectory() as directory:
+            config = {
+                "result_dir": directory,
+                "n_features": 2,
+                "latent_scale": 1.0,
+                "phi_sizes": (2,),
+                "f_sizes": (2,),
+                "arch": "energyflow",
+                "jit": False,
+                "lr": 1.0e-4,
+                "warmup_steps": 1,
+                "decay_steps": 30,
+                "min_lr": 1.0e-6,
+                "clipnorm": 0.0,
+                "model_seed": 1,
+                "select_metric": "loss",
+                "min_delta": 0.0,
+                "min_delta_sigma": 1.0,
+                "epochs": 1,
+                "patience": 15,
+                "min_epochs": 0,
+                "units_per_epoch": 1,
+                "batch_size": 2,
+                "max_minutes": 0.0,
+                "progress_every": 0,
+            }
+
+            def train_batches(_epoch):
+                yield (
+                    np.zeros((2, 1, 2), np.float32),
+                    np.eye(2, dtype=np.float32),
+                    np.asarray([0, 1], np.int32),
+                )
+
+            def predict_validation(_model):
+                return (
+                    np.asarray([0, 1], np.int32),
+                    np.asarray([0.2, 0.8], np.float64),
+                )
+
+            with mock.patch.dict(sys.modules, {"tensorflow": fake_tf}), \
+                    mock.patch.object(engine, "_build_model",
+                                      return_value=model):
+                returned, state, complete = engine.run_binary_pfn_training(
+                    config, train_batches, predict_validation)
+
+            self.assertIs(returned, model)
+            self.assertTrue(complete)
+            self.assertTrue(state["done"])
+            self.assertEqual(state["epoch"], 1)
+            self.assertEqual(state["best_epoch"], 0)
+            self.assertEqual(model.loaded, os.path.join(
+                directory, "best.weights.h5"))
+            self.assertTrue(os.path.isfile(os.path.join(
+                directory, "history.csv")))
+
+
+class VariableReuseDefinitionTests(unittest.TestCase):
+    def test_main_definitions_map_labels_to_physical_reuse(self):
+        with tempfile.TemporaryDirectory() as directory:
+            definitions = variable_trainer.load_or_create_seed_definitions(
+                os.path.join(directory, "definitions.npz"),
+                reuse_k=(1, 10), units_per_class=20, seed=7,
+                null_test=False)
+        for label, physical_k, _ in definitions:
+            self.assertEqual(physical_k, (1, 10)[label])
+
+    def test_null_keeps_inputs_but_permutes_labels(self):
+        with tempfile.TemporaryDirectory() as directory:
+            main = variable_trainer.load_or_create_seed_definitions(
+                os.path.join(directory, "main.npz"),
+                reuse_k=(10, 42), units_per_class=100, seed=9,
+                null_test=False)
+            null = variable_trainer.load_or_create_seed_definitions(
+                os.path.join(directory, "null.npz"),
+                reuse_k=(10, 42), units_per_class=100, seed=9,
+                null_test=True)
+        self.assertEqual(
+            [(physical_k, seed) for _, physical_k, seed in main],
+            [(physical_k, seed) for _, physical_k, seed in null])
+        self.assertEqual([label for label, _, _ in null].count(0), 100)
+        self.assertNotEqual(
+            [label for label, _, _ in main],
+            [label for label, _, _ in null])
 
 
 if __name__ == "__main__":

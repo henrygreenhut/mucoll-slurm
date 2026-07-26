@@ -16,13 +16,9 @@ import time
 import numpy as np
 
 import libtest_common as lc
-from pfn_libtest_train import (
-    append_history,
-    current_learning_rate,
-    initial_state,
-    per_unit_cross_entropy,
-    save_state,
-    update_validation_state,
+from pfn_training_engine import (
+    CONFIG_SCHEMA_VERSION,
+    run_binary_pfn_training,
     write_or_validate_config,
 )
 from variable_reuse_common import MotherStore, sample_definition
@@ -40,17 +36,12 @@ VAL_UNITS = 300
 TEST_UNITS = 300
 EPOCHS = 80
 PATIENCE = 15
-NULL_EPOCHS = 40
-NULL_PATIENCE = 8
 LEARNING_RATE = 1.0e-4
 WARMUP_EPOCHS = 1
 DECAY_EPOCHS = 30
 MIN_LEARNING_RATE = 1.0e-6
 DATA_SEED = 1701
 NORM_STAT_UNITS = 100
-NORM_PARTICLES_PER_UNIT = 100000
-# Shared immutable-config helper currently uses schema version 2.
-CONFIG_SCHEMA_VERSION = 2
 
 
 def parse_args():
@@ -69,6 +60,7 @@ def parse_args():
 
 def scientific_config(args, epochs, patience, units, val_units, test_units,
                       norm_units):
+    steps_per_epoch = 2 * units // BATCH_SIZE
     return {
         "config_schema_version": CONFIG_SCHEMA_VERSION,
         "mother_store": os.path.abspath(args.mother_store),
@@ -89,18 +81,34 @@ def scientific_config(args, epochs, patience, units, val_units, test_units,
         "patience": patience,
         "learning_rate": LEARNING_RATE,
         "warmup_epochs": WARMUP_EPOCHS,
+        "warmup_steps": WARMUP_EPOCHS * steps_per_epoch,
         "decay_epochs": DECAY_EPOCHS,
+        "decay_steps": DECAY_EPOCHS * steps_per_epoch,
         "min_learning_rate": MIN_LEARNING_RATE,
         "clipnorm": 0.0,
+        "latent_dropout": 0.0,
+        "f_dropout": 0.0,
+        "phi_l2": 0.0,
+        "f_l2": 0.0,
         "jit_compile": False,
         "data_seed": DATA_SEED,
+        "normalization_seed": DATA_SEED,
+        "validation_definition_seed": DATA_SEED + 999,
+        "test_definition_seed": DATA_SEED + 2026,
+        "epoch_seed_formula": "data_seed * 100003 + epoch",
         "model_seed": args.model_seed,
         "null_test": args.null_test,
-        "null_definition": "permutation of labels over the same k10/k42 units",
+        "null_definition": (
+            "permutation of labels over the same k{}-vs-k{} units".format(
+                args.reuse_k[0], args.reuse_k[1])),
         "selection_metric": "validation loss",
+        "min_epochs": 0,
+        # Ignored for loss selection, but retained at the successful N=420
+        # value so the recorded optimizer/selection recipe matches exactly.
+        "min_delta": 1.0e-4,
         "min_delta_sigma": 1.0,
         "norm_stat_units_per_class": norm_units,
-        "norm_particles_per_unit": NORM_PARTICLES_PER_UNIT,
+        "norm_particle_weighting": "all particles, matching N=420 recipe",
         "test_events_overlap_sources": True,
         "max_minutes": args.max_minutes,
         "progress_every": args.progress_every,
@@ -129,16 +137,24 @@ def load_or_create_seed_definitions(path, reuse_k, units_per_class, seed,
     expected = 2 * units_per_class
     if not (labels.shape == physical_k.shape == seeds.shape == (expected,)):
         raise ValueError("saved unit definitions have the wrong shape")
-    if sorted(np.unique(physical_k).tolist()) != sorted(reuse_k):
-        raise ValueError("saved unit definitions use different reuse factors")
+    physical_counts = [
+        int(np.count_nonzero(physical_k == k)) for k in reuse_k]
+    if physical_counts != [units_per_class, units_per_class]:
+        raise ValueError(
+            "saved unit definitions do not contain equal reuse-factor counts")
     if np.bincount(labels, minlength=2).tolist() != [units_per_class] * 2:
         raise ValueError("saved unit definitions are not label balanced")
+    if not null_test:
+        expected_k = np.asarray(reuse_k, dtype=np.int32)[labels]
+        if not np.array_equal(physical_k, expected_k):
+            raise ValueError(
+                "saved main-study labels do not match their reuse factors")
     return list(zip(labels.tolist(), physical_k.tolist(), seeds.tolist()))
 
 
-def epoch_definitions(reuse_k, units_per_class, epoch, null_test):
-    path_seed = DATA_SEED * 100003 + epoch
-    rng = np.random.default_rng(path_seed)
+def epoch_definitions(reuse_k, units_per_class, epoch, null_test, rng=None):
+    if rng is None:
+        rng = np.random.default_rng(DATA_SEED * 100003 + epoch)
     physical_k = np.repeat(np.asarray(reuse_k, np.int32), units_per_class)
     labels = np.repeat(np.arange(2, dtype=np.int32), units_per_class)
     seeds = rng.integers(
@@ -219,34 +235,24 @@ def predict(model, definitions, store, mother_pool, mean, std,
 
 
 def compute_normalization(store, train_pool, reuse_k, norm_units):
-    rng = np.random.default_rng(DATA_SEED + 314159)
-    count = 0
-    sum1 = None
-    sum2 = None
+    # Match the successful file-level N=420 normalization stream: a fresh
+    # generator initialized directly from the fixed data seed.
+    rng = np.random.default_rng(DATA_SEED)
     particle_counts = []
-    for physical_k in reuse_k:
-        seeds = rng.integers(
-            0, np.iinfo(np.int64).max, size=norm_units, dtype=np.int64)
-        for seed in seeds:
-            features = unit_features(
-                store, train_pool, physical_k, int(seed))
-            particle_counts.append(len(features))
-            if len(features) > NORM_PARTICLES_PER_UNIT:
-                keep = rng.choice(
-                    len(features), NORM_PARTICLES_PER_UNIT, replace=False)
-                features = features[keep]
-            values = features.astype(np.float64)
-            batch_sum = values.sum(axis=0)
-            batch_sum2 = np.square(values).sum(axis=0)
-            sum1 = batch_sum if sum1 is None else sum1 + batch_sum
-            sum2 = batch_sum2 if sum2 is None else sum2 + batch_sum2
-            count += len(values)
-    mean = sum1 / count
-    variance = np.maximum(sum2 / count - np.square(mean), 0.0)
-    std = np.sqrt(variance)
-    std[std < 1.0e-6] = 1.0
+
+    def feature_stream():
+        for physical_k in reuse_k:
+            seeds = rng.integers(
+                0, np.iinfo(np.int64).max, size=norm_units, dtype=np.int64)
+            for seed in seeds:
+                features = unit_features(
+                    store, train_pool, physical_k, int(seed))
+                particle_counts.append(len(features))
+                yield features
+
+    mean, std = lc.compute_norm_stats(feature_stream())
     latent_scale = 1.0 / float(np.median(particle_counts))
-    return mean.astype(np.float32), std.astype(np.float32), latent_scale
+    return mean, std, latent_scale
 
 
 def save_test_outputs(result_dir, definitions, labels, scores, reuse_k,
@@ -306,11 +312,8 @@ def main():
     else:
         units, val_units, test_units, norm_units = (
             UNITS_PER_EPOCH, VAL_UNITS, TEST_UNITS, NORM_STAT_UNITS)
-        epochs = NULL_EPOCHS if args.null_test else EPOCHS
-        patience = NULL_PATIENCE if args.null_test else PATIENCE
+        epochs, patience = EPOCHS, PATIENCE
 
-    import tensorflow as tf
-    tf.keras.utils.set_random_seed(args.model_seed)
     start_time = time.time()
     result_dir = os.path.join("variable_k_results", args.label)
     os.makedirs(result_dir, exist_ok=True)
@@ -323,8 +326,6 @@ def main():
         args, epochs, patience, units, val_units, test_units, norm_units)
     write_or_validate_config(
         os.path.join(result_dir, "config.json"), config)
-    state_path = os.path.join(result_dir, "state.json")
-    state = initial_state("loss")
 
     print("[{}] loading {}".format(args.label, args.mother_store), flush=True)
     store = MotherStore(args.mother_store)
@@ -368,153 +369,76 @@ def main():
 
     val_definitions = load_or_create_seed_definitions(
         os.path.join(result_dir, "validation_units.npz"),
-        reuse_k, val_units, DATA_SEED + 9001, args.null_test)
+        reuse_k, val_units, DATA_SEED + 999, args.null_test)
     test_definitions = load_or_create_seed_definitions(
         os.path.join(result_dir, "test_units.npz"),
-        reuse_k, test_units, DATA_SEED + 202607, args.null_test)
+        reuse_k, test_units, DATA_SEED + 2026, args.null_test)
 
+    # The adapter ends here: it defines synthetic mother-reuse events and
+    # materializes them. Model fitting and validation below use the exact
+    # shared engine used by pfn_libtest_train.py.
     steps_per_epoch = 2 * units // BATCH_SIZE
     warmup_steps = WARMUP_EPOCHS * steps_per_epoch
     decay_steps = DECAY_EPOCHS * steps_per_epoch
-    model = lc.build_pfn_energyflow_scaled(
-        len(mean), latent_scale, phi_sizes=PHI_SIZES, f_sizes=F_SIZES,
-        jit_compile=False, lr=LEARNING_RATE,
-        warmup_steps=warmup_steps, clipnorm=0.0,
-        decay_steps=decay_steps, min_lr=MIN_LEARNING_RATE)
     print("  EnergyFlow scaled sum | batch {} | LR {} | "
           "{}-epoch warmup + {}-epoch cosine decay".format(
               BATCH_SIZE, LEARNING_RATE, WARMUP_EPOCHS, DECAY_EPOCHS))
 
-    if hasattr(model.optimizer, "build"):
-        model.optimizer.build(model.trainable_variables)
-    checkpoint_values = {
-        "epoch": tf.Variable(0, dtype=tf.int64, trainable=False),
-        "max_val_auc": tf.Variable(-1.0, dtype=tf.float64, trainable=False),
-        "max_val_auc_epoch": tf.Variable(-1, dtype=tf.int64, trainable=False),
-        "min_val_loss": tf.Variable(
-            float("inf"), dtype=tf.float64, trainable=False),
-        "min_val_loss_epoch": tf.Variable(
-            -1, dtype=tf.int64, trainable=False),
-        "best_metric_value": tf.Variable(
-            float("inf"), dtype=tf.float64, trainable=False),
-        "best_epoch": tf.Variable(-1, dtype=tf.int64, trainable=False),
-    }
-    checkpoint = tf.train.Checkpoint(
-        model=model, optimizer=model.optimizer, **checkpoint_values)
-    checkpoint_manager = tf.train.CheckpointManager(
-        checkpoint, os.path.join(result_dir, "resume_checkpoint"),
-        max_to_keep=1)
-    if checkpoint_manager.latest_checkpoint:
-        status = checkpoint.restore(checkpoint_manager.latest_checkpoint)
-        try:
-            status.assert_consumed()
-        except (AssertionError, ValueError) as exc:
-            raise SystemExit(
-                "checkpoint mismatch; use a new label\n{}".format(exc))
-        checkpoint_state = {
-            name: (int(value.numpy()) if "epoch" in name
-                   else float(value.numpy()))
-            for name, value in checkpoint_values.items()
-        }
-        if not os.path.isfile(state_path):
-            raise SystemExit("checkpoint exists but state.json is missing")
-        with open(state_path) as handle:
-            saved_state = json.load(handle)
-        state = checkpoint_state
-        state["done"] = bool(saved_state["done"])
-        print("  resumed from epoch {} (best epoch {})".format(
-            state["epoch"], state["best_epoch"]))
-    elif os.path.isfile(state_path):
-        raise SystemExit(
-            "state.json exists but the full model/Adam checkpoint is missing; "
-            "use a new label")
-
-    best_weights = os.path.join(result_dir, "best.weights.h5")
-    last_weights = os.path.join(result_dir, "last.weights.h5")
-    history_path = os.path.join(result_dir, "history.csv")
-    progress_every = args.progress_every
-
-    while not state["done"] and state["epoch"] < epochs:
-        epoch = state["epoch"]
+    def train_batches_for_epoch(epoch):
+        # Use one epoch RNG for unit definitions and batch shuffling, exactly
+        # as the successful file-level trainer does.
+        rng = np.random.default_rng(DATA_SEED * 100003 + epoch)
         definitions = epoch_definitions(
-            reuse_k, units, epoch, args.null_test)
-        rng = np.random.default_rng(DATA_SEED * 200003 + epoch)
-        losses = []
-        train_start = time.time()
-        for step, (x, y, _) in enumerate(
-                balanced_batches(
-                    definitions, store, pools["train"], mean, std, rng), 1):
-            output = model.train_on_batch(x, y)
-            losses.append(float(
-                output[0] if isinstance(output, (list, tuple)) else output))
-            if progress_every and (
-                    step == 1 or step % progress_every == 0
-                    or step == steps_per_epoch):
-                print("  train batch {}/{}: mean loss {:.4f}, {:.0f}s".format(
-                    step, steps_per_epoch, np.mean(losses),
-                    time.time() - train_start), flush=True)
-        train_seconds = time.time() - train_start
+            reuse_k, units, epoch, args.null_test, rng=rng)
+        return balanced_batches(
+            definitions, store, pools["train"], mean, std, rng)
 
-        val_start = time.time()
-        labels, scores = predict(
+    def predict_validation(model):
+        return predict(
             model, val_definitions, store, pools["val"], mean, std,
-            progress_every)
-        val_seconds = time.time() - val_start
-        val_auc = lc.auc_score(labels, scores)
-        unit_losses = per_unit_cross_entropy(labels, scores)
-        val_loss = float(np.mean(unit_losses))
-        val_loss_sem = float(
-            np.std(unit_losses, ddof=1) / np.sqrt(len(unit_losses)))
-        state["epoch"] = epoch + 1
-        improved = update_validation_state(
-            state, val_auc, val_loss, val_loss_sem,
-            "loss", 0.0, 1.0, epoch)
-        if improved:
-            model.save_weights(best_weights)
-        model.save_weights(last_weights)
-        for name, value in checkpoint_values.items():
-            value.assign(state[name])
-        checkpoint_manager.save(checkpoint_number=state["epoch"])
-        append_history(history_path, {
-            "epoch": epoch,
-            "train_loss": float(np.mean(losses)),
-            "val_loss": val_loss,
-            "val_loss_sem": val_loss_sem,
-            "val_auc": val_auc,
-            "learning_rate": current_learning_rate(model),
-            "train_seconds": round(train_seconds, 1),
-            "val_seconds": round(val_seconds, 1),
-            "seconds": round(train_seconds + val_seconds, 1),
-        })
-        save_state(state_path, state)
-        print("epoch {}: loss {:.4f} | val loss {:.4f} (SEM {:.4f}) | "
-              "val AUC {:.4f}{} | train {:.0f}s + val {:.0f}s".format(
-                  epoch, np.mean(losses), val_loss, val_loss_sem, val_auc,
-                  " *" if improved else "", train_seconds, val_seconds),
-              flush=True)
+            args.progress_every)
 
-        if lc.should_early_stop(state, patience, 0):
-            state["done"] = True
-            save_state(state_path, state)
-            print("early stop: no validation-loss improvement for {} epochs"
-                  .format(patience))
-        if (args.max_minutes > 0
-                and (time.time() - start_time) / 60.0 > args.max_minutes):
-            print("wall-clock limit reached; checkpoint saved")
-            return
-
-    if state["epoch"] >= epochs:
-        state["done"] = True
-        save_state(state_path, state)
+    training_config = {
+        "result_dir": result_dir,
+        "n_features": len(mean),
+        "latent_scale": latent_scale,
+        "phi_sizes": PHI_SIZES,
+        "f_sizes": F_SIZES,
+        "arch": "energyflow",
+        "jit": False,
+        "lr": LEARNING_RATE,
+        "warmup_steps": warmup_steps,
+        "decay_steps": decay_steps,
+        "min_lr": MIN_LEARNING_RATE,
+        "clipnorm": 0.0,
+        "latent_dropout": 0.0,
+        "f_dropout": 0.0,
+        "phi_l2": 0.0,
+        "f_l2": 0.0,
+        "model_seed": args.model_seed,
+        "select_metric": "loss",
+        "min_delta": 1.0e-4,
+        "min_delta_sigma": 1.0,
+        "epochs": epochs,
+        "patience": patience,
+        "min_epochs": 0,
+        "units_per_epoch": units,
+        "batch_size": BATCH_SIZE,
+        "max_minutes": args.max_minutes,
+        "progress_every": args.progress_every,
+    }
+    model, state, training_complete = run_binary_pfn_training(
+        training_config, train_batches_for_epoch, predict_validation,
+        start_time=start_time)
+    if not training_complete:
+        return
     if args.smoke:
         print("smoke training complete; test evaluation skipped")
         return
-    if os.path.isfile(best_weights):
-        model.load_weights(best_weights)
 
     labels, scores = predict(
         model, test_definitions, store, pools["test"], mean, std,
-        progress_every, label="test")
+        args.progress_every, label="test")
     save_test_outputs(
         result_dir, test_definitions, labels, scores, reuse_k, state, args)
     print("outputs -> {}".format(result_dir))

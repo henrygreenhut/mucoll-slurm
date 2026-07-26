@@ -46,7 +46,8 @@ trainer. The important ones are:
 
 | Purpose | Files |
 | --- | --- |
-| Shared GEN representation and PFN | `libtest_common.py` |
+| Shared GEN representation and PFN model | `libtest_common.py` |
+| Shared GEN fitting/checkpoint/validation engine | `pfn_training_engine.py` |
 | Existing norm1 versus norm42 GEN study | `gen_libtest_make_store.py`, `pfn_libtest_train.py`, `pfn_libtest_evaluate.py` |
 | On-the-fly variable reuse | `gen_mother_make_store.py`, `variable_reuse_common.py`, `pfn_variable_reuse_train.py` |
 | N=420 reconstruction study | `reco_libtest_prepare_pools.py`, `submit_reco_libtest_packed.py`, `run_reco_libtest_task.sh`, `make_reco_libtest_stores.py`, `train_reco_libtest_pfn.py` |
@@ -116,7 +117,10 @@ N=420 event scale. Every class contains 29,400 mother-equivalents: k=1
 samples 29,400 distinct mothers, k=10 samples 2,940, and k=42 samples 700.
 The selected recipe is the official EnergyFlow scaled-sum network, expanded
 GEN features, balanced batches of four, peak learning rate `1e-4`, one-epoch
-warmup, and cosine decay.
+warmup, and cosine decay. This entry point supplies only mother-level event
+construction; model fitting, validation-loss selection, checkpointing,
+early stopping, and history are executed by the same `pfn_training_engine.py`
+used by the existing norm1-versus-norm42 trainer.
 
 ```bash
 sbatch submit_oscar_variable_reuse.slurm 1v10 main
