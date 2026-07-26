@@ -12,7 +12,9 @@
 #SBATCH -e n420_recipe_%j.err
 
 # Usage:
-#   sbatch submit_oscar_n420_recipe.slurm {scaled|raw} {1e-4|3e-4} MODEL_SEED
+#   sbatch submit_oscar_n420_recipe.slurm \
+#       {scaled|raw} {1e-4|3e-4} MODEL_SEED [main|null] [train|smoke]
+# Backward-compatible:
 #   sbatch -p gpu-debug -t 00:15:00 submit_oscar_n420_recipe.slurm \
 #       scaled 1e-4 1 smoke
 #
@@ -23,7 +25,7 @@ set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
 usage() {
-    echo "usage: $0 {scaled|raw} {1e-4|3e-4} MODEL_SEED [train|smoke]"
+    echo "usage: $0 {scaled|raw} {1e-4|3e-4} MODEL_SEED [main|null] [train|smoke]"
     exit 2
 }
 
@@ -31,7 +33,15 @@ usage() {
 VARIANT=$1
 LR=$2
 MODEL_SEED=$3
-MODE=${4:-train}
+RUN=main
+MODE=train
+case "${4:-}" in
+    main|null) RUN=$4; MODE=${5:-train} ;;
+    train|smoke) MODE=$4 ;;
+    "") ;;
+    *) usage ;;
+esac
+[ "$#" -le 5 ] || usage
 
 case "$VARIANT" in
     scaled) LATENT_SCALE=auto ;;
@@ -59,7 +69,9 @@ for store in "$NORM1_STORE" "$NORM42_STORE"; do
 done
 
 LR_LABEL=${LR/./p}
-LABEL="n420_recipe_bs4_expanded_${VARIANT}_lr${LR_LABEL}_mseed${MODEL_SEED}_pointonly"
+LABEL="n420_recipe_bs4_expanded_${VARIANT}_lr${LR_LABEL}_mseed${MODEL_SEED}"
+[ "$RUN" = null ] && LABEL="${LABEL}_null"
+LABEL="${LABEL}_pointonly"
 COMMON_ARGS=(
     --label "$LABEL"
     --norm1-store "$NORM1_STORE"
@@ -79,8 +91,10 @@ COMMON_ARGS=(
     --data-seed 1701
     --model-seed "$MODEL_SEED"
     --select-metric loss
+    --min-delta 1e-4
     --progress-every 25
 )
+[ "$RUN" = null ] && COMMON_ARGS+=(--null-test)
 
 if [ "$MODE" = smoke ]; then
     LABEL="${LABEL}_smoke"
@@ -106,6 +120,6 @@ else
     )
 fi
 
-echo "label=$LABEL variant=$VARIANT lr=$LR data_seed=1701 model_seed=$MODEL_SEED mode=$MODE"
+echo "label=$LABEL variant=$VARIANT lr=$LR run=$RUN data_seed=1701 model_seed=$MODEL_SEED mode=$MODE"
 apptainer exec --nv "$NGC_TENSORFLOW_CONTAINER" \
     python -u pfn_libtest_train.py "${COMMON_ARGS[@]}" "${RUN_ARGS[@]}"

@@ -76,6 +76,7 @@ required whenever scientific settings change.
 
 ```bash
 sbatch submit_oscar_n420_recipe.slurm scaled 1e-4 1
+sbatch submit_oscar_n420_recipe.slurm scaled 1e-4 1 null
 sbatch submit_oscar_n420_recipe.slurm scaled 3e-4 1
 sbatch submit_oscar_n420_recipe.slurm raw 1e-4 1
 sbatch submit_oscar_n420_recipe.slurm raw 3e-4 1
