@@ -198,6 +198,18 @@ it with the local GEN builder under an existing result label. `summary.json`
 records the fixed seed, EnergyFlow and TensorFlow versions, and one held-out
 test AUC. Test events may share sources and are therefore correlated.
 
+After the unchanged baseline, two fixed optimizer studies reuse the same
+stores, source split, features, architecture, batch size, and seed. Both use
+Adam with a one-epoch linear warmup to `1e-4`, a 30-epoch cosine decay to
+`1e-6`, no clipping, and explicit `jit_compile=False`. The second adds only
+EnergyFlow's standard `F_dropouts=0.1`. Each job trains its matched null after
+the main classifier:
+
+```bash
+sbatch submit_reco_libtest_recipe.slurm stabilized
+sbatch submit_reco_libtest_recipe.slurm stabilized_dropout
+```
+
 The `_simple` pool, RECO, store, and result names prevent this data from being
 mixed with earlier, incompatible outputs.
 

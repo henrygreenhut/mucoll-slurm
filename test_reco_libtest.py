@@ -58,5 +58,36 @@ class RecoFeatureTests(unittest.TestCase):
                 trainer.load_store(path)
 
 
+class RecoRecipeTests(unittest.TestCase):
+    def test_stabilized_recipes_only_differ_by_dropout(self):
+        plain = trainer.recipe_config("stabilized", steps_per_epoch=125)
+        dropout = trainer.recipe_config(
+            "stabilized_dropout", steps_per_epoch=125)
+
+        self.assertEqual(plain["learning_rate"], 1e-4)
+        self.assertEqual(plain["warmup_steps"], 125)
+        self.assertEqual(plain["decay_steps"], 3750)
+        self.assertEqual(plain["min_learning_rate"], 1e-6)
+        self.assertEqual(plain["jit_compile"], False)
+        self.assertEqual(plain["clipnorm"], 0.0)
+        self.assertEqual(plain["f_dropout"], 0.0)
+        self.assertEqual(dropout["f_dropout"], 0.1)
+        self.assertEqual(
+            {key: value for key, value in plain.items()
+             if key != "f_dropout"},
+            {key: value for key, value in dropout.items()
+             if key != "f_dropout"},
+        )
+
+    def test_baseline_retains_energyflow_internal_compile(self):
+        baseline = trainer.recipe_config("baseline", steps_per_epoch=125)
+        self.assertFalse(baseline["explicit_compile"])
+        self.assertIsNone(baseline["jit_compile"])
+        self.assertEqual(baseline["learning_rate"], 1e-3)
+        self.assertEqual(baseline["warmup_steps"], 0)
+        self.assertEqual(baseline["decay_steps"], 0)
+        self.assertEqual(baseline["f_dropout"], 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()

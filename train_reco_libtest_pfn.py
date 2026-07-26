@@ -4,6 +4,7 @@
 import argparse
 import csv
 import json
+import math
 import os
 import subprocess
 from pathlib import Path
@@ -14,6 +15,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.metrics import roc_auc_score, roc_curve
+
+from libtest_common import build_pfn_energyflow
 
 
 FEATURES = (
@@ -27,6 +30,37 @@ RAW = {name: i for i, name in enumerate(RAW_FEATURES)}
 N_FILES = 420
 EXPECTED_EVENTS = {"train": 2000, "val": 400, "test": 800}
 TRAINING_SEED = 12345
+PHI_SIZES = (64, 64, 64)
+F_SIZES = (64, 64, 64)
+RECIPES = {
+    # Preserve the original Perlmutter EnergyFlow behavior for the OSCAR
+    # reproduction: PFN's internal compile, fixed Adam LR=1e-3, and no
+    # regularization.
+    "baseline": {
+        "learning_rate": 1e-3,
+        "warmup_epochs": 0,
+        "decay_epochs": 0,
+        "min_learning_rate": 0.0,
+        "f_dropout": 0.0,
+        "explicit_compile": False,
+    },
+    "stabilized": {
+        "learning_rate": 1e-4,
+        "warmup_epochs": 1,
+        "decay_epochs": 30,
+        "min_learning_rate": 1e-6,
+        "f_dropout": 0.0,
+        "explicit_compile": True,
+    },
+    "stabilized_dropout": {
+        "learning_rate": 1e-4,
+        "warmup_epochs": 1,
+        "decay_epochs": 30,
+        "min_learning_rate": 1e-6,
+        "f_dropout": 0.1,
+        "explicit_compile": True,
+    },
+}
 
 
 def parse_args():
@@ -39,6 +73,7 @@ def parse_args():
     parser.add_argument("--epochs", type=int, default=150)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--patience", type=int, default=20)
+    parser.add_argument("--recipe", choices=tuple(RECIPES), default="baseline")
     return parser.parse_args()
 
 
@@ -125,14 +160,46 @@ def combine_pair(pair, width):
     return x, y, metadata
 
 
-def get_pfn(input_dim):
-    """Build the EnergyFlow PFN used for the original RECO study."""
+def recipe_config(name, steps_per_epoch):
+    config = dict(RECIPES[name])
+    config["warmup_steps"] = config["warmup_epochs"] * steps_per_epoch
+    config["decay_steps"] = config["decay_epochs"] * steps_per_epoch
+    config["jit_compile"] = False if config["explicit_compile"] else None
+    config["clipnorm"] = 0.0
+    return config
+
+
+def get_pfn(input_dim, recipe, steps_per_epoch):
+    """Build the requested standard EnergyFlow PFN recipe."""
+    config = recipe_config(recipe, steps_per_epoch)
+    if config["explicit_compile"]:
+        return build_pfn_energyflow(
+            input_dim=input_dim,
+            phi_sizes=PHI_SIZES,
+            f_sizes=F_SIZES,
+            jit_compile=False,
+            lr=config["learning_rate"],
+            warmup_steps=config["warmup_steps"],
+            decay_steps=config["decay_steps"],
+            min_lr=config["min_learning_rate"],
+            clipnorm=0.0,
+            f_dropouts=config["f_dropout"],
+        )
+
+    # Do not route the reproduction through the new optimizer builder:
+    # leaving EnergyFlow's original internal compile untouched is part of
+    # checking the Perlmutter setup on OSCAR.
     try:
         from energyflow.archs.efn import PFN
     except ImportError:
         from energyflow.archs import PFN
-    return PFN(input_dim=input_dim, Phi_sizes=(64, 64, 64),
-               F_sizes=(64, 64, 64))
+    return PFN(input_dim=input_dim, Phi_sizes=PHI_SIZES,
+               F_sizes=F_SIZES)
+
+
+def underlying_model(model):
+    """Return Keras model while preserving EnergyFlow's baseline wrapper."""
+    return getattr(model, "model", model)
 
 
 def git_provenance():
@@ -216,7 +283,10 @@ def main():
     result_dir = Path(args.outdir) / args.label
     result_dir.mkdir(parents=True, exist_ok=True)
     weights = result_dir / "best.weights.h5"
-    model = get_pfn(len(FEATURES))
+    steps_per_epoch = int(math.ceil(len(y_train) / args.batch_size))
+    training_config = recipe_config(args.recipe, steps_per_epoch)
+    print("recipe {}: {}".format(args.recipe, training_config))
+    model = get_pfn(len(FEATURES), args.recipe, steps_per_epoch)
     history = model.fit(
         x_train[train_order], one_hot(y_train[train_order]),
         validation_data=(x_val[val_order], one_hot(y_val[val_order])),
@@ -224,7 +294,7 @@ def main():
         callbacks=callbacks(weights, args.patience),
     )
     if weights.is_file():
-        model.model.load_weights(weights)
+        underlying_model(model).load_weights(weights)
 
     with open(result_dir / "history.csv", "w", newline="") as handle:
         keys = list(history.history)
@@ -248,8 +318,9 @@ def main():
         "class_b": args.class_b,
         "n_files": N_FILES,
         "features": list(FEATURES),
-        "architecture": {"Phi": [64, 64, 64], "F": [64, 64, 64],
-                         "aggregation": "sum"},
+        "architecture": {"Phi": list(PHI_SIZES), "F": list(F_SIZES),
+                         "aggregation": "sum",
+                         "F_dropout": training_config["f_dropout"]},
         "implementation": {
             "class": "energyflow.archs.PFN",
             "energyflow": __import__("energyflow").__version__,
@@ -257,10 +328,21 @@ def main():
         },
         "code": git_provenance(),
         "training": {
+            "recipe": args.recipe,
             "epochs_requested": args.epochs,
             "batch_size": args.batch_size,
             "patience": args.patience,
             "early_stopping_monitor": "val_loss",
+            "optimizer": "Adam",
+            "learning_rate": training_config["learning_rate"],
+            "warmup_epochs": training_config["warmup_epochs"],
+            "warmup_steps": training_config["warmup_steps"],
+            "decay": ("cosine" if training_config["decay_steps"] else "none"),
+            "decay_epochs": training_config["decay_epochs"],
+            "decay_steps": training_config["decay_steps"],
+            "min_learning_rate": training_config["min_learning_rate"],
+            "clipnorm": training_config["clipnorm"],
+            "jit_compile": training_config["jit_compile"],
         },
         "seed": TRAINING_SEED,
         "epochs_run": len(history.history["loss"]),
