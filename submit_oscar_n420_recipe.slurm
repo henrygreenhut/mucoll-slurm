@@ -14,6 +14,9 @@
 # Usage:
 #   sbatch submit_oscar_n420_recipe.slurm \
 #       {scaled|raw} {1e-4|3e-4} MODEL_SEED [main|null] [train|smoke]
+# Set RUN_TAG for a clean repeat with identical seeds/configuration:
+#   sbatch --export=ALL,RUN_TAG=repro1 submit_oscar_n420_recipe.slurm \
+#       scaled 1e-4 1 main
 # Backward-compatible:
 #   sbatch -p gpu-debug -t 00:15:00 submit_oscar_n420_recipe.slurm \
 #       scaled 1e-4 1 smoke
@@ -71,6 +74,12 @@ done
 LR_LABEL=${LR/./p}
 LABEL="n420_recipe_bs4_expanded_${VARIANT}_lr${LR_LABEL}_mseed${MODEL_SEED}"
 [ "$RUN" = null ] && LABEL="${LABEL}_null"
+RUN_TAG=${RUN_TAG:-}
+if [[ "$RUN_TAG" =~ [^A-Za-z0-9_-] ]]; then
+    echo "RUN_TAG may contain only letters, numbers, underscores, and hyphens"
+    exit 2
+fi
+[ -n "$RUN_TAG" ] && LABEL="${LABEL}_${RUN_TAG}"
 LABEL="${LABEL}_pointonly"
 COMMON_ARGS=(
     --label "$LABEL"
@@ -120,6 +129,6 @@ else
     )
 fi
 
-echo "label=$LABEL variant=$VARIANT lr=$LR run=$RUN data_seed=1701 model_seed=$MODEL_SEED mode=$MODE"
+echo "label=$LABEL variant=$VARIANT lr=$LR run=$RUN tag=${RUN_TAG:-none} data_seed=1701 model_seed=$MODEL_SEED mode=$MODE"
 apptainer exec --nv "$NGC_TENSORFLOW_CONTAINER" \
     python -u pfn_libtest_train.py "${COMMON_ARGS[@]}" "${RUN_ARGS[@]}"

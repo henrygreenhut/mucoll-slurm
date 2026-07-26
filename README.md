@@ -88,6 +88,14 @@ restored strictly. Production training reports the AUC on overlapping
 held-out events. Paired source-cycle uncertainty is run separately only when
 needed.
 
+To repeat a completed configuration from scratch with the same data and model
+seeds, give it a new immutable result label with `RUN_TAG`:
+
+```bash
+sbatch --export=ALL,RUN_TAG=repro1 \
+  submit_oscar_n420_recipe.slurm scaled 1e-4 1 main
+```
+
 ## 2. Variable reuse generated on the fly
 
 Build one compact bank from the split-by-mother, unrotated GEN library:
