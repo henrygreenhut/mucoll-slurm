@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J k10_k42
+#SBATCH -J variable_reuse
 #SBATCH -p gpu
 #SBATCH --gres=gpu:1
 #SBATCH -C l40s
@@ -8,30 +8,37 @@
 #SBATCH --mem=56g
 #SBATCH -t 24:00:00
 #SBATCH --exclude=gpu3005
-#SBATCH -o variable_k10_k42_%j.out
-#SBATCH -e variable_k10_k42_%j.err
+#SBATCH -o variable_reuse_%j.out
+#SBATCH -e variable_reuse_%j.err
 
 # Usage:
-#   sbatch submit_oscar_variable_k10_k42.slurm {main|null} [train|smoke]
+#   sbatch submit_oscar_variable_reuse.slurm \
+#       {1v10|10v42} {main|null} [train|smoke]
 
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
-if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
-    echo "usage: $0 {main|null} [train|smoke]"
+if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
+    echo "usage: $0 {1v10|10v42} {main|null} [train|smoke]"
     exit 2
 fi
-RUN=$1
-MODE=${2:-train}
+COMPARISON=$1
+RUN=$2
+MODE=${3:-train}
+case "$COMPARISON" in
+    1v10) K0=1; K1=10 ;;
+    10v42) K0=10; K1=42 ;;
+    *) echo "first argument must be 1v10 or 10v42"; exit 2 ;;
+esac
 case "$RUN" in
     main) NULL_ARG= ;;
     null) NULL_ARG=--null-test ;;
-    *) echo "first argument must be main or null"; exit 2 ;;
+    *) echo "second argument must be main or null"; exit 2 ;;
 esac
 case "$MODE" in
     train) SMOKE_ARG= ;;
     smoke) SMOKE_ARG=--smoke ;;
-    *) echo "second argument must be train or smoke"; exit 2 ;;
+    *) echo "third argument must be train or smoke"; exit 2 ;;
 esac
 
 module load ngc-tensorflow-container/25.02-tf2-py3-j4zj
@@ -42,16 +49,16 @@ if [ ! -f "$MOTHER_STORE" ]; then
     exit 1
 fi
 
-LABEL="n420_k10_vs_k42_scaled_lr1e-4_mseed1"
+LABEL="n420_k${K0}_vs_k${K1}_scaled_lr1e-4_mseed1"
 [ "$RUN" = null ] && LABEL="${LABEL}_null"
 [ "$MODE" = smoke ] && LABEL="${LABEL}_smoke"
 
-echo "label=$LABEL run=$RUN mode=$MODE"
+echo "label=$LABEL comparison=$COMPARISON run=$RUN mode=$MODE"
 apptainer exec --nv "$NGC_TENSORFLOW_CONTAINER" \
     python -u pfn_variable_reuse_train.py \
         --mother-store "$MOTHER_STORE" \
         --label "$LABEL" \
-        --reuse-k 10 42 \
+        --reuse-k "$K0" "$K1" \
         --model-seed 1 \
         --max-minutes 1400 \
         $NULL_ARG \

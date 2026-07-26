@@ -111,22 +111,25 @@ angles for each, and concatenates their particles. A rotation by angle
 `alpha` applies the same two-dimensional rotation to `(px,py)` and `(vx,vy)`;
 `pz`, energy, time, `vz`, and PDG ID are unchanged.
 
-The current binary study compares 10x with 42x reuse at the N=420 event
-scale. Both classes contain 29,400 mother-equivalents: k=10 samples 2,940
-distinct mothers and k=42 samples 700. The selected recipe is the official
-EnergyFlow scaled-sum network, expanded GEN features, balanced batches of
-four, peak learning rate `1e-4`, one-epoch warmup, and cosine decay.
+The current binary studies compare 1x with 10x and 10x with 42x reuse at the
+N=420 event scale. Every class contains 29,400 mother-equivalents: k=1
+samples 29,400 distinct mothers, k=10 samples 2,940, and k=42 samples 700.
+The selected recipe is the official EnergyFlow scaled-sum network, expanded
+GEN features, balanced batches of four, peak learning rate `1e-4`, one-epoch
+warmup, and cosine decay.
 
 ```bash
-sbatch submit_oscar_variable_k10_k42.slurm main
-sbatch submit_oscar_variable_k10_k42.slurm null
+sbatch submit_oscar_variable_reuse.slurm 1v10 main
+sbatch submit_oscar_variable_reuse.slurm 1v10 null
+sbatch submit_oscar_variable_reuse.slurm 10v42 main
+sbatch submit_oscar_variable_reuse.slurm 10v42 null
 ```
 
-The null permutes labels over the same sampled k=10 and k=42 units, removing
-the association between reuse factor and target while preserving the full
-input construction. Both evaluations use overlapping pseudo-events from the
-held-out source-cycle pool and report a point AUC; cycle-level uncertainty is
-run separately if needed.
+Each null permutes labels over the same sampled units as its corresponding
+main comparison, removing the association between reuse factor and target
+while preserving the full input construction. Evaluations use overlapping
+pseudo-events from the held-out source-cycle pool and report a point AUC;
+cycle-level uncertainty is run separately if needed.
 
 ## 3. N=420 reconstructed-PFO study
 
