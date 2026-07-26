@@ -179,9 +179,11 @@ python3 submit_reco_libtest_packed.py
 
 Rerun that command after a timeout until it reports that nothing remains.
 Then build the nine PFO stores and train one main comparison followed by one
-null on a single shared-QOS GPU, both with the fixed, predeclared seed 12345:
+null on one L40S GPU, both with the fixed, predeclared seed 12345. Create the
+two pinned OSCAR environments once before submitting either stage:
 
 ```bash
+./setup_oscar_reco_envs.sh
 sbatch submit_reco_libtest_stores.slurm
 sbatch submit_reco_libtest_train.slurm
 ```
