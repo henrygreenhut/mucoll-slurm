@@ -50,6 +50,14 @@ def main():
     repo = Path(__file__).resolve().parent
     pools = Path(args.pools).resolve()
     outdir = Path(args.outdir).resolve()
+    oscar_scratch = Path("/oscar/scratch") / os.environ.get("USER", "")
+    try:
+        outdir.relative_to(oscar_scratch)
+    except ValueError:
+        raise SystemExit(
+            "refusing output outside OSCAR user scratch {}: {}"
+            .format(oscar_scratch, outdir)
+        )
     logs = repo / "logs"
     logs.mkdir(exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
