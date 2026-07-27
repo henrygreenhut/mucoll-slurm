@@ -162,6 +162,18 @@ The dataset contains 2,000 train, 400 validation, and 800 test events per
 class. Source cycles are deterministically shuffled with seed 12345 before the
 60/15/25 train/validation/test split.
 
+The MAIA Pandora configuration must pass the reconstructed tracks into PFA:
+
+```python
+TrackCollections = ["SiTracks"]
+RelTrackCollections = ["MergedTrackerHitsRelations"]
+```
+
+If these are empty, Pandora still produces neutral cluster-based PFOs, but
+charged PFOs and PFO-to-track links are absent. Such output is not equivalent
+to the intended RECO configuration and must not be used for the final PFN
+comparison.
+
 Prepare immutable source pools:
 
 ```bash
@@ -201,6 +213,20 @@ present. The trainer imports the standard `energyflow.archs.PFN`; do not replace
 it with the local GEN builder under an existing result label. `summary.json`
 records the fixed seed, EnergyFlow and TensorFlow versions, and one held-out
 test AUC. Test events may share sources and are therefore correlated.
+
+The extended stores also retain selected `SiTracks` (mapped to their
+`AllTracks` IP states), `PandoraClusters`, and the number of PFO-to-track
+links. Plot the complete U and R samples, combining the train, validation, and
+test partitions only for these descriptive distributions:
+
+```bash
+sbatch submit_reco_distributions.slurm
+```
+
+This writes the U-versus-R and matched-null PFO, track, and cluster
+distributions, a numerical summary, and descriptive whole-sample
+single-observable AUCs to
+`plots/reco_n420_whole_distributions/`.
 
 After the unchanged baseline, two fixed optimizer studies reuse the same
 stores, source split, features, architecture, batch size, and seed. Both use

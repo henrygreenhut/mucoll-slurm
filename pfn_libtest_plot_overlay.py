@@ -3,7 +3,8 @@
 
 Unlike pfn_libtest_compare.py (multi-run, loss OR AUC per panel), this is
 for showing one run's training and validation loss together on one axis --
-built for the raw-sum / scaled-sum + warmup writeup plots.
+built for the raw-sum / scaled-sum + warmup writeup plots. It accepts both
+the shared GEN training-engine history schema and the Keras RECO schema.
 
     python pfn_libtest_plot_overlay.py \
         pfn_results/oscar_n420_halfphi_raw_seed1_w1_c0 \
@@ -42,7 +43,8 @@ def load_history(rundir):
     with open(os.path.join(rundir, "history.csv")) as f:
         for row in csv.DictReader(f):
             epochs.append(int(row["epoch"]))
-            train_loss.append(float(row["train_loss"]))
+            train_loss.append(float(
+                row["train_loss"] if "train_loss" in row else row["loss"]))
             val_loss.append(float(row["val_loss"]))
     order = np.argsort(epochs)
     return (np.asarray(epochs)[order], np.asarray(train_loss)[order],
@@ -50,27 +52,40 @@ def load_history(rundir):
 
 
 def load_test_auc(rundir):
-    path = os.path.join(rundir, "point_summary.json")
-    if not os.path.isfile(path):
-        return None
-    with open(path) as f:
-        return json.load(f)["auc"]
+    for name in ("point_summary.json", "summary.json", "auc_summary.json"):
+        path = os.path.join(rundir, name)
+        if not os.path.isfile(path):
+            continue
+        with open(path) as f:
+            payload = json.load(f)
+        if name == "point_summary.json":
+            auc = payload.get("auc")
+        elif name == "auc_summary.json":
+            auc = payload.get("test_auc", payload.get("auc"))
+        else:
+            auc = payload.get("test_auc", payload.get("auc"))
+            if auc is None:
+                auc = payload.get("results", {}).get("test", {}).get("auc")
+        if auc is not None:
+            return float(auc)
+    return None
 
 
-def load_best_epoch(rundir):
+def load_best_epoch(rundir, epochs, val_loss):
     # state["best_epoch"] is authoritative regardless of --select-metric
     # (auc or loss) -- it's whichever epoch's weights actually got saved to
     # best.weights.h5 and reloaded for the point/bootstrap test evaluation.
     path = os.path.join(rundir, "state.json")
-    with open(path) as f:
-        return json.load(f)["best_epoch"]
+    if os.path.isfile(path):
+        with open(path) as f:
+            return int(json.load(f)["best_epoch"])
+    return int(epochs[np.argmin(val_loss)])
 
 
-def main():
-    args = parse_args()
-    epochs, train_loss, val_loss = load_history(args.rundir)
-    test_auc = load_test_auc(args.rundir)
-    best_epoch = load_best_epoch(args.rundir)
+def make_plot(rundir, title, output):
+    epochs, train_loss, val_loss = load_history(rundir)
+    test_auc = load_test_auc(rundir)
+    best_epoch = load_best_epoch(rundir, epochs, val_loss)
 
     plt.rcParams["font.family"] = "serif"
     fig, ax = plt.subplots(figsize=(4.8, 3.6))
@@ -112,10 +127,17 @@ def main():
         labels.append(f"test AUC = {test_auc:.3f}")
     ax.legend(handles, labels, frameon=False, fontsize=9)
 
-    ax.set_title(args.title, fontsize=11)
+    ax.set_title(title, fontsize=11)
     fig.tight_layout()
-    fig.savefig(args.out, bbox_inches="tight")
-    print(f"chart -> {args.out}")
+    os.makedirs(os.path.dirname(os.path.abspath(output)), exist_ok=True)
+    fig.savefig(output, bbox_inches="tight")
+    plt.close(fig)
+    print(f"chart -> {output}")
+
+
+def main():
+    args = parse_args()
+    make_plot(args.rundir, args.title, args.out)
 
 
 if __name__ == "__main__":

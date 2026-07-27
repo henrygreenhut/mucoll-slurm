@@ -2,3 +2,4 @@ numpy==1.26.4
 h5py==3.11.0
 awkward==2.6.5
 uproot==5.3.7
+matplotlib==3.8.4

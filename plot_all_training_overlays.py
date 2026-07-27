@@ -1,0 +1,106 @@
+#!/usr/bin/env python3
+"""Make presentation-style loss overlays for completed production studies."""
+
+import csv
+from pathlib import Path
+
+from pfn_libtest_plot_overlay import load_test_auc, make_plot
+
+
+RUNS = (
+    # N=420 architecture development.
+    ("pfn_results/oscar_n420_halfphi_raw_seed1",
+     "GEN N=420 — raw sum, fixed LR",
+     "gen_n420_development/gen_n420_raw_fixed_lr.pdf"),
+    ("pfn_results/oscar_n420_halfphi_raw_seed1_w1_c0",
+     "GEN N=420 — raw sum with warmup",
+     "gen_n420_development/gen_n420_raw_warmup.pdf"),
+    ("pfn_results/oscar_n420_halfphi_scaled_seed1",
+     "GEN N=420 — scaled sum, fixed LR",
+     "gen_n420_development/gen_n420_scaled_fixed_lr.pdf"),
+    ("pfn_results/oscar_n420_halfphi_scaled_seed1_w1_c0",
+     "GEN N=420 — scaled sum with warmup",
+     "gen_n420_development/gen_n420_scaled_warmup.pdf"),
+
+    # Final N=420 architecture and reproducibility studies.
+    ("pfn_results/n420_recipe_bs4_expanded_scaled_lr1e-4_mseed1_pointonly",
+     "GEN N=420 — scaled sum, LR $10^{-4}$",
+     "gen_n420_recipe/gen_n420_scaled_lr1e-4.pdf"),
+    ("pfn_results/n420_recipe_bs4_expanded_scaled_lr1e-4_mseed1_repro1_pointonly",
+     "GEN N=420 — scaled sum, independent repeat",
+     "gen_n420_recipe/gen_n420_scaled_lr1e-4_repeat.pdf"),
+    ("pfn_results/n420_recipe_bs4_expanded_scaled_lr3e-4_mseed1_pointonly",
+     "GEN N=420 — scaled sum, LR $3\\times10^{-4}$",
+     "gen_n420_recipe/gen_n420_scaled_lr3e-4.pdf"),
+    ("pfn_results/n420_recipe_bs4_expanded_raw_lr1e-4_mseed1_pointonly",
+     "GEN N=420 — raw sum, LR $10^{-4}$",
+     "gen_n420_recipe/gen_n420_raw_lr1e-4.pdf"),
+    ("pfn_results/n420_recipe_bs4_expanded_scaled_lr1e-4_mseed1_null_pointonly",
+     "GEN N=420 — scaled-sum null",
+     "gen_n420_recipe/gen_n420_scaled_lr1e-4_null.pdf"),
+
+    # Synthetic mother-level reuse scan.
+    ("variable_k_results/n420_k1_vs_k10_scaled_lr1e-4_mseed1",
+     "GEN N=420 — 1× versus 10× reuse",
+     "gen_variable_k/gen_n420_k1_vs_k10.pdf"),
+    ("variable_k_results/n420_k10_vs_k42_scaled_lr1e-4_mseed1",
+     "GEN N=420 — 10× versus 42× reuse",
+     "gen_variable_k/gen_n420_k10_vs_k42.pdf"),
+    ("variable_k_results/n420_k10_vs_k42_scaled_lr1e-4_mseed1_null",
+     "GEN N=420 — 10× versus 42× null",
+     "gen_variable_k/gen_n420_k10_vs_k42_null.pdf"),
+    ("variable_k_results/n420_k1_vs_k10_scaled_lr1e-4_mseed1_null",
+     "GEN N=420 — 1× versus 10× null",
+     "gen_variable_k/gen_n420_k1_vs_k10_null.pdf"),
+    ("variable_k_results/n420_k1_vs_k5_scaled_lr1e-4_mseed1",
+     "GEN N=420 — 1× versus 5× reuse",
+     "gen_variable_k/gen_n420_k1_vs_k5.pdf"),
+    ("variable_k_results/n420_k1_vs_k5_scaled_lr1e-4_mseed1_null",
+     "GEN N=420 — 1× versus 5× null",
+     "gen_variable_k/gen_n420_k1_vs_k5_null.pdf"),
+    ("variable_k_results/n420_k5_vs_k10_scaled_lr1e-4_mseed1",
+     "GEN N=420 — 5× versus 10× reuse",
+     "gen_variable_k/gen_n420_k5_vs_k10.pdf"),
+    ("variable_k_results/n420_k5_vs_k10_scaled_lr1e-4_mseed1_null",
+     "GEN N=420 — 5× versus 10× null",
+     "gen_variable_k/gen_n420_k5_vs_k10_null.pdf"),
+
+    # Reconstructed-PFO study.
+    ("reco_pfn_results/reco_n420_simple_U_vs_R",
+     "RECO N=420 — baseline PFN", "reco_n420/reco_n420_baseline.pdf"),
+    ("reco_pfn_results/reco_n420_simple_null",
+     "RECO N=420 — baseline null", "reco_n420/reco_n420_baseline_null.pdf"),
+    ("reco_pfn_results/reco_n420_stabilized_U_vs_R",
+     "RECO N=420 — stabilized PFN", "reco_n420/reco_n420_stabilized.pdf"),
+    ("reco_pfn_results/reco_n420_stabilized_null",
+     "RECO N=420 — stabilized null", "reco_n420/reco_n420_stabilized_null.pdf"),
+    ("reco_pfn_results/reco_n420_stabilized_dropout_U_vs_R",
+     "RECO N=420 — stabilized PFN with dropout",
+     "reco_n420/reco_n420_stabilized_dropout.pdf"),
+    ("reco_pfn_results/reco_n420_stabilized_dropout_null",
+     "RECO N=420 — stabilized dropout null",
+     "reco_n420/reco_n420_stabilized_dropout_null.pdf"),
+)
+
+
+def main():
+    output_root = Path("plots/training_overlays")
+    made = 0
+    for rundir, title, relative_output in RUNS:
+        path = Path(rundir)
+        history = path / "history.csv"
+        if not history.is_file() or load_test_auc(path) is None:
+            print("skip incomplete -> {}".format(path))
+            continue
+        with history.open() as handle:
+            columns = next(csv.reader(handle))
+        if "val_loss" not in columns:
+            print("skip: validation loss was not recorded -> {}".format(path))
+            continue
+        make_plot(path, title, output_root / relative_output)
+        made += 1
+    print("{} completed overlays -> {}".format(made, output_root))
+
+
+if __name__ == "__main__":
+    main()
