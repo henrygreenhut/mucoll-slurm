@@ -121,9 +121,9 @@ angles for each, and concatenates their particles. A rotation by angle
 `alpha` applies the same two-dimensional rotation to `(px,py)` and `(vx,vy)`;
 `pz`, energy, time, `vz`, and PDG ID are unchanged.
 
-The current binary studies compare 1x with 10x and 10x with 42x reuse at the
-N=420 event scale. Every class contains 29,400 mother-equivalents: k=1
-samples 29,400 distinct mothers, k=10 samples 2,940, and k=42 samples 700.
+The current binary studies compare adjacent reuse regimes at the N=420 event
+scale. Every class contains 29,400 mother-equivalents: k=1 samples 29,400
+distinct mothers, k=5 samples 5,880, k=10 samples 2,940, and k=42 samples 700.
 The selected recipe is the official EnergyFlow scaled-sum network, expanded
 GEN features, balanced batches of four, peak learning rate `1e-4`, one-epoch
 warmup, and cosine decay. This entry point supplies only mother-level event
@@ -132,6 +132,10 @@ early stopping, and history are executed by the same `pfn_training_engine.py`
 used by the existing norm1-versus-norm42 trainer.
 
 ```bash
+sbatch submit_oscar_variable_reuse.slurm 1v5 main
+sbatch submit_oscar_variable_reuse.slurm 1v5 null
+sbatch submit_oscar_variable_reuse.slurm 5v10 main
+sbatch submit_oscar_variable_reuse.slurm 5v10 null
 sbatch submit_oscar_variable_reuse.slurm 1v10 main
 sbatch submit_oscar_variable_reuse.slurm 1v10 null
 sbatch submit_oscar_variable_reuse.slurm 10v42 main

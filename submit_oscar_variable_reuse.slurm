@@ -13,22 +13,24 @@
 
 # Usage:
 #   sbatch submit_oscar_variable_reuse.slurm \
-#       {1v10|10v42} {main|null} [train|smoke]
+#       {1v5|5v10|1v10|10v42} {main|null} [train|smoke]
 
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
 if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
-    echo "usage: $0 {1v10|10v42} {main|null} [train|smoke]"
+    echo "usage: $0 {1v5|5v10|1v10|10v42} {main|null} [train|smoke]"
     exit 2
 fi
 COMPARISON=$1
 RUN=$2
 MODE=${3:-train}
 case "$COMPARISON" in
+    1v5) K0=1; K1=5 ;;
+    5v10) K0=5; K1=10 ;;
     1v10) K0=1; K1=10 ;;
     10v42) K0=10; K1=42 ;;
-    *) echo "first argument must be 1v10 or 10v42"; exit 2 ;;
+    *) echo "first argument must be 1v5, 5v10, 1v10, or 10v42"; exit 2 ;;
 esac
 case "$RUN" in
     main) NULL_ARG= ;;
