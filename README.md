@@ -236,7 +236,9 @@ sbatch submit_reco_distributions.slurm
 This writes the U-versus-R and matched-null PFO, track, and cluster
 distributions, a numerical summary, and descriptive whole-sample
 single-observable AUCs to
-`plots/reco_n420_whole_distributions/`.
+`plots/reco_n420_directlog_whole_distributions/`. The PFO object plots use
+the exact nine direct-log inputs consumed by the PFN; the pre-existing
+distribution directories are not overwritten.
 
 After the unchanged baseline, two fixed optimizer studies reuse the same
 stores, source split, features, architecture, batch size, and seed. Both use

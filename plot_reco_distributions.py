@@ -12,13 +12,12 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
+from reco_libtest_features import FEATURES, RAW_FEATURES, pfn_features
 
 N_FILES = 420
 SAMPLES = ("U", "R", "null_b")
 SPLITS = ("train", "val", "test")
-PFO_FEATURES = (
-    "pt", "eta", "phi", "energy", "mass", "charge", "pdg", "px", "py", "pz",
-)
+PFO_FEATURES = RAW_FEATURES
 TRACK_FEATURES = (
     "pt", "eta", "phi", "d0", "z0", "chi2_ndf", "n_holes", "omega",
     "tan_lambda",
@@ -44,7 +43,7 @@ def parse_args():
         help="directory containing the nine extended N=420 RECO stores",
     )
     parser.add_argument(
-        "--outdir", default="plots/reco_n420_whole_distributions",
+        "--outdir", default="plots/reco_n420_directlog_whole_distributions",
         help="output directory",
     )
     return parser.parse_args()
@@ -118,6 +117,9 @@ def extract_store(path):
     neutral = pfo_mask & (~charged) & (~photon)
     track_pt = tracks[:, :, track["pt"]]
     cluster_energy = clusters[:, :, cluster["energy"]]
+    transformed_pfos = pfn_features(pfos)
+    transformed = {name: i for i, name in enumerate(FEATURES)}
+    pfn_mask = pfo_mask & (pfo_pt > 0)
 
     events = {
         "n_pfos": n_pfos.astype(np.float64),
@@ -143,10 +145,31 @@ def extract_store(path):
         "leading_cluster_energy": event_max(cluster_energy, cluster_mask),
     }
     objects = {
-        "pfo_pt": pfos[:, :, pfo["pt"]][pfo_mask],
-        "pfo_energy": pfos[:, :, pfo["energy"]][pfo_mask],
-        "pfo_eta": pfos[:, :, pfo["eta"]][pfo_mask],
-        "pfo_phi": pfos[:, :, pfo["phi"]][pfo_mask],
+        "pfo_log_pt": transformed_pfos[
+            :, :, transformed["log_pt"]
+        ][pfn_mask],
+        "pfo_eta": transformed_pfos[:, :, transformed["eta"]][pfn_mask],
+        "pfo_sin_phi": transformed_pfos[
+            :, :, transformed["sin_phi"]
+        ][pfn_mask],
+        "pfo_cos_phi": transformed_pfos[
+            :, :, transformed["cos_phi"]
+        ][pfn_mask],
+        "pfo_log_energy": transformed_pfos[
+            :, :, transformed["log_energy"]
+        ][pfn_mask],
+        "pfo_charge": transformed_pfos[
+            :, :, transformed["charge"]
+        ][pfn_mask],
+        "pfo_is_charged": transformed_pfos[
+            :, :, transformed["is_charged"]
+        ][pfn_mask],
+        "pfo_is_photon": transformed_pfos[
+            :, :, transformed["is_photon"]
+        ][pfn_mask],
+        "pfo_is_neutral": transformed_pfos[
+            :, :, transformed["is_neutral"]
+        ][pfn_mask],
         "track_pt": tracks[:, :, track["pt"]][track_mask],
         "track_eta": tracks[:, :, track["eta"]][track_mask],
         "track_phi": tracks[:, :, track["phi"]][track_mask],
@@ -195,8 +218,11 @@ def signed_log10_one_plus(values):
 
 def histogram_bins(arrays, integer, bins=50):
     if integer:
+        lowest = min(
+            (int(np.floor(np.min(x))) for x in arrays if len(x)), default=0
+        )
         highest = max((int(np.max(x)) for x in arrays if len(x)), default=1)
-        return np.arange(-0.5, highest + 1.5, 1.0)
+        return np.arange(lowest - 0.5, highest + 1.5, 1.0)
     merged = np.concatenate([finite(x) for x in arrays if len(finite(x))])
     if not len(merged):
         return np.linspace(0.0, 1.0, bins + 1)
@@ -364,39 +390,63 @@ def main():
         ),
     }
     object_plots = {
-        "pfo_pt": ("pfo_pt", r"$\log_{10}(1+p_T/\mathrm{GeV})$",
-                   False, log10_one_plus),
-        "pfo_energy": ("pfo_energy", r"$\log_{10}(1+E/\mathrm{GeV})$",
-                       False, log10_one_plus),
-        "pfo_eta": ("pfo_eta", r"PFO $\eta$", False, None),
-        "pfo_phi": ("pfo_phi", r"PFO $\phi$", False, None),
+        "pfo_log_pt": (
+            "pfo_log_pt", r"$\ln(p_T/\mathrm{GeV})$", False, None, False,
+        ),
+        "pfo_eta": ("pfo_eta", r"PFO $\eta$", False, None, False),
+        "pfo_sin_phi": (
+            "pfo_sin_phi", r"PFO $\sin\phi$", False, None, False,
+        ),
+        "pfo_cos_phi": (
+            "pfo_cos_phi", r"PFO $\cos\phi$", False, None, False,
+        ),
+        "pfo_log_energy": (
+            "pfo_log_energy", r"$\ln(E/\mathrm{GeV})$", False, None, False,
+        ),
+        "pfo_charge": (
+            "pfo_charge", r"PFO charge$/e$", True, None, False,
+        ),
+        "pfo_is_charged": (
+            "pfo_is_charged", "PFO charged indicator", True, None, False,
+        ),
+        "pfo_is_photon": (
+            "pfo_is_photon", "PFO photon indicator", True, None, False,
+        ),
+        "pfo_is_neutral": (
+            "pfo_is_neutral", "PFO neutral indicator", True, None, False,
+        ),
         "track_pt": ("track_pt", r"$\log_{10}(1+p_T/\mathrm{GeV})$",
-                     False, log10_one_plus),
-        "track_eta": ("track_eta", r"Track $\eta$", False, None),
-        "track_phi": ("track_phi", r"Track $\phi$", False, None),
+                     False, log10_one_plus, False),
+        "track_eta": ("track_eta", r"Track $\eta$", False, None, False),
+        "track_phi": ("track_phi", r"Track $\phi$", False, None, False),
         "track_d0": (
             "track_d0", r"$\mathrm{sign}(d_0)\log_{10}(1+|d_0|/\mathrm{mm})$",
-            False, signed_log10_one_plus,
+            False, signed_log10_one_plus, False,
         ),
         "track_z0": (
             "track_z0", r"$\mathrm{sign}(z_0)\log_{10}(1+|z_0|/\mathrm{mm})$",
-            False, signed_log10_one_plus,
+            False, signed_log10_one_plus, False,
         ),
         "track_chi2_ndf": (
             "track_chi2_ndf", r"$\log_{10}(1+\chi^2/\mathrm{ndf})$",
-            False, log10_one_plus,
+            False, log10_one_plus, False,
         ),
         "track_n_holes": (
-            "track_n_holes", "Track holes", True, None,
+            "track_n_holes", "Track holes", True, None, True,
         ),
         "cluster_energy": (
             "cluster_energy", r"$\log_{10}(1+E/\mathrm{GeV})$",
-            False, log10_one_plus,
+            False, log10_one_plus, False,
         ),
-        "cluster_eta": ("cluster_eta", r"Cluster $\eta$", False, None),
-        "cluster_phi": ("cluster_phi", r"Cluster $\phi$", False, None),
+        "cluster_eta": (
+            "cluster_eta", r"Cluster $\eta$", False, None, False,
+        ),
+        "cluster_phi": (
+            "cluster_phi", r"Cluster $\phi$", False, None, False,
+        ),
         "cluster_n_hits": (
-            "cluster_n_hits", "Calorimeter hits per cluster", True, None,
+            "cluster_n_hits", "Calorimeter hits per cluster",
+            True, None, True,
         ),
     }
 
@@ -411,11 +461,13 @@ def main():
                 data, samples, "events", key, directory / (name + ".pdf"),
                 xlabel, integer=integer, transform=transform, log_y=log_y,
             )
-        for name, (key, xlabel, integer, transform) in object_plots.items():
+        for name, (
+            key, xlabel, integer, transform, log_y
+        ) in object_plots.items():
             plot_distribution(
                 data, samples, "objects", key, directory / (name + ".pdf"),
                 xlabel, integer=integer, transform=transform,
-                log_y=integer,
+                log_y=log_y,
             )
 
     write_summary(data, outdir / "reco_summary.csv")
