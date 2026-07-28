@@ -102,6 +102,19 @@ RUNS = (
     ("reco_pfn_results/reco_n420_directlog_stabilized_dropout_null",
      "RECO N=420 — direct-log stabilized dropout null",
      "reco_n420_directlog/reco_n420_directlog_stabilized_dropout_null.pdf"),
+
+    # Track-fixed direct-log results are scientifically distinct from the
+    # legacy direct-log models above, which used the old simple stores.
+    ("reco_pfn_results/"
+     "reco_n420_trackfix_directlog_stabilized_dropout_U_vs_R",
+     "RECO N=420 — track-fixed stabilized PFN with dropout",
+     "reco_n420_trackfix_directlog/"
+     "reco_n420_trackfix_directlog_stabilized_dropout.pdf"),
+    ("reco_pfn_results/"
+     "reco_n420_trackfix_directlog_stabilized_dropout_null",
+     "RECO N=420 — track-fixed stabilized dropout null",
+     "reco_n420_trackfix_directlog/"
+     "reco_n420_trackfix_directlog_stabilized_dropout_null.pdf"),
 )
 
 

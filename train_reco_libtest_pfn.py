@@ -3,10 +3,14 @@
 
 import argparse
 import csv
+import hashlib
 import json
 import math
 import os
+import socket
 import subprocess
+import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import h5py
@@ -68,6 +72,21 @@ def parse_args():
     parser.add_argument("--class-a", required=True)
     parser.add_argument("--class-b", required=True)
     parser.add_argument("--label", required=True)
+    parser.add_argument(
+        "--dataset-tag",
+        required=True,
+        help="short identity that must also occur in --label, e.g. trackfix",
+    )
+    parser.add_argument(
+        "--require-clean-code",
+        action="store_true",
+        help="refuse training when tracked git files differ from HEAD",
+    )
+    parser.add_argument(
+        "--require-pfo-track-links",
+        action="store_true",
+        help="require every input store to contain linked charged PFOs",
+    )
     parser.add_argument("--outdir", default="reco_pfn_results")
     parser.add_argument("--epochs", type=int, default=150)
     parser.add_argument("--batch-size", type=int, default=32)
@@ -172,17 +191,158 @@ def underlying_model(model):
     return getattr(model, "model", model)
 
 
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def utc_now():
+    return datetime.now(timezone.utc).isoformat()
+
+
 def git_provenance():
-    """Return the checked-out revision and whether tracked code is modified."""
+    """Return the exact tracked-code state used by the process."""
     try:
         commit = subprocess.check_output(
             ["git", "rev-parse", "HEAD"], text=True).strip()
-        dirty = bool(subprocess.check_output(
+        status = subprocess.check_output(
             ["git", "status", "--short", "--untracked-files=no"],
-            text=True).strip())
-        return {"commit": commit, "dirty": dirty}
+            text=True,
+        ).strip()
+        diff = subprocess.check_output(["git", "diff", "--binary", "HEAD"])
+        return {
+            "commit": commit,
+            "dirty": bool(status),
+            "tracked_changes": status.splitlines(),
+            "tracked_diff_sha256": hashlib.sha256(diff).hexdigest(),
+        }
     except (OSError, subprocess.CalledProcessError):
-        return {"commit": None, "dirty": None}
+        return {
+            "commit": None,
+            "dirty": None,
+            "tracked_changes": None,
+            "tracked_diff_sha256": None,
+        }
+
+
+def runtime_provenance():
+    keys = (
+        "SLURM_JOB_ID",
+        "SLURM_JOB_NAME",
+        "SLURM_CLUSTER_NAME",
+        "SLURM_JOB_NODELIST",
+        "CUDA_VISIBLE_DEVICES",
+    )
+    return {
+        "started_utc": utc_now(),
+        "hostname": socket.gethostname(),
+        "command": [sys.executable] + sys.argv,
+        "slurm": {key: os.environ.get(key) for key in keys},
+    }
+
+
+def json_attr(value):
+    if isinstance(value, bytes):
+        return value.decode()
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, np.generic):
+        return value.item()
+    return value
+
+
+def store_provenance(path):
+    """Fingerprint one immutable HDF5 input and its reconstruction content."""
+    path = Path(path).resolve()
+    with h5py.File(path, "r") as h5:
+        source_files = sorted({
+            item.decode() if isinstance(item, bytes) else str(item)
+            for item in h5["source_file"][:]
+        })
+        source_digest = hashlib.sha256(
+            "\n".join(source_files).encode()
+        ).hexdigest()
+        statistics = {}
+        for name in (
+            "n_particles",
+            "n_tracks",
+            "n_clusters",
+            "pfo_track_links",
+        ):
+            if name in h5:
+                values = h5[name][:]
+                statistics[name] = {
+                    "total": int(np.sum(values)),
+                    "mean": float(np.mean(values)),
+                }
+        particles_shape = [int(value) for value in h5["particles"].shape]
+        attrs = {
+            str(key): json_attr(value)
+            for key, value in h5.attrs.items()
+        }
+    return {
+        "path": str(path),
+        "bytes": path.stat().st_size,
+        "sha256": sha256_file(path),
+        "particles_shape": particles_shape,
+        "source_root_files": len(source_files),
+        "source_file_list_sha256": source_digest,
+        "attributes": attrs,
+        "collection_statistics": statistics,
+    }
+
+
+def dataset_provenance(store_dir, class_a, class_b):
+    stores = {}
+    for split in ("train", "val", "test"):
+        stores[split] = {}
+        for class_name in (class_a, class_b):
+            path = (
+                Path(store_dir)
+                / "n{}_{}_{}.h5".format(N_FILES, class_name, split)
+            )
+            stores[split][class_name] = store_provenance(path)
+    identity = {
+        split: {
+            class_name: item["sha256"]
+            for class_name, item in classes.items()
+        }
+        for split, classes in stores.items()
+    }
+    return {
+        "store_dir": str(Path(store_dir).resolve()),
+        "stores": stores,
+        "identity_sha256": hashlib.sha256(
+            json.dumps(identity, sort_keys=True).encode()
+        ).hexdigest(),
+    }
+
+
+def require_pfo_track_links(dataset):
+    missing = []
+    for split, classes in dataset["stores"].items():
+        for class_name, store in classes.items():
+            total = (
+                store["collection_statistics"]
+                .get("pfo_track_links", {})
+                .get("total", 0)
+            )
+            if total <= 0:
+                missing.append("{}:{}".format(split, class_name))
+    if missing:
+        raise ValueError(
+            "track-fixed dataset required, but no PFO-track links were found "
+            "in {}".format(", ".join(missing))
+        )
+
+
+def write_json(path, value):
+    with open(path, "w") as handle:
+        json.dump(value, handle, indent=2)
+        handle.write("\n")
 
 
 def callbacks(weights, patience):
@@ -228,11 +388,67 @@ def save_roc(path, y, scores, auc):
 
 def main():
     args = parse_args()
+    if args.dataset_tag.lower() not in args.label.lower():
+        raise SystemExit(
+            "dataset tag {!r} must occur in result label {!r}".format(
+                args.dataset_tag, args.label
+            )
+        )
+
+    code = git_provenance()
+    if args.require_clean_code and code["dirty"]:
+        raise SystemExit(
+            "refusing non-reproducible training with tracked code changes:\n{}"
+            .format("\n".join(code["tracked_changes"]))
+        )
+
+    result_dir = Path(args.outdir) / args.label
+    if result_dir.exists() and any(result_dir.iterdir()):
+        raise SystemExit(
+            "refusing to overwrite nonempty result directory: {}".format(
+                result_dir
+            )
+        )
+    result_dir.mkdir(parents=True, exist_ok=True)
+
     np.random.seed(TRAINING_SEED)
     import tensorflow as tf
     tf.random.set_seed(TRAINING_SEED)
 
     store_dir = Path(args.store_dir).resolve()
+    dataset = dataset_provenance(
+        store_dir, args.class_a, args.class_b
+    )
+    if args.require_pfo_track_links:
+        require_pfo_track_links(dataset)
+    runtime = runtime_provenance()
+    run_context = {
+        "status": "started",
+        "label": args.label,
+        "dataset_tag": args.dataset_tag,
+        "classes": [args.class_a, args.class_b],
+        "n_files": N_FILES,
+        "dataset": dataset,
+        "features": list(FEATURES),
+        "feature_definitions": FEATURE_DEFINITIONS,
+        "code": code,
+        "runtime": runtime,
+        "requested_training": {
+            "recipe": args.recipe,
+            "epochs": args.epochs,
+            "batch_size": args.batch_size,
+            "patience": args.patience,
+            "seed": TRAINING_SEED,
+            "require_pfo_track_links": args.require_pfo_track_links,
+        },
+    }
+    write_json(result_dir / "run_context.json", run_context)
+    print(
+        "dataset tag={} identity={} store_dir={}".format(
+            args.dataset_tag, dataset["identity_sha256"], store_dir
+        )
+    )
+
     pairs = {
         split: load_pair(
             store_dir, N_FILES, args.class_a, args.class_b, split,
@@ -250,8 +466,6 @@ def main():
     train_order = rng.permutation(len(y_train))
     val_order = rng.permutation(len(y_val))
 
-    result_dir = Path(args.outdir) / args.label
-    result_dir.mkdir(parents=True, exist_ok=True)
     weights = result_dir / "best.weights.h5"
     steps_per_epoch = int(math.ceil(len(y_train) / args.batch_size))
     training_config = recipe_config(args.recipe, steps_per_epoch)
@@ -280,13 +494,37 @@ def main():
     test_auc, test_scores = auc_and_scores(
         model, x_test, y_test, args.batch_size)
     write_scores(scores_path, "test", y_test, test_scores, test_metadata)
-    save_roc(result_dir / "roc.pdf", y_test, test_scores, test_auc)
+    roc_path = result_dir / "roc.pdf"
+    save_roc(roc_path, y_test, test_scores, test_auc)
+
+    history_path = result_dir / "history.csv"
+    artifacts = {
+        "best_weights": {
+            "path": str(weights.resolve()),
+            "sha256": sha256_file(weights),
+            "bytes": weights.stat().st_size,
+        },
+        "history": {
+            "path": str(history_path.resolve()),
+            "sha256": sha256_file(history_path),
+        },
+        "test_scores": {
+            "path": str(scores_path.resolve()),
+            "sha256": sha256_file(scores_path),
+        },
+        "roc": {
+            "path": str(roc_path.resolve()),
+            "sha256": sha256_file(roc_path),
+        },
+    }
 
     summary = {
         "label": args.label,
+        "dataset_tag": args.dataset_tag,
         "class_a": args.class_a,
         "class_b": args.class_b,
         "n_files": N_FILES,
+        "dataset": dataset,
         "features": list(FEATURES),
         "feature_definitions": FEATURE_DEFINITIONS,
         "feature_preprocessing": {
@@ -302,7 +540,8 @@ def main():
             "energyflow": __import__("energyflow").__version__,
             "tensorflow": tf.__version__,
         },
-        "code": git_provenance(),
+        "code": code,
+        "runtime": runtime,
         "training": {
             "recipe": args.recipe,
             "epochs_requested": args.epochs,
@@ -322,14 +561,22 @@ def main():
         },
         "seed": TRAINING_SEED,
         "epochs_run": len(history.history["loss"]),
+        "selection": {
+            "best_epoch": int(np.argmin(history.history["val_loss"]) + 1),
+            "best_val_loss": float(np.min(history.history["val_loss"])),
+        },
         "results": {"test": {"auc": test_auc, "events": int(len(y_test))}},
+        "artifacts": artifacts,
         "uncertainty_note": (
             "held-out events may reuse source files and are therefore correlated"
         ),
     }
-    with open(result_dir / "summary.json", "w") as handle:
-        json.dump(summary, handle, indent=2)
-        handle.write("\n")
+    write_json(result_dir / "summary.json", summary)
+    run_context["status"] = "complete"
+    run_context["completed_utc"] = utc_now()
+    run_context["summary"] = str((result_dir / "summary.json").resolve())
+    run_context["artifacts"] = artifacts
+    write_json(result_dir / "run_context.json", run_context)
     print("test AUC = {:.6f}".format(test_auc))
     print("results -> {}".format(result_dir))
 

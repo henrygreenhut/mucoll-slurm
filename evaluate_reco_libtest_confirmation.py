@@ -15,10 +15,17 @@ from reco_libtest_features import FEATURES, FEATURE_DEFINITIONS
 from train_reco_libtest_pfn import (
     auc_and_scores,
     combine_pair,
+    git_provenance,
     get_pfn,
     load_store,
+    require_pfo_track_links,
+    runtime_provenance,
     save_roc,
+    sha256_file,
+    store_provenance,
     underlying_model,
+    utc_now,
+    write_json,
     write_scores,
 )
 
@@ -32,20 +39,14 @@ def parse_args():
     parser.add_argument("--store-dir", required=True)
     parser.add_argument("--checkpoint-dir", required=True)
     parser.add_argument("--class-b", choices=("R", "null_b"), required=True)
+    parser.add_argument("--expected-training-dataset-tag", required=True)
     parser.add_argument("--label", required=True)
+    parser.add_argument("--require-clean-code", action="store_true")
     parser.add_argument("--outdir", default="reco_pfn_results")
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--bootstrap-repetitions", type=int, default=2000)
     parser.add_argument("--bootstrap-seed", type=int, default=20260727)
     return parser.parse_args()
-
-
-def sha256(path):
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def job_key(source_file):
@@ -121,7 +122,7 @@ def paired_job_bootstrap(labels, scores, metadata, repetitions, seed):
     return aucs, int(len(keys))
 
 
-def validate_checkpoint(summary, class_b):
+def validate_checkpoint(summary, class_b, expected_dataset_tag, weights):
     if summary.get("class_a") != "U" or summary.get("class_b") != class_b:
         raise ValueError(
             "checkpoint classes are {} vs {}, requested U vs {}".format(
@@ -141,6 +142,27 @@ def validate_checkpoint(summary, class_b):
         raise ValueError(
             "confirmation evaluator requires a stabilized checkpoint; got {!r}"
             .format(recipe)
+        )
+    actual_tag = summary.get("dataset_tag")
+    if actual_tag != expected_dataset_tag:
+        raise ValueError(
+            "checkpoint dataset tag is {!r}; expected {!r}".format(
+                actual_tag, expected_dataset_tag
+            )
+        )
+    require_pfo_track_links(summary["dataset"])
+    expected_hash = (
+        summary.get("artifacts", {})
+        .get("best_weights", {})
+        .get("sha256")
+    )
+    if not expected_hash:
+        raise ValueError("checkpoint summary does not fingerprint best weights")
+    actual_hash = sha256_file(weights)
+    if actual_hash != expected_hash:
+        raise ValueError(
+            "checkpoint weight hash differs from its training summary: "
+            "{} != {}".format(actual_hash, expected_hash)
         )
     return recipe
 
@@ -168,8 +190,58 @@ def load_confirmation(store_dir, class_b):
     return combine_pair(pair, width)
 
 
+def confirmation_provenance(store_dir, class_b):
+    stores = {}
+    for class_name in ("U", class_b):
+        path = (
+            Path(store_dir)
+            / "n{}_{}_confirmation.h5".format(N_FILES, class_name)
+        )
+        stores[class_name] = store_provenance(path)
+    identity = {
+        class_name: item["sha256"]
+        for class_name, item in stores.items()
+    }
+    result = {
+        "store_dir": str(Path(store_dir).resolve()),
+        "stores": stores,
+        "identity_sha256": hashlib.sha256(
+            json.dumps(identity, sort_keys=True).encode()
+        ).hexdigest(),
+    }
+    missing = [
+        class_name
+        for class_name, store in stores.items()
+        if (
+            store["collection_statistics"]
+            .get("pfo_track_links", {})
+            .get("total", 0)
+        ) <= 0
+    ]
+    if missing:
+        raise ValueError(
+            "confirmation stores have no PFO-track links: {}".format(
+                ", ".join(missing)
+            )
+        )
+    return result
+
+
 def main():
     args = parse_args()
+    if args.expected_training_dataset_tag.lower() not in args.label.lower():
+        raise SystemExit(
+            "training dataset tag {!r} must occur in evaluation label {!r}"
+            .format(args.expected_training_dataset_tag, args.label)
+        )
+    code = git_provenance()
+    if args.require_clean_code and code["dirty"]:
+        raise SystemExit(
+            "refusing evaluation with tracked code changes:\n{}".format(
+                "\n".join(code["tracked_changes"])
+            )
+        )
+
     store_dir = Path(args.store_dir).resolve()
     checkpoint_dir = Path(args.checkpoint_dir).resolve()
     checkpoint_summary_path = checkpoint_dir / "summary.json"
@@ -182,7 +254,43 @@ def main():
 
     with checkpoint_summary_path.open() as handle:
         checkpoint_summary = json.load(handle)
-    recipe = validate_checkpoint(checkpoint_summary, args.class_b)
+    training_commit = checkpoint_summary.get("code", {}).get("commit")
+    if not training_commit or code.get("commit") != training_commit:
+        raise ValueError(
+            "evaluation code commit {!r} differs from training commit {!r}"
+            .format(code.get("commit"), training_commit)
+        )
+    recipe = validate_checkpoint(
+        checkpoint_summary,
+        args.class_b,
+        args.expected_training_dataset_tag,
+        weights,
+    )
+
+    result_dir = Path(args.outdir) / args.label
+    if result_dir.exists() and any(result_dir.iterdir()):
+        raise SystemExit(
+            "refusing to overwrite nonempty result directory: {}".format(
+                result_dir
+            )
+        )
+    result_dir.mkdir(parents=True, exist_ok=True)
+    confirmation_dataset = confirmation_provenance(
+        store_dir, args.class_b
+    )
+    context = {
+        "status": "started",
+        "label": args.label,
+        "evaluation": "frozen-checkpoint confirmation",
+        "training_dataset_tag": args.expected_training_dataset_tag,
+        "checkpoint_summary": str(checkpoint_summary_path),
+        "checkpoint_weights": str(weights),
+        "checkpoint_weights_sha256": sha256_file(weights),
+        "confirmation_dataset": confirmation_dataset,
+        "code": code,
+        "runtime": runtime_provenance(),
+    }
+    write_json(result_dir / "evaluation_context.json", context)
 
     x, labels, metadata = load_confirmation(store_dir, args.class_b)
     print(
@@ -208,8 +316,6 @@ def main():
     )
     low, high = np.percentile(bootstrap_aucs, [2.5, 97.5])
 
-    result_dir = Path(args.outdir) / args.label
-    result_dir.mkdir(parents=True, exist_ok=True)
     scores_path = result_dir / "confirmation_scores.csv"
     if scores_path.exists():
         scores_path.unlink()
@@ -230,11 +336,18 @@ def main():
         "checkpoint": {
             "directory": str(checkpoint_dir),
             "weights": str(weights),
-            "weights_sha256": sha256(weights),
+            "weights_sha256": sha256_file(weights),
+            "training_dataset_tag": checkpoint_summary["dataset_tag"],
+            "training_dataset_identity_sha256": (
+                checkpoint_summary["dataset"]["identity_sha256"]
+            ),
             "training_code": checkpoint_summary.get("code"),
             "recipe": recipe,
             "original_test": checkpoint_summary.get("results", {}).get("test"),
         },
+        "confirmation_dataset": confirmation_dataset,
+        "code": context["code"],
+        "runtime": context["runtime"],
         "results": {
             "auc": auc,
             "binary_crossentropy": loss,
@@ -254,9 +367,13 @@ def main():
             ),
         },
     }
-    with (result_dir / "confirmation_summary.json").open("w") as handle:
-        json.dump(summary, handle, indent=2)
-        handle.write("\n")
+    write_json(result_dir / "confirmation_summary.json", summary)
+    context["status"] = "complete"
+    context["completed_utc"] = utc_now()
+    context["summary"] = str(
+        (result_dir / "confirmation_summary.json").resolve()
+    )
+    write_json(result_dir / "evaluation_context.json", context)
 
     print("confirmation AUC = {:.6f}".format(auc))
     print("confirmation loss = {:.6f} (ln2 = {:.6f})".format(

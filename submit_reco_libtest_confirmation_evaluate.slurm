@@ -38,13 +38,15 @@ evaluate() {
         --store-dir "$STORE_DIR" \
         --checkpoint-dir "$RESULT_DIR/$checkpoint_label" \
         --class-b "$class_b" \
+        --expected-training-dataset-tag trackfix \
+        --require-clean-code \
         --label "$output_label" \
         --outdir "$RESULT_DIR"
 }
 
 evaluate R \
-    reco_n420_directlog_stabilized_dropout_U_vs_R \
-    reco_n420_directlog_stabilized_dropout_confirmation_U_vs_R
+    reco_n420_trackfix_directlog_stabilized_dropout_U_vs_R \
+    reco_n420_trackfix_directlog_stabilized_dropout_confirmation_U_vs_R
 evaluate null_b \
-    reco_n420_directlog_stabilized_dropout_null \
-    reco_n420_directlog_stabilized_dropout_confirmation_null
+    reco_n420_trackfix_directlog_stabilized_dropout_null \
+    reco_n420_trackfix_directlog_stabilized_dropout_confirmation_null

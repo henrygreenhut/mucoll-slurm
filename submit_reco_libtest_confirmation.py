@@ -22,8 +22,8 @@ EVENTS_PER_JOB = 50
 EVENTS_PER_CLASS = 5000
 JOB_ID_START = 300_000
 CHECKPOINTS = (
-    "reco_n420_directlog_stabilized_dropout_U_vs_R",
-    "reco_n420_directlog_stabilized_dropout_null",
+    "reco_n420_trackfix_directlog_stabilized_dropout_U_vs_R",
+    "reco_n420_trackfix_directlog_stabilized_dropout_null",
 )
 
 

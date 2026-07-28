@@ -84,6 +84,47 @@ class RecoFeatureTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "unexpected features"):
                 trainer.load_store(path)
 
+    def test_store_provenance_fingerprints_data_and_track_links(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "store.h5"
+            with h5py.File(path, "w") as h5:
+                h5.create_dataset(
+                    "particles", data=np.zeros((2, 3, len(trainer.RAW_FEATURES)))
+                )
+                h5.create_dataset(
+                    "source_file",
+                    data=np.asarray([b"a.root", b"b.root"]),
+                )
+                h5.create_dataset("source_event", data=np.asarray([0, 0]))
+                h5.create_dataset("n_particles", data=np.asarray([1, 2]))
+                h5.create_dataset("n_tracks", data=np.asarray([1, 1]))
+                h5.create_dataset("n_clusters", data=np.asarray([2, 3]))
+                h5.create_dataset("pfo_track_links", data=np.asarray([1, 2]))
+                h5.attrs["features"] = ",".join(trainer.RAW_FEATURES)
+                h5.attrs["pfo_collection"] = "PandoraPFOs"
+
+            first = trainer.store_provenance(path)
+            second = trainer.store_provenance(path)
+            self.assertEqual(first["sha256"], second["sha256"])
+            self.assertEqual(first["particles_shape"], [2, 3, 10])
+            self.assertEqual(first["source_root_files"], 2)
+            self.assertEqual(
+                first["collection_statistics"]["pfo_track_links"]["total"], 3
+            )
+
+    def test_trackfix_guard_rejects_unlinked_stores(self):
+        dataset = {
+            "stores": {
+                "train": {
+                    "U": {"collection_statistics": {
+                        "pfo_track_links": {"total": 0}
+                    }}
+                }
+            }
+        }
+        with self.assertRaisesRegex(ValueError, "no PFO-track links"):
+            trainer.require_pfo_track_links(dataset)
+
 
 class RecoRecipeTests(unittest.TestCase):
     def test_stabilized_recipes_only_differ_by_dropout(self):

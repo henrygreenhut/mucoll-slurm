@@ -98,6 +98,52 @@ class ConfirmationEvaluationTests(unittest.TestCase):
         self.assertEqual(summary["U"]["events"], 2)
         self.assertEqual(summary["R"]["events"], 2)
 
+    def test_checkpoint_validation_binds_tag_data_and_weights(self):
+        with tempfile.TemporaryDirectory() as directory:
+            weights = Path(directory) / "best.weights.h5"
+            weights.write_bytes(b"fixed checkpoint")
+            summary = {
+                "class_a": "U",
+                "class_b": "R",
+                "n_files": 420,
+                "features": list(evaluator.FEATURES),
+                "feature_definitions": evaluator.FEATURE_DEFINITIONS,
+                "dataset_tag": "trackfix",
+                "dataset": {
+                    "stores": {
+                        "train": {
+                            "U": {"collection_statistics": {
+                                "pfo_track_links": {"total": 10}
+                            }},
+                            "R": {"collection_statistics": {
+                                "pfo_track_links": {"total": 10}
+                            }},
+                        }
+                    }
+                },
+                "training": {"recipe": "stabilized_dropout"},
+                "artifacts": {
+                    "best_weights": {
+                        "sha256": evaluator.sha256_file(weights)
+                    }
+                },
+            }
+            self.assertEqual(
+                evaluator.validate_checkpoint(
+                    summary, "R", "trackfix", weights
+                ),
+                "stabilized_dropout",
+            )
+            with self.assertRaisesRegex(ValueError, "dataset tag"):
+                evaluator.validate_checkpoint(
+                    summary, "R", "simple", weights
+                )
+            weights.write_bytes(b"different checkpoint")
+            with self.assertRaisesRegex(ValueError, "weight hash"):
+                evaluator.validate_checkpoint(
+                    summary, "R", "trackfix", weights
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

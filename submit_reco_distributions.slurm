@@ -13,7 +13,7 @@ set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
 ENV_DIR=/oscar/scratch/$USER/mucoll/envs/reco-store
-STORE_DIR=${STORE_DIR:-/oscar/scratch/$USER/mucoll/libtest/reco_n420_pfn_stores_simple}
+STORE_DIR=${STORE_DIR:-/oscar/scratch/$USER/mucoll/libtest/reco_n420_pfn_stores_trackfix}
 OUTDIR=${OUTDIR:-"$SLURM_SUBMIT_DIR/plots/reco_n420_directlog_whole_distributions"}
 
 if [ ! -x "$ENV_DIR/bin/python" ]; then

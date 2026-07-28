@@ -38,7 +38,10 @@ def parse_args():
     parser.add_argument("--time", default="08:00:00",
                         help="SBATCH -t override for the 64-way array job")
     parser.add_argument("--pools", default=scratch + "/mucoll/libtest/bib_pools_simple")
-    parser.add_argument("--outdir", default=scratch + "/mucoll/libtest/reco_n420_pfn_simple")
+    parser.add_argument(
+        "--outdir",
+        default=scratch + "/mucoll/libtest/reco_n420_pfn_trackfix",
+    )
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()

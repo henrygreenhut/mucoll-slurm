@@ -34,7 +34,7 @@ COLORS = {"U": "#0072B2", "R": "#D55E00", "null_b": "#009E73"}
 def parse_args():
     scratch = os.environ.get("PSCRATCH", "")
     default_store = (
-        scratch + "/mucoll/libtest/reco_n420_pfn_stores_simple"
+        scratch + "/mucoll/libtest/reco_n420_pfn_stores_trackfix"
         if scratch else None
     )
     parser = argparse.ArgumentParser()
@@ -210,6 +210,12 @@ def load_all(store_dir):
 
 def log10_one_plus(values):
     return np.log10(1.0 + np.maximum(values, 0.0))
+
+
+def natural_log_positive(values):
+    if np.any(values <= 0):
+        raise ValueError("plain logarithm requested for non-positive values")
+    return np.log(values)
 
 
 def signed_log10_one_plus(values):
@@ -415,8 +421,10 @@ def main():
         "pfo_is_neutral": (
             "pfo_is_neutral", "PFO neutral indicator", True, None, False,
         ),
-        "track_pt": ("track_pt", r"$\log_{10}(1+p_T/\mathrm{GeV})$",
-                     False, log10_one_plus, False),
+        "track_pt": (
+            "track_pt", r"$\ln(p_T/\mathrm{GeV})$",
+            False, natural_log_positive, False,
+        ),
         "track_eta": ("track_eta", r"Track $\eta$", False, None, False),
         "track_phi": ("track_phi", r"Track $\phi$", False, None, False),
         "track_d0": (
@@ -435,8 +443,8 @@ def main():
             "track_n_holes", "Track holes", True, None, True,
         ),
         "cluster_energy": (
-            "cluster_energy", r"$\log_{10}(1+E/\mathrm{GeV})$",
-            False, log10_one_plus, False,
+            "cluster_energy", r"$\ln(E/\mathrm{GeV})$",
+            False, natural_log_positive, False,
         ),
         "cluster_eta": (
             "cluster_eta", r"Cluster $\eta$", False, None, False,

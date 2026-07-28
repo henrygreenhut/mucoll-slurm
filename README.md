@@ -213,16 +213,23 @@ zeros. The RECO PFN uses a raw sum: at
 roughly O(10) PFOs per event, the large GEN-level sum-saturation issue is not
 present. The trainer imports the standard `energyflow.archs.PFN`; do not replace
 it with the local GEN builder under an existing result label. `summary.json`
-records the fixed seed, EnergyFlow and TensorFlow versions, and one held-out
-test AUC. Test events may share sources and are therefore correlated.
+records the fixed seed, EnergyFlow and TensorFlow versions, one held-out test
+AUC, the resolved store directory, a SHA-256 hash and collection statistics
+for every input HDF5 store, the checkpoint hash, and the exact tracked-code
+state. `run_context.json` is written before fitting so an interrupted run
+still identifies its inputs. Track-fixed jobs refuse dirty tracked code,
+stores without PFO-to-track links, ambiguous labels, and nonempty result
+directories. Test events may share sources and are therefore correlated.
+All RECO production, store, training, and plotting defaults point to the
+track-fixed `reco_n420_pfn_trackfix` dataset and
+`reco_n420_pfn_stores_trackfix` stores.
 
-The direct-log preprocessing study writes to
-`reco_pfn_results/reco_n420_directlog_*`; the earlier clipped/scaled-feature
-results retain their original `reco_n420_*` names. After copying completed
-histories and summaries to the laptop, run
-`python3 plot_all_training_overlays.py --study reco_n420_directlog`. New plots are written under
-`plots/training_overlays/reco_n420_directlog/`, while the previous plots stay
-under `plots/training_overlays/reco_n420/`.
+Important provenance correction: the legacy
+`reco_pfn_results/reco_n420_directlog_*` models were trained by commit
+`d043b02` from `reco_n420_pfn_stores_simple`, before the Slurm store path was
+changed. They are not track-fixed results and must not be compared to
+track-fixed confirmation events. All new track-fixed direct-log labels begin
+with `reco_n420_trackfix_directlog_`.
 
 The extended stores also retain selected `SiTracks` (mapped to their
 `AllTracks` IP states), `PandoraClusters`, and the number of PFO-to-track
@@ -238,7 +245,10 @@ distributions, a numerical summary, and descriptive whole-sample
 single-observable AUCs to
 `plots/reco_n420_directlog_whole_distributions/`. The PFO object plots use
 the exact nine direct-log inputs consumed by the PFN; the pre-existing
-distribution directories are not overwritten.
+distribution directories are not overwritten. Positive track momentum and
+cluster-energy object distributions also use plain natural logarithms.
+Event-level sums retain a zero-safe display because the samples contain
+zero-object events; those aggregate quantities are not PFN inputs.
 
 After the unchanged baseline, two fixed optimizer studies reuse the same
 stores, source split, features, architecture, batch size, and seed. Both use
@@ -248,12 +258,18 @@ EnergyFlow's standard `F_dropouts=0.1`. Each job trains its matched null after
 the main classifier:
 
 ```bash
-sbatch submit_reco_libtest_recipe.slurm stabilized
-sbatch submit_reco_libtest_recipe.slurm stabilized_dropout
+train_job=$(sbatch --parsable \
+  submit_reco_libtest_recipe.slurm stabilized_dropout)
+sbatch --dependency=afterok:"$train_job" \
+  submit_reco_libtest_confirmation_evaluate.slurm
 ```
 
-The `_simple` pool, RECO, store, and result names prevent this data from being
-mixed with earlier, incompatible outputs.
+The first job creates explicitly named track-fixed main and null models. The
+dependent job loads their fingerprinted checkpoints without fitting and
+evaluates them on the separate 5,000-event/class track-fixed confirmation
+stores. Confirmation summaries fingerprint both the training and
+confirmation datasets and refuse a checkpoint whose stored hash, dataset
+tag, or PFO-track-link requirement does not match.
 
 ## Checks
 

@@ -31,13 +31,13 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--reco-dir",
-        default=(scratch + "/mucoll/libtest/reco_n420_pfn_simple")
+        default=(scratch + "/mucoll/libtest/reco_n420_pfn_trackfix")
         if scratch else None,
         required=not bool(scratch),
     )
     parser.add_argument(
         "--outdir",
-        default=(scratch + "/mucoll/libtest/reco_n420_pfn_stores_simple")
+        default=(scratch + "/mucoll/libtest/reco_n420_pfn_stores_trackfix")
         if scratch else None,
         required=not bool(scratch),
     )
