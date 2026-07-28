@@ -45,8 +45,8 @@ evaluate() {
 }
 
 evaluate R \
-    reco_n420_trackfix_directlog_stabilized_dropout_U_vs_R \
-    reco_n420_trackfix_directlog_stabilized_dropout_confirmation_U_vs_R
+    reco_n420_trackfix_directlog_minimal6_stabilized_dropout_U_vs_R \
+    reco_n420_trackfix_directlog_minimal6_stabilized_dropout_confirmation_U_vs_R
 evaluate null_b \
-    reco_n420_trackfix_directlog_stabilized_dropout_null \
-    reco_n420_trackfix_directlog_stabilized_dropout_confirmation_null
+    reco_n420_trackfix_directlog_minimal6_stabilized_dropout_null \
+    reco_n420_trackfix_directlog_minimal6_stabilized_dropout_confirmation_null

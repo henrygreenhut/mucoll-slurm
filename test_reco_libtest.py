@@ -28,7 +28,7 @@ class RecoSourceSplitTests(unittest.TestCase):
 
 
 class RecoFeatureTests(unittest.TestCase):
-    def test_pdg_and_charge_define_particle_categories(self):
+    def test_particle_category_indicators_are_not_model_inputs(self):
         raw = np.zeros((1, 3, len(trainer.RAW_FEATURES)), dtype=np.float32)
         raw[0, 0, trainer.RAW["pt"]] = 1.0
         raw[0, 0, trainer.RAW["energy"]] = 1.0
@@ -39,14 +39,14 @@ class RecoFeatureTests(unittest.TestCase):
         raw[0, 1, trainer.RAW["charge"]] = 1.0
 
         features = trainer.pfn_features(raw)
-        photon = trainer.FEATURES.index("is_photon")
-        charged = trainer.FEATURES.index("is_charged")
-        neutral = trainer.FEATURES.index("is_neutral")
-        np.testing.assert_array_equal(features[0, 0, [charged, photon, neutral]],
-                                      [0.0, 1.0, 0.0])
-        np.testing.assert_array_equal(features[0, 1, [charged, photon, neutral]],
-                                      [1.0, 0.0, 0.0])
+        self.assertEqual(
+            trainer.FEATURES,
+            ("log_pt", "eta", "sin_phi", "cos_phi", "log_energy", "charge"),
+        )
+        self.assertNotIn("is_charged", trainer.FEATURES)
         np.testing.assert_array_equal(features[0, 2], 0.0)
+        self.assertNotIn("is_photon", trainer.FEATURES)
+        self.assertNotIn("is_neutral", trainer.FEATURES)
 
     def test_continuous_features_are_direct_and_padding_stays_zero(self):
         raw = np.zeros((1, 2, len(trainer.RAW_FEATURES)), dtype=np.float32)

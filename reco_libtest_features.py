@@ -10,7 +10,6 @@ RAW_FEATURES = (
 RAW = {name: i for i, name in enumerate(RAW_FEATURES)}
 FEATURES = (
     "log_pt", "eta", "sin_phi", "cos_phi", "log_energy", "charge",
-    "is_charged", "is_photon", "is_neutral",
 )
 FEATURE_DEFINITIONS = {
     "log_pt": "ln(pt / GeV)",
@@ -19,9 +18,6 @@ FEATURE_DEFINITIONS = {
     "cos_phi": "cos(atan2(py, px))",
     "log_energy": "ln(energy / GeV)",
     "charge": "charge / e",
-    "is_charged": "abs(charge) > 0.1 e",
-    "is_photon": "not is_charged and abs(PDG) == 22",
-    "is_neutral": "not is_charged and not is_photon",
 }
 
 
@@ -34,10 +30,6 @@ def pfn_features(raw):
     phi = raw[:, :, RAW["phi"]]
     energy = raw[:, :, RAW["energy"]]
     charge = raw[:, :, RAW["charge"]]
-    pfo_type = np.abs(raw[:, :, RAW["pdg"]]).astype(np.int64)
-    charged = np.abs(charge) > 0.1
-    photon = (~charged) & (pfo_type == 22)
-    neutral = (~charged) & (~photon)
 
     if np.any(mask & (energy <= 0)):
         raise ValueError("real PFOs must have positive energy for log(E)")
@@ -53,9 +45,6 @@ def pfn_features(raw):
         np.cos(phi),
         log_energy,
         charge,
-        charged.astype(np.float32),
-        photon.astype(np.float32),
-        neutral.astype(np.float32),
     )
     for index, value in enumerate(values):
         out[:, :, index][mask] = value[mask]

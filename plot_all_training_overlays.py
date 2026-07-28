@@ -115,6 +115,16 @@ RUNS = (
      "RECO N=420 — track-fixed stabilized dropout null",
      "reco_n420_trackfix_directlog/"
      "reco_n420_trackfix_directlog_stabilized_dropout_null.pdf"),
+    ("reco_pfn_results/"
+     "reco_n420_trackfix_directlog_minimal6_stabilized_dropout_U_vs_R",
+     "RECO N=420 — track-fixed minimal-six PFN",
+     "reco_n420_trackfix_directlog_minimal6/"
+     "reco_n420_trackfix_directlog_minimal6_stabilized_dropout.pdf"),
+    ("reco_pfn_results/"
+     "reco_n420_trackfix_directlog_minimal6_stabilized_dropout_null",
+     "RECO N=420 — track-fixed minimal-six null",
+     "reco_n420_trackfix_directlog_minimal6/"
+     "reco_n420_trackfix_directlog_minimal6_stabilized_dropout_null.pdf"),
 )
 
 

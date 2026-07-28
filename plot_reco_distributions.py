@@ -43,7 +43,7 @@ def parse_args():
         help="directory containing the nine extended N=420 RECO stores",
     )
     parser.add_argument(
-        "--outdir", default="plots/reco_n420_directlog_whole_distributions",
+        "--outdir", default="plots/reco_n420_minimal6_whole_distributions",
         help="output directory",
     )
     return parser.parse_args()
@@ -111,10 +111,7 @@ def extract_store(path):
     pfo_pt = pfos[:, :, pfo["pt"]]
     pfo_energy = pfos[:, :, pfo["energy"]]
     pfo_charge = pfos[:, :, pfo["charge"]]
-    pfo_pdg = np.abs(pfos[:, :, pfo["pdg"]].astype(np.int64))
     charged = pfo_mask & (np.abs(pfo_charge) > 0.1)
-    photon = pfo_mask & (~charged) & (pfo_pdg == 22)
-    neutral = pfo_mask & (~charged) & (~photon)
     track_pt = tracks[:, :, track["pt"]]
     cluster_energy = clusters[:, :, cluster["energy"]]
     transformed_pfos = pfn_features(pfos)
@@ -131,8 +128,6 @@ def extract_store(path):
         ),
         "leading_pfo_energy": event_max(pfo_energy, pfo_mask),
         "n_charged_pfos": np.sum(charged, axis=1).astype(np.float64),
-        "n_photons": np.sum(photon, axis=1).astype(np.float64),
-        "n_neutral_pfos": np.sum(neutral, axis=1).astype(np.float64),
         "n_tracks": n_tracks.astype(np.float64),
         "sum_track_pt": np.sum(
             np.where(track_mask, track_pt, 0.0), axis=1
@@ -160,15 +155,6 @@ def extract_store(path):
         ][pfn_mask],
         "pfo_charge": transformed_pfos[
             :, :, transformed["charge"]
-        ][pfn_mask],
-        "pfo_is_charged": transformed_pfos[
-            :, :, transformed["is_charged"]
-        ][pfn_mask],
-        "pfo_is_photon": transformed_pfos[
-            :, :, transformed["is_photon"]
-        ][pfn_mask],
-        "pfo_is_neutral": transformed_pfos[
-            :, :, transformed["is_neutral"]
         ][pfn_mask],
         "track_pt": tracks[:, :, track["pt"]][track_mask],
         "track_eta": tracks[:, :, track["eta"]][track_mask],
@@ -411,15 +397,6 @@ def main():
         ),
         "pfo_charge": (
             "pfo_charge", r"PFO charge$/e$", True, None, False,
-        ),
-        "pfo_is_charged": (
-            "pfo_is_charged", "PFO charged indicator", True, None, False,
-        ),
-        "pfo_is_photon": (
-            "pfo_is_photon", "PFO photon indicator", True, None, False,
-        ),
-        "pfo_is_neutral": (
-            "pfo_is_neutral", "PFO neutral indicator", True, None, False,
         ),
         "track_pt": (
             "track_pt", r"$\ln(p_T/\mathrm{GeV})$",
