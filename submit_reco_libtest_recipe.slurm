@@ -59,5 +59,5 @@ run_training() {
 }
 
 echo "RECO N=420 recipe: $RECIPE"
-run_training R "reco_n420_${RECIPE}_U_vs_R"
-run_training null_b "reco_n420_${RECIPE}_null"
+run_training R "reco_n420_directlog_${RECIPE}_U_vs_R"
+run_training null_b "reco_n420_directlog_${RECIPE}_null"

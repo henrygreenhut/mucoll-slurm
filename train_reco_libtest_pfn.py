@@ -23,6 +23,17 @@ FEATURES = (
     "log_pt", "eta", "sin_phi", "cos_phi", "log_energy", "charge",
     "is_charged", "is_photon", "is_neutral",
 )
+FEATURE_DEFINITIONS = {
+    "log_pt": "ln(pt / GeV)",
+    "eta": "asinh(pz / pt)",
+    "sin_phi": "sin(atan2(py, px))",
+    "cos_phi": "cos(atan2(py, px))",
+    "log_energy": "ln(energy / GeV)",
+    "charge": "charge / e",
+    "is_charged": "abs(charge) > 0.1 e",
+    "is_photon": "not is_charged and abs(PDG) == 22",
+    "is_neutral": "not is_charged and not is_photon",
+}
 RAW_FEATURES = (
     "pt", "eta", "phi", "energy", "mass", "charge", "pdg", "px", "py", "pz",
 )
@@ -103,23 +114,30 @@ def pad_width(array, width):
 def pfn_features(raw):
     mask = raw[:, :, RAW["pt"]] > 0
     out = np.zeros((len(raw), raw.shape[1], len(FEATURES)), dtype=np.float32)
-    pt = np.maximum(raw[:, :, RAW["pt"]], 0)
+    pt = raw[:, :, RAW["pt"]]
     eta = raw[:, :, RAW["eta"]]
     phi = raw[:, :, RAW["phi"]]
-    energy = np.maximum(raw[:, :, RAW["energy"]], 0)
+    energy = raw[:, :, RAW["energy"]]
     charge = raw[:, :, RAW["charge"]]
     pfo_type = np.abs(raw[:, :, RAW["pdg"]]).astype(np.int64)
     charged = np.abs(charge) > 0.1
     photon = (~charged) & (pfo_type == 22)
     neutral = (~charged) & (~photon)
 
+    if np.any(mask & (energy <= 0)):
+        raise ValueError("real PFOs must have positive energy for log(E)")
+    log_pt = np.zeros_like(pt, dtype=np.float32)
+    log_energy = np.zeros_like(energy, dtype=np.float32)
+    np.log(pt, out=log_pt, where=mask)
+    np.log(energy, out=log_energy, where=mask)
+
     values = (
-        np.log1p(pt) / 6.0,
-        np.clip(eta / 5.0, -2.0, 2.0),
+        log_pt,
+        eta,
         np.sin(phi),
         np.cos(phi),
-        np.log1p(energy) / 6.0,
-        np.clip(charge, -3.0, 3.0) / 3.0,
+        log_energy,
+        charge,
         charged.astype(np.float32),
         photon.astype(np.float32),
         neutral.astype(np.float32),
@@ -318,6 +336,12 @@ def main():
         "class_b": args.class_b,
         "n_files": N_FILES,
         "features": list(FEATURES),
+        "feature_definitions": FEATURE_DEFINITIONS,
+        "feature_preprocessing": {
+            "clipping": False,
+            "learned_normalization": False,
+            "padding_value": 0.0,
+        },
         "architecture": {"Phi": list(PHI_SIZES), "F": list(F_SIZES),
                          "aggregation": "sum",
                          "F_dropout": training_config["f_dropout"]},

@@ -31,8 +31,10 @@ class RecoFeatureTests(unittest.TestCase):
     def test_pdg_and_charge_define_particle_categories(self):
         raw = np.zeros((1, 3, len(trainer.RAW_FEATURES)), dtype=np.float32)
         raw[0, 0, trainer.RAW["pt"]] = 1.0
+        raw[0, 0, trainer.RAW["energy"]] = 1.0
         raw[0, 0, trainer.RAW["pdg"]] = 22
         raw[0, 1, trainer.RAW["pt"]] = 2.0
+        raw[0, 1, trainer.RAW["energy"]] = 2.0
         raw[0, 1, trainer.RAW["pdg"]] = 211
         raw[0, 1, trainer.RAW["charge"]] = 1.0
 
@@ -45,6 +47,31 @@ class RecoFeatureTests(unittest.TestCase):
         np.testing.assert_array_equal(features[0, 1, [charged, photon, neutral]],
                                       [1.0, 0.0, 0.0])
         np.testing.assert_array_equal(features[0, 2], 0.0)
+
+    def test_continuous_features_are_direct_and_padding_stays_zero(self):
+        raw = np.zeros((1, 2, len(trainer.RAW_FEATURES)), dtype=np.float32)
+        raw[0, 0, trainer.RAW["pt"]] = np.exp(2.0)
+        raw[0, 0, trainer.RAW["eta"]] = 7.0
+        raw[0, 0, trainer.RAW["phi"]] = np.pi / 2
+        raw[0, 0, trainer.RAW["energy"]] = np.exp(3.0)
+        raw[0, 0, trainer.RAW["charge"]] = 5.0
+
+        features = trainer.pfn_features(raw)
+        expected = {
+            "log_pt": 2.0,
+            "eta": 7.0,
+            "sin_phi": 1.0,
+            "cos_phi": 0.0,
+            "log_energy": 3.0,
+            "charge": 5.0,
+        }
+        for name, value in expected.items():
+            self.assertAlmostEqual(
+                float(features[0, 0, trainer.FEATURES.index(name)]),
+                value,
+                places=6,
+            )
+        np.testing.assert_array_equal(features[0, 1], 0.0)
 
     def test_store_feature_order_must_match_trainer(self):
         with tempfile.TemporaryDirectory() as directory:

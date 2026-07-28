@@ -44,5 +44,5 @@ run_training() {
         --label "$label"
 }
 
-run_training R "reco_n420_simple_U_vs_R"
-run_training null_b "reco_n420_simple_null"
+run_training R "reco_n420_directlog_baseline_U_vs_R"
+run_training null_b "reco_n420_directlog_baseline_null"

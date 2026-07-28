@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Make presentation-style loss overlays for completed production studies."""
 
+import argparse
 import csv
 from pathlib import Path
 
@@ -80,13 +81,50 @@ RUNS = (
     ("reco_pfn_results/reco_n420_stabilized_dropout_null",
      "RECO N=420 — stabilized dropout null",
      "reco_n420/reco_n420_stabilized_dropout_null.pdf"),
+
+    # Direct-log PFO preprocessing. Separate names preserve the earlier
+    # clipped/scaled-feature results and plots for comparison.
+    ("reco_pfn_results/reco_n420_directlog_baseline_U_vs_R",
+     "RECO N=420 — direct-log baseline PFN",
+     "reco_n420_directlog/reco_n420_directlog_baseline.pdf"),
+    ("reco_pfn_results/reco_n420_directlog_baseline_null",
+     "RECO N=420 — direct-log baseline null",
+     "reco_n420_directlog/reco_n420_directlog_baseline_null.pdf"),
+    ("reco_pfn_results/reco_n420_directlog_stabilized_U_vs_R",
+     "RECO N=420 — direct-log stabilized PFN",
+     "reco_n420_directlog/reco_n420_directlog_stabilized.pdf"),
+    ("reco_pfn_results/reco_n420_directlog_stabilized_null",
+     "RECO N=420 — direct-log stabilized null",
+     "reco_n420_directlog/reco_n420_directlog_stabilized_null.pdf"),
+    ("reco_pfn_results/reco_n420_directlog_stabilized_dropout_U_vs_R",
+     "RECO N=420 — direct-log stabilized PFN with dropout",
+     "reco_n420_directlog/reco_n420_directlog_stabilized_dropout.pdf"),
+    ("reco_pfn_results/reco_n420_directlog_stabilized_dropout_null",
+     "RECO N=420 — direct-log stabilized dropout null",
+     "reco_n420_directlog/reco_n420_directlog_stabilized_dropout_null.pdf"),
 )
 
 
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--study",
+        help=(
+            "only make plots whose first output-directory component matches "
+            "this value, e.g. reco_n420_directlog"
+        ),
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
     output_root = Path("plots/training_overlays")
     made = 0
     for rundir, title, relative_output in RUNS:
+        study = Path(relative_output).parts[0]
+        if args.study and study != args.study:
+            continue
         path = Path(rundir)
         history = path / "history.csv"
         if not history.is_file() or load_test_auc(path) is None:

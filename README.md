@@ -204,15 +204,25 @@ sbatch submit_reco_libtest_stores.slurm
 sbatch submit_reco_libtest_train.slurm
 ```
 
-Each PFO contributes `log(pT)`, `eta`, `sin(phi)`, `cos(phi)`, `log(E)`,
-charge, and charged/photon/neutral indicators derived from
-`PandoraPFOs.PDG`. Missing required PFO branches are fatal rather than being
-silently replaced by zeros. The RECO PFN uses a raw sum: at
+Each PFO contributes the unscaled features `ln(pT/GeV)`, `eta`, `sin(phi)`,
+`cos(phi)`, `ln(E/GeV)`, charge in units of `e`, and
+charged/photon/neutral indicators derived from `PandoraPFOs.PDG`. No clipping
+or learned feature normalization is applied. Missing required PFO branches
+and non-positive energies are fatal rather than being silently replaced by
+zeros. The RECO PFN uses a raw sum: at
 roughly O(10) PFOs per event, the large GEN-level sum-saturation issue is not
 present. The trainer imports the standard `energyflow.archs.PFN`; do not replace
 it with the local GEN builder under an existing result label. `summary.json`
 records the fixed seed, EnergyFlow and TensorFlow versions, and one held-out
 test AUC. Test events may share sources and are therefore correlated.
+
+The direct-log preprocessing study writes to
+`reco_pfn_results/reco_n420_directlog_*`; the earlier clipped/scaled-feature
+results retain their original `reco_n420_*` names. After copying completed
+histories and summaries to the laptop, run
+`python3 plot_all_training_overlays.py --study reco_n420_directlog`. New plots are written under
+`plots/training_overlays/reco_n420_directlog/`, while the previous plots stay
+under `plots/training_overlays/reco_n420/`.
 
 The extended stores also retain selected `SiTracks` (mapped to their
 `AllTracks` IP states), `PandoraClusters`, and the number of PFO-to-track
