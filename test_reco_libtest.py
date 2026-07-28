@@ -28,7 +28,7 @@ class RecoSourceSplitTests(unittest.TestCase):
 
 
 class RecoFeatureTests(unittest.TestCase):
-    def test_particle_category_indicators_are_not_model_inputs(self):
+    def test_only_charge_derived_category_is_a_model_input(self):
         raw = np.zeros((1, 3, len(trainer.RAW_FEATURES)), dtype=np.float32)
         raw[0, 0, trainer.RAW["pt"]] = 1.0
         raw[0, 0, trainer.RAW["energy"]] = 1.0
@@ -41,9 +41,14 @@ class RecoFeatureTests(unittest.TestCase):
         features = trainer.pfn_features(raw)
         self.assertEqual(
             trainer.FEATURES,
-            ("log_pt", "eta", "sin_phi", "cos_phi", "log_energy", "charge"),
+            (
+                "log_pt", "eta", "sin_phi", "cos_phi", "log_energy",
+                "charge", "is_charged",
+            ),
         )
-        self.assertNotIn("is_charged", trainer.FEATURES)
+        charged = trainer.FEATURES.index("is_charged")
+        self.assertEqual(float(features[0, 0, charged]), 0.0)
+        self.assertEqual(float(features[0, 1, charged]), 1.0)
         np.testing.assert_array_equal(features[0, 2], 0.0)
         self.assertNotIn("is_photon", trainer.FEATURES)
         self.assertNotIn("is_neutral", trainer.FEATURES)

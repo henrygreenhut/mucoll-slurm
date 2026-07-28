@@ -57,6 +57,6 @@ run_training() {
         --label "$label"
 }
 
-echo "RECO N=420 dataset=trackfix features=minimal6 store=$STORE_DIR recipe=$RECIPE"
-run_training R "reco_n420_trackfix_directlog_minimal6_${RECIPE}_U_vs_R"
-run_training null_b "reco_n420_trackfix_directlog_minimal6_${RECIPE}_null"
+echo "RECO N=420 dataset=trackfix features=charged7 store=$STORE_DIR recipe=$RECIPE"
+run_training R "reco_n420_trackfix_directlog_charged7_${RECIPE}_U_vs_R"
+run_training null_b "reco_n420_trackfix_directlog_charged7_${RECIPE}_null"

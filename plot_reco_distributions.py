@@ -43,7 +43,7 @@ def parse_args():
         help="directory containing the nine extended N=420 RECO stores",
     )
     parser.add_argument(
-        "--outdir", default="plots/reco_n420_minimal6_whole_distributions",
+        "--outdir", default="plots/reco_n420_charged7_whole_distributions",
         help="output directory",
     )
     return parser.parse_args()
@@ -155,6 +155,9 @@ def extract_store(path):
         ][pfn_mask],
         "pfo_charge": transformed_pfos[
             :, :, transformed["charge"]
+        ][pfn_mask],
+        "pfo_is_charged": transformed_pfos[
+            :, :, transformed["is_charged"]
         ][pfn_mask],
         "track_pt": tracks[:, :, track["pt"]][track_mask],
         "track_eta": tracks[:, :, track["eta"]][track_mask],
@@ -397,6 +400,9 @@ def main():
         ),
         "pfo_charge": (
             "pfo_charge", r"PFO charge$/e$", True, None, False,
+        ),
+        "pfo_is_charged": (
+            "pfo_is_charged", "PFO charged indicator", True, None, False,
         ),
         "track_pt": (
             "track_pt", r"$\ln(p_T/\mathrm{GeV})$",

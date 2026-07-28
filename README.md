@@ -204,12 +204,13 @@ sbatch submit_reco_libtest_stores.slurm
 sbatch submit_reco_libtest_train.slurm
 ```
 
-Each PFO contributes exactly six unscaled features: `ln(pT/GeV)`, `eta`,
-`sin(phi)`, `cos(phi)`, `ln(E/GeV)`, and charge in units of `e`. All derived
-particle-category indicators are deliberately excluded. The available Pandora
-photon identification has not been updated for the muon-collider image;
-charged and neutral flags are redundant with the charge input and, after
-removing the photon category, with each other. No clipping or learned feature
+Each PFO contributes seven unscaled features: `ln(pT/GeV)`, `eta`, `sin(phi)`,
+`cos(phi)`, `ln(E/GeV)`, charge in units of `e`, and an explicit
+`abs(charge)>0.1e` indicator. The available Pandora photon identification has
+not been updated for the muon-collider image and is deliberately excluded.
+The charged indicator is information-theoretically redundant with charge but
+is retained as a controlled optimization ablation; a separate neutral flag
+would be exactly complementary and is omitted. No clipping or learned feature
 normalization is applied. Missing required PFO branches and non-positive
 energies are fatal rather than being silently replaced by zeros. The RECO PFN
 uses a raw sum: at
@@ -232,9 +233,11 @@ Important provenance correction: the legacy
 `d043b02` from `reco_n420_pfn_stores_simple`, before the Slurm store path was
 changed. They are not track-fixed results and must not be compared to
 track-fixed confirmation events. The original nine-feature track-fixed result
-is retained under `reco_n420_trackfix_directlog_stabilized_dropout_*`; new
-six-feature results use
-`reco_n420_trackfix_directlog_minimal6_stabilized_dropout_*`.
+is retained under `reco_n420_trackfix_directlog_stabilized_dropout_*`; the
+six-feature ablation uses
+`reco_n420_trackfix_directlog_minimal6_stabilized_dropout_*`; and the
+seven-feature charged-flag ablation uses
+`reco_n420_trackfix_directlog_charged7_stabilized_dropout_*`.
 
 The extended stores also retain selected `SiTracks` (mapped to their
 `AllTracks` IP states), `PandoraClusters`, and the number of PFO-to-track
@@ -248,8 +251,8 @@ sbatch submit_reco_distributions.slurm
 This writes the U-versus-R and matched-null PFO, track, and cluster
 distributions, a numerical summary, and descriptive whole-sample
 single-observable AUCs to
-`plots/reco_n420_minimal6_whole_distributions/`. The PFO object plots use
-the exact six direct-log inputs consumed by the current PFN; the pre-existing
+`plots/reco_n420_charged7_whole_distributions/`. The PFO object plots use
+the exact seven direct-log inputs consumed by the current PFN; the pre-existing
 distribution directories are not overwritten. Positive track momentum and
 cluster-energy object distributions also use plain natural logarithms.
 Event-level sums retain a zero-safe display because the samples contain

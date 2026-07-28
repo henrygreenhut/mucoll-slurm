@@ -47,5 +47,5 @@ run_training() {
         --label "$label"
 }
 
-run_training R "reco_n420_trackfix_directlog_minimal6_baseline_U_vs_R"
-run_training null_b "reco_n420_trackfix_directlog_minimal6_baseline_null"
+run_training R "reco_n420_trackfix_directlog_charged7_baseline_U_vs_R"
+run_training null_b "reco_n420_trackfix_directlog_charged7_baseline_null"
