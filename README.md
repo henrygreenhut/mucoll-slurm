@@ -185,9 +185,9 @@ python3 reco_libtest_prepare_pools.py \
   --exclude-cycle 6291 --force
 ```
 
-Produce any missing GEN->SIM->DIGI->RECO chunks. The submitter packs up to 64
-independent four-core chains per CPU node into one allocation and skips valid
-existing outputs:
+Produce any missing GEN->SIM->DIGI->RECO chunks. On OSCAR the submitter uses a
+fixed 64-way CPU array, with each task processing its assigned reconstruction
+chains sequentially. It skips valid existing outputs:
 
 ```bash
 python3 submit_reco_libtest_packed.py
@@ -278,6 +278,72 @@ evaluates them on the separate 5,000-event/class track-fixed confirmation
 stores. Confirmation summaries fingerprint both the training and
 confirmation datasets and refuse a checkpoint whose stored hash, dataset
 tag, or PFO-track-link requirement does not match.
+
+### Validation-size studies
+
+Two charged-seven-feature studies separate two possible limitations of the
+original 400-event/class validation set:
+
+- `val2000` keeps the original 60/15/25 source-cycle split and the existing
+  train and test RECO events, but reconstructs 2,000 validation events/class
+  from the same validation-cycle pool.
+- `val25` uses a 50/25/25 source-cycle split and reconstructs 2,000 train and
+  2,000 validation events/class. The deterministic shuffle and unchanged 25%
+  test fraction preserve the original 1,664 test cycles exactly, so the
+  existing 800-event/class test cohort is reused.
+
+With 6,654 usable paired cycles, `val25` contains 3,326 train, 1,664
+validation, and 1,664 test cycles. Both studies use the same seven inputs,
+EnergyFlow PFN, stabilized-dropout recipe, seed, 2,000 training events/class,
+and frozen test and confirmation cohorts. Thus `val2000` tests event-count
+noise alone; comparing `val25` with it additionally tests validation source
+diversity (while reducing training source diversity).
+
+After creating the `val25` pool, submit only the RECO partitions that are new:
+
+```bash
+python3 reco_libtest_prepare_pools.py \
+  --norm1-sim /oscar/data/mleblan6/mucoll/hgreenhu/mucoll/bib_norm1_reconstructed/SIM \
+  --norm42-sim /oscar/data/mleblan6/mucoll/bib/SIM \
+  --outdir "$PSCRATCH/mucoll/libtest/bib_pools_val25" \
+  --exclude-cycle 6291 \
+  --val-fraction 0.25 \
+  --test-fraction 0.25 \
+  --force
+
+python3 submit_reco_libtest_packed.py \
+  --pools "$PSCRATCH/mucoll/libtest/bib_pools_simple" \
+  --outdir "$PSCRATCH/mucoll/libtest/reco_n420_pfn_trackfix_val2000" \
+  --splits val \
+  --val-events 2000
+
+python3 submit_reco_libtest_packed.py \
+  --pools "$PSCRATCH/mucoll/libtest/bib_pools_val25" \
+  --outdir "$PSCRATCH/mucoll/libtest/reco_n420_pfn_trackfix_val25" \
+  --splits train val \
+  --train-events 2000 \
+  --val-events 2000
+```
+
+After each packed job succeeds, use the matching study name for store
+construction, training, and frozen-model confirmation:
+
+```bash
+store_job=$(sbatch --parsable submit_reco_libtest_stores.slurm val2000)
+train_job=$(sbatch --parsable --dependency=afterok:"$store_job" \
+  submit_reco_libtest_recipe.slurm stabilized_dropout val2000)
+sbatch --dependency=afterok:"$train_job" \
+  submit_reco_libtest_confirmation_evaluate.slurm val2000
+
+store_job=$(sbatch --parsable submit_reco_libtest_stores.slurm val25)
+train_job=$(sbatch --parsable --dependency=afterok:"$store_job" \
+  submit_reco_libtest_recipe.slurm stabilized_dropout val25)
+sbatch --dependency=afterok:"$train_job" \
+  submit_reco_libtest_confirmation_evaluate.slurm val25
+```
+
+The store builder requires the exact declared event count and records the
+source-pool manifest path and SHA-256 fingerprint in every HDF5 store.
 
 ## Checks
 

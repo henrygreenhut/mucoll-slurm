@@ -135,6 +135,30 @@ RUNS = (
      "RECO N=420 — track-fixed charged-flag null",
      "reco_n420_trackfix_directlog_charged7/"
      "reco_n420_trackfix_directlog_charged7_stabilized_dropout_null.pdf"),
+    ("reco_pfn_results/"
+     "reco_n420_trackfix_val2000_directlog_charged7_"
+     "stabilized_dropout_U_vs_R",
+     "RECO N=420 — charged-flag PFN, 2,000 validation events",
+     "reco_n420_trackfix_validation/"
+     "reco_n420_trackfix_charged7_val2000.pdf"),
+    ("reco_pfn_results/"
+     "reco_n420_trackfix_val2000_directlog_charged7_"
+     "stabilized_dropout_null",
+     "RECO N=420 — charged-flag null, 2,000 validation events",
+     "reco_n420_trackfix_validation/"
+     "reco_n420_trackfix_charged7_val2000_null.pdf"),
+    ("reco_pfn_results/"
+     "reco_n420_trackfix_val25_directlog_charged7_"
+     "stabilized_dropout_U_vs_R",
+     "RECO N=420 — charged-flag PFN, 25% validation cycles",
+     "reco_n420_trackfix_validation/"
+     "reco_n420_trackfix_charged7_val25.pdf"),
+    ("reco_pfn_results/"
+     "reco_n420_trackfix_val25_directlog_charged7_"
+     "stabilized_dropout_null",
+     "RECO N=420 — charged-flag null, 25% validation cycles",
+     "reco_n420_trackfix_validation/"
+     "reco_n420_trackfix_charged7_val25_null.pdf"),
 )
 
 

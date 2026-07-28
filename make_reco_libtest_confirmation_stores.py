@@ -52,7 +52,7 @@ def main():
             temporary.unlink()
 
         print("\nconfirmation / {}".format(sample))
-        write_store(source, temporary, sample)
+        write_store(source, temporary, sample, EXPECTED_EVENTS)
         found = event_count(temporary)
         if found != EXPECTED_EVENTS:
             temporary.unlink()

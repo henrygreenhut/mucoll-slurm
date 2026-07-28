@@ -26,6 +26,22 @@ class RecoSourceSplitTests(unittest.TestCase):
                             ("val", "test")):
             self.assertTrue(set(first[left]).isdisjoint(first[right]))
 
+    def test_larger_validation_split_preserves_frozen_test_cycles(self):
+        cycles = list(range(6654))
+        original = pools.split_cycles(cycles, 0.15, 0.25)
+        enlarged = pools.split_cycles(cycles, 0.25, 0.25)
+
+        self.assertEqual(
+            [len(enlarged[name]) for name in ("train", "val", "test")],
+            [3326, 1664, 1664],
+        )
+        self.assertEqual(enlarged["test"], original["test"])
+        self.assertTrue(set(original["val"]).issubset(enlarged["val"]))
+        self.assertEqual(
+            set(enlarged["val"]) - set(original["val"]),
+            set(original["train"]) - set(enlarged["train"]),
+        )
+
 
 class RecoFeatureTests(unittest.TestCase):
     def test_only_charge_derived_category_is_a_model_input(self):

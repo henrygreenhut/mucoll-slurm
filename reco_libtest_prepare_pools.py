@@ -21,6 +21,14 @@ def parse_args():
     parser.add_argument("--outdir", required=True)
     parser.add_argument("--exclude-cycle", type=int, action="append", default=[],
                         help="cycle ID to exclude (repeatable)")
+    parser.add_argument(
+        "--val-fraction", type=float, default=0.15,
+        help="fraction of paired cycles assigned to validation (default 0.15)",
+    )
+    parser.add_argument(
+        "--test-fraction", type=float, default=0.25,
+        help="fraction of paired cycles assigned to test (default 0.25)",
+    )
     parser.add_argument("--audit-only", action="store_true")
     parser.add_argument("--force", action="store_true",
                         help="replace existing pool symlinks and manifest")
@@ -56,16 +64,23 @@ def assign_cycle_ids(paths):
     return dict(zip(ids, paths))
 
 
-def split_cycles(cycles):
+def split_cycles(cycles, val_fraction=0.15, test_fraction=0.25):
+    if val_fraction <= 0 or test_fraction <= 0:
+        raise ValueError("validation and test fractions must be positive")
+    if val_fraction + test_fraction >= 1:
+        raise ValueError("validation and test fractions must sum to less than 1")
     cycles = list(cycles)
     random.Random(SPLIT_SEED).shuffle(cycles)
     n_cycles = len(cycles)
-    n_train = round(0.60 * n_cycles)
-    n_val = round(0.15 * n_cycles)
+    n_val = round(val_fraction * n_cycles)
+    n_test = round(test_fraction * n_cycles)
+    n_train = n_cycles - n_val - n_test
+    if min(n_train, n_val, n_test) < 1:
+        raise ValueError("source split leaves an empty partition")
     return {
         "train": cycles[:n_train],
         "val": cycles[n_train:n_train + n_val],
-        "test": cycles[n_train + n_val:],
+        "test": cycles[n_train + n_val:n_train + n_val + n_test],
     }
 
 
@@ -128,7 +143,11 @@ def main():
     cycles = sorted(common - excluded)
     if not cycles:
         raise SystemExit("the selected SIM libraries have no paired cycle IDs")
-    splits = split_cycles(cycles)
+    splits = split_cycles(
+        cycles,
+        val_fraction=args.val_fraction,
+        test_fraction=args.test_fraction,
+    )
     print("paired cycles: {} ({} .. {})".format(len(cycles), cycles[0], cycles[-1]))
     if excluded:
         print("excluded cycles: {}".format(
@@ -161,6 +180,11 @@ def main():
         "n_paired_cycles": len(cycles),
         "cycles": cycles,
         "split_seed": SPLIT_SEED,
+        "split_fractions": {
+            "train": 1.0 - args.val_fraction - args.test_fraction,
+            "val": args.val_fraction,
+            "test": args.test_fraction,
+        },
         "splits": {name: values for name, values in splits.items()},
         "null_construction": (
             "null_b shares every norm1 source cycle with U and uses an "

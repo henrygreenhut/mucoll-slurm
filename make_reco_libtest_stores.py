@@ -3,6 +3,8 @@
 
 import argparse
 import glob
+import hashlib
+import json
 import os
 from pathlib import Path
 
@@ -41,6 +43,31 @@ def parse_args():
         if scratch else None,
         required=not bool(scratch),
     )
+    parser.add_argument(
+        "--pool-manifest",
+        help="default source-pool manifest recorded in every store",
+    )
+    for split in SPLITS:
+        parser.add_argument(
+            "--{}-reco-dir".format(split),
+            help=(
+                "optional {}-partition input root; defaults to --reco-dir"
+                .format(split)
+            ),
+        )
+        parser.add_argument(
+            "--{}-pool-manifest".format(split),
+            help=(
+                "source-pool manifest for {}; defaults to --pool-manifest"
+                .format(split)
+            ),
+        )
+        parser.add_argument(
+            "--{}-events".format(split),
+            type=int,
+            default={"train": 2000, "val": 400, "test": 800}[split],
+            help="required events per class in the {} store".format(split),
+        )
     return parser.parse_args()
 
 
@@ -244,7 +271,9 @@ def pad_events(events, n_features):
     return output, counts
 
 
-def write_store(directory, output, class_name):
+def write_store(
+    directory, output, class_name, expected_events, provenance_attrs=None
+):
     root_files = find_root_files(directory)
     if not root_files:
         raise SystemExit("No RECO ROOT files found in {}".format(directory))
@@ -261,6 +290,12 @@ def write_store(directory, output, class_name):
         pfo_track_links.extend(result["pfo_track_links"])
         source_files.extend([str(path)] * n_events)
         source_events.extend(range(n_events))
+    if len(source_events) != expected_events:
+        raise SystemExit(
+            "{} has {} events for {}; expected {}".format(
+                directory, len(source_events), class_name, expected_events
+            )
+        )
 
     padded = {}
     for name, features in (
@@ -297,6 +332,8 @@ def write_store(directory, output, class_name):
         h5.attrs["pfo_collection"] = "PandoraPFOs"
         h5.attrs["track_collection"] = "SiTracks_objIdx -> AllTracks"
         h5.attrs["cluster_collection"] = "PandoraClusters"
+        for key, value in (provenance_attrs or {}).items():
+            h5.attrs[key] = value
 
     means = {
         name: np.mean(counts) for name, (_, counts) in padded.items()
@@ -310,14 +347,62 @@ def write_store(directory, output, class_name):
     )
 
 
+def pool_provenance(manifest_arg, split):
+    if not manifest_arg:
+        return {}, set()
+    manifest_path = Path(manifest_arg).resolve()
+    payload = manifest_path.read_bytes()
+    manifest = json.loads(payload)
+    cycles = [int(value) for value in manifest["splits"][split]]
+    cycle_payload = ",".join(map(str, cycles)).encode()
+    return {
+        "source_pool_manifest": str(manifest_path),
+        "source_pool_manifest_sha256": hashlib.sha256(payload).hexdigest(),
+        "source_pool_paired_cycles": int(manifest["n_paired_cycles"]),
+        "source_pool_split": split,
+        "source_pool_split_cycles": len(cycles),
+        "source_pool_split_cycles_sha256": hashlib.sha256(
+            cycle_payload
+        ).hexdigest(),
+    }, set(cycles)
+
+
 def main():
     args = parse_args()
     reco_dir = Path(args.reco_dir).resolve()
     outdir = Path(args.outdir).resolve()
+    pool_attrs = {}
+    pool_cycles = {}
+    for split in SPLITS:
+        manifest_arg = (
+            getattr(args, "{}_pool_manifest".format(split))
+            or args.pool_manifest
+        )
+        pool_attrs[split], pool_cycles[split] = pool_provenance(
+            manifest_arg, split
+        )
+    if all(pool_cycles.values()):
+        for left, right in (
+            ("train", "val"),
+            ("train", "test"),
+            ("val", "test"),
+        ):
+            overlap = pool_cycles[left] & pool_cycles[right]
+            if overlap:
+                raise SystemExit(
+                    "source-pool manifests leak {} cycles between {} and {}"
+                    .format(len(overlap), left, right)
+                )
+    split_roots = {
+        split: Path(
+            getattr(args, "{}_reco_dir".format(split)) or reco_dir
+        ).resolve()
+        for split in SPLITS
+    }
     for sample in SAMPLES:
         for split in SPLITS:
             source = (
-                reco_dir
+                split_roots[split]
                 / "reco_libtest_n{}_{}".format(N_FILES, sample)
                 / split
             )
@@ -325,7 +410,13 @@ def main():
                 N_FILES, sample, split
             )
             print("\n{} / {}".format(sample, split))
-            write_store(source, output, sample)
+            write_store(
+                source,
+                output,
+                sample,
+                getattr(args, "{}_events".format(split)),
+                pool_attrs[split],
+            )
 
 
 if __name__ == "__main__":

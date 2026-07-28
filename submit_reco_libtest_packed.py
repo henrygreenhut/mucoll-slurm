@@ -16,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 
 
-SPLIT_EVENTS = {
+DEFAULT_SPLIT_EVENTS = {
     "train": 2000,
     "val": 400,
     "test": 800,
@@ -42,6 +42,22 @@ def parse_args():
         "--outdir",
         default=scratch + "/mucoll/libtest/reco_n420_pfn_trackfix",
     )
+    parser.add_argument(
+        "--splits",
+        nargs="+",
+        choices=("train", "val", "test"),
+        default=("train", "val", "test"),
+        help="partitions to produce (default: all)",
+    )
+    parser.add_argument(
+        "--train-events", type=int, default=DEFAULT_SPLIT_EVENTS["train"]
+    )
+    parser.add_argument(
+        "--val-events", type=int, default=DEFAULT_SPLIT_EVENTS["val"]
+    )
+    parser.add_argument(
+        "--test-events", type=int, default=DEFAULT_SPLIT_EVENTS["test"]
+    )
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
@@ -66,10 +82,19 @@ def main():
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     manifest = logs / "reco_n{}_{}.tsv".format(N_FILES, stamp)
 
+    split_events = {
+        "train": args.train_events,
+        "val": args.val_events,
+        "test": args.test_events,
+    }
+    if any(split_events[split] <= 0 for split in args.splits):
+        raise SystemExit("requested split event counts must be positive")
+
     rows = []
     skipped = 0
-    for split in SPLIT_EVENTS:
-        n_jobs = math.ceil(SPLIT_EVENTS[split] / EVENTS_PER_JOB)
+    for split in args.splits:
+        n_events = split_events[split]
+        n_jobs = math.ceil(n_events / EVENTS_PER_JOB)
         for sample in LIBRARY:
             library = LIBRARY[sample]
             plus = pools / library / split / "MUPLUS"
@@ -83,8 +108,7 @@ def main():
             for index in range(n_jobs):
                 job_id = JOB_ID_BASE[split] + index
                 first = index * EVENTS_PER_JOB
-                nevents = min(EVENTS_PER_JOB,
-                              SPLIT_EVENTS[split] - first)
+                nevents = min(EVENTS_PER_JOB, n_events - first)
                 expected = (outdir / study / "job_{}".format(job_id) /
                             "reco_output_{}.edm4hep.root".format(job_id))
                 if expected.is_file() and expected.stat().st_size > 0 and not args.force:

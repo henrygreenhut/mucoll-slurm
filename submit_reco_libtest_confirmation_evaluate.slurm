@@ -14,6 +14,29 @@
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
+STUDY=${1:-charged7}
+case "$STUDY" in
+    charged7)
+        DATASET_TAG=trackfix
+        CHECKPOINT_PREFIX=reco_n420_trackfix_directlog_charged7_stabilized_dropout
+        OUTPUT_PREFIX=reco_n420_trackfix_directlog_charged7_stabilized_dropout_confirmation
+        ;;
+    val2000)
+        DATASET_TAG=trackfix_val2000
+        CHECKPOINT_PREFIX=reco_n420_trackfix_val2000_directlog_charged7_stabilized_dropout
+        OUTPUT_PREFIX=reco_n420_trackfix_val2000_directlog_charged7_stabilized_dropout_confirmation
+        ;;
+    val25)
+        DATASET_TAG=trackfix_val25
+        CHECKPOINT_PREFIX=reco_n420_trackfix_val25_directlog_charged7_stabilized_dropout
+        OUTPUT_PREFIX=reco_n420_trackfix_val25_directlog_charged7_stabilized_dropout_confirmation
+        ;;
+    *)
+        echo "usage: sbatch $0 [charged7|val2000|val25]" >&2
+        exit 2
+        ;;
+esac
+
 module load ngc-tensorflow-container/25.02-tf2-py3-j4zj
 
 TRAIN_SITE=/oscar/scratch/$USER/mucoll/envs/reco-train-site-v1
@@ -38,15 +61,15 @@ evaluate() {
         --store-dir "$STORE_DIR" \
         --checkpoint-dir "$RESULT_DIR/$checkpoint_label" \
         --class-b "$class_b" \
-        --expected-training-dataset-tag trackfix \
+        --expected-training-dataset-tag "$DATASET_TAG" \
         --require-clean-code \
         --label "$output_label" \
         --outdir "$RESULT_DIR"
 }
 
 evaluate R \
-    reco_n420_trackfix_directlog_charged7_stabilized_dropout_U_vs_R \
-    reco_n420_trackfix_directlog_charged7_stabilized_dropout_confirmation_U_vs_R
+    "${CHECKPOINT_PREFIX}_U_vs_R" \
+    "${OUTPUT_PREFIX}_U_vs_R"
 evaluate null_b \
-    reco_n420_trackfix_directlog_charged7_stabilized_dropout_null \
-    reco_n420_trackfix_directlog_charged7_stabilized_dropout_confirmation_null
+    "${CHECKPOINT_PREFIX}_null" \
+    "${OUTPUT_PREFIX}_null"

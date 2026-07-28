@@ -14,11 +14,12 @@
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
-if [ "$#" -ne 1 ]; then
-    echo "usage: sbatch $0 {stabilized|stabilized_dropout}" >&2
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+    echo "usage: sbatch $0 {stabilized|stabilized_dropout} [charged7|val2000|val25]" >&2
     exit 2
 fi
 RECIPE=$1
+STUDY=${2:-charged7}
 case "$RECIPE" in
     stabilized|stabilized_dropout) ;;
     *)
@@ -27,10 +28,35 @@ case "$RECIPE" in
         ;;
 esac
 
+case "$STUDY" in
+    charged7)
+        STORE_NAME=reco_n420_pfn_stores_trackfix
+        DATASET_TAG=trackfix
+        LABEL_PREFIX=reco_n420_trackfix_directlog_charged7
+        VAL_EVENTS=400
+        ;;
+    val2000)
+        STORE_NAME=reco_n420_pfn_stores_trackfix_val2000
+        DATASET_TAG=trackfix_val2000
+        LABEL_PREFIX=reco_n420_trackfix_val2000_directlog_charged7
+        VAL_EVENTS=2000
+        ;;
+    val25)
+        STORE_NAME=reco_n420_pfn_stores_trackfix_val25
+        DATASET_TAG=trackfix_val25
+        LABEL_PREFIX=reco_n420_trackfix_val25_directlog_charged7
+        VAL_EVENTS=2000
+        ;;
+    *)
+        echo "unknown study: $STUDY" >&2
+        exit 2
+        ;;
+esac
+
 module load ngc-tensorflow-container/25.02-tf2-py3-j4zj
 
 TRAIN_SITE=/oscar/scratch/$USER/mucoll/envs/reco-train-site-v1
-STORE_DIR=/oscar/scratch/$USER/mucoll/libtest/reco_n420_pfn_stores_trackfix
+STORE_DIR=/oscar/scratch/$USER/mucoll/libtest/$STORE_NAME
 RESULT_DIR="$SLURM_SUBMIT_DIR/reco_pfn_results"
 if [ ! -d "$TRAIN_SITE/matplotlib" ]; then
     echo "ERROR: missing $TRAIN_SITE; run ./setup_oscar_reco_envs.sh first"
@@ -50,13 +76,16 @@ run_training() {
         --store-dir "$STORE_DIR" \
         --class-a U \
         --class-b "$class_b" \
-        --dataset-tag trackfix \
+        --dataset-tag "$DATASET_TAG" \
         --require-clean-code \
         --require-pfo-track-links \
+        --train-events 2000 \
+        --val-events "$VAL_EVENTS" \
+        --test-events 800 \
         --recipe "$RECIPE" \
         --label "$label"
 }
 
-echo "RECO N=420 dataset=trackfix features=charged7 store=$STORE_DIR recipe=$RECIPE"
-run_training R "reco_n420_trackfix_directlog_charged7_${RECIPE}_U_vs_R"
-run_training null_b "reco_n420_trackfix_directlog_charged7_${RECIPE}_null"
+echo "RECO N=420 study=$STUDY dataset=$DATASET_TAG features=charged7 store=$STORE_DIR recipe=$RECIPE"
+run_training R "${LABEL_PREFIX}_${RECIPE}_U_vs_R"
+run_training null_b "${LABEL_PREFIX}_${RECIPE}_null"

@@ -31,7 +31,7 @@ from reco_libtest_features import (
 
 
 N_FILES = 420
-EXPECTED_EVENTS = {"train": 2000, "val": 400, "test": 800}
+DEFAULT_EXPECTED_EVENTS = {"train": 2000, "val": 400, "test": 800}
 TRAINING_SEED = 12345
 PHI_SIZES = (64, 64, 64)
 F_SIZES = (64, 64, 64)
@@ -91,6 +91,15 @@ def parse_args():
     parser.add_argument("--epochs", type=int, default=150)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--patience", type=int, default=20)
+    parser.add_argument(
+        "--train-events", type=int, default=DEFAULT_EXPECTED_EVENTS["train"]
+    )
+    parser.add_argument(
+        "--val-events", type=int, default=DEFAULT_EXPECTED_EVENTS["val"]
+    )
+    parser.add_argument(
+        "--test-events", type=int, default=DEFAULT_EXPECTED_EVENTS["test"]
+    )
     parser.add_argument("--recipe", choices=tuple(RECIPES), default="baseline")
     return parser.parse_args()
 
@@ -421,6 +430,12 @@ def main():
     )
     if args.require_pfo_track_links:
         require_pfo_track_links(dataset)
+    expected_events = {
+        split: getattr(args, "{}_events".format(split))
+        for split in ("train", "val", "test")
+    }
+    if any(value <= 0 for value in expected_events.values()):
+        raise SystemExit("train, validation, and test event counts must be positive")
     runtime = runtime_provenance()
     run_context = {
         "status": "started",
@@ -440,6 +455,7 @@ def main():
             "patience": args.patience,
             "seed": TRAINING_SEED,
             "require_pfo_track_links": args.require_pfo_track_links,
+            "events_per_class": expected_events,
         },
     }
     write_json(result_dir / "run_context.json", run_context)
@@ -452,7 +468,7 @@ def main():
     pairs = {
         split: load_pair(
             store_dir, N_FILES, args.class_a, args.class_b, split,
-            EXPECTED_EVENTS[split])
+            expected_events[split])
         for split in ("train", "val", "test")
     }
     width = max(item[0].shape[1] for pair in pairs.values() for item in pair)
@@ -558,6 +574,7 @@ def main():
             "min_learning_rate": training_config["min_learning_rate"],
             "clipnorm": training_config["clipnorm"],
             "jit_compile": training_config["jit_compile"],
+            "events_per_class": expected_events,
         },
         "seed": TRAINING_SEED,
         "epochs_run": len(history.history["loss"]),
