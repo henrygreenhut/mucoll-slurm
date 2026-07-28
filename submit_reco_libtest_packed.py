@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Submit the complete N=420 RECO data set as one packed CPU allocation.
+"""Submit one fixed-size RECO BIB data set as a packed CPU allocation.
 
 Ported from Perlmutter (whole-node shifter/srun packing, --account/--qos)
 to OSCAR: the batch partition caps this account at MaxTRESPU=cpu=64 total
@@ -28,19 +28,34 @@ JOB_ID_BASE = {
 }
 LIBRARY = {"U": "norm1", "R": "norm42", "null_b": "norm1"}
 DIGI_OFFSET = {"U": 0, "R": 0, "null_b": 1_000_000}
-N_FILES = 420
+DEFAULT_N_FILES = 420
 EVENTS_PER_JOB = 50
+
+
+def files_per_event(n_files, sample):
+    """Return actual library files overlaid per polarity for one class."""
+    return n_files if sample != "R" else n_files // 42
 
 
 def parse_args():
     scratch = f"/oscar/scratch/{os.environ.get('USER', '')}"
     parser = argparse.ArgumentParser()
-    parser.add_argument("--time", default="08:00:00",
-                        help="SBATCH -t override for the 64-way array job")
+    parser.add_argument(
+        "--n-files", type=int, default=DEFAULT_N_FILES,
+        help="norm1-file equivalents per reconstructed event",
+    )
+    parser.add_argument(
+        "--time",
+        help="SBATCH time override (default: 8 hours at N=420, 16 otherwise)",
+    )
+    parser.add_argument(
+        "--memory",
+        help="memory per array task (default: 8G at N=420, 16G otherwise)",
+    )
     parser.add_argument("--pools", default=scratch + "/mucoll/libtest/bib_pools_simple")
     parser.add_argument(
         "--outdir",
-        default=scratch + "/mucoll/libtest/reco_n420_pfn_trackfix",
+        help="output root (default includes --n-files)",
     )
     parser.add_argument(
         "--splits",
@@ -65,10 +80,24 @@ def parse_args():
 
 def main():
     args = parse_args()
+    if args.n_files <= 0 or args.n_files % 42:
+        raise SystemExit("--n-files must be a positive multiple of 42")
 
     repo = Path(__file__).resolve().parent
     pools = Path(args.pools).resolve()
-    outdir = Path(args.outdir).resolve()
+    outdir = Path(
+        args.outdir
+        or (
+            "/oscar/scratch/{}/mucoll/libtest/reco_n{}_pfn_trackfix"
+            .format(os.environ.get("USER", ""), args.n_files)
+        )
+    ).resolve()
+    walltime = args.time or (
+        "08:00:00" if args.n_files == DEFAULT_N_FILES else "16:00:00"
+    )
+    memory = args.memory or (
+        "8G" if args.n_files == DEFAULT_N_FILES else "16G"
+    )
     oscar_scratch = Path("/oscar/scratch") / os.environ.get("USER", "")
     try:
         outdir.relative_to(oscar_scratch)
@@ -80,7 +109,7 @@ def main():
     logs = repo / "logs"
     logs.mkdir(exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    manifest = logs / "reco_n{}_{}.tsv".format(N_FILES, stamp)
+    manifest = logs / "reco_n{}_{}.tsv".format(args.n_files, stamp)
 
     split_events = {
         "train": args.train_events,
@@ -99,12 +128,22 @@ def main():
             library = LIBRARY[sample]
             plus = pools / library / split / "MUPLUS"
             minus = pools / library / split / "MUMINUS"
+            bib_number = files_per_event(args.n_files, sample)
             for directory in (plus, minus):
-                if not directory.is_dir() or not any(directory.glob("*.root")):
-                    raise SystemExit("empty or missing pool: {}".format(directory))
+                available = (
+                    len(list(directory.glob("*.root")))
+                    if directory.is_dir() else 0
+                )
+                if available < bib_number:
+                    raise SystemExit(
+                        "pool {} has {} files; need {} for sample {}".format(
+                            directory, available, bib_number, sample
+                        )
+                    )
 
-            bib_number = N_FILES if sample != "R" else N_FILES // 42
-            study = "reco_libtest_n{}_{}/{}".format(N_FILES, sample, split)
+            study = "reco_libtest_n{}_{}/{}".format(
+                args.n_files, sample, split
+            )
             for index in range(n_jobs):
                 job_id = JOB_ID_BASE[split] + index
                 first = index * EVENTS_PER_JOB
@@ -131,13 +170,20 @@ def main():
     slurm = repo / "submit_reco_libtest_packed.slurm"
     command = [
         "sbatch", "--parsable",
-        "--time={}".format(args.time),
+        "--time={}".format(walltime),
+        "--mem={}".format(memory),
         str(slurm), str(manifest),
     ]
     print("manifest: {}".format(manifest))
     print("tasks: {} ({} existing outputs skipped)".format(len(rows), skipped))
     print("allocation: fixed 64-way array (OSCAR batch partition MaxTRESPU=cpu=64),"
           " each shard looping over its assigned rows")
+    print(
+        "construction: U/null={} norm1 files; R={} norm42 files".format(
+            files_per_event(args.n_files, "U"),
+            files_per_event(args.n_files, "R"),
+        )
+    )
     print(" ".join(command))
     if not args.dry_run:
         result = subprocess.run(command, check=True,

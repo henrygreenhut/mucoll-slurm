@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Train one split-safe PFN for the N=420 reconstructed-BIB study."""
+"""Train one split-safe PFN for a fixed-size reconstructed-BIB study."""
 
 import argparse
 import csv
@@ -30,7 +30,7 @@ from reco_libtest_features import (
 )
 
 
-N_FILES = 420
+DEFAULT_N_FILES = 420
 DEFAULT_EXPECTED_EVENTS = {"train": 2000, "val": 400, "test": 800}
 TRAINING_SEED = 12345
 PHI_SIZES = (64, 64, 64)
@@ -68,6 +68,7 @@ RECIPES = {
 
 def parse_args():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--n-files", type=int, default=DEFAULT_N_FILES)
     parser.add_argument("--store-dir", required=True)
     parser.add_argument("--class-a", required=True)
     parser.add_argument("--class-b", required=True)
@@ -104,8 +105,19 @@ def parse_args():
     return parser.parse_args()
 
 
-def load_store(path):
+def load_store(path, expected_n_files=None):
     with h5py.File(path, "r") as h5:
+        stored_n_files = h5.attrs.get("n_files")
+        if (
+            expected_n_files is not None
+            and stored_n_files is not None
+            and int(stored_n_files) != expected_n_files
+        ):
+            raise ValueError(
+                "{} stores N={}, expected N={}".format(
+                    path, int(stored_n_files), expected_n_files
+                )
+            )
         feature_names = h5.attrs.get("features", "")
         if isinstance(feature_names, bytes):
             feature_names = feature_names.decode()
@@ -136,7 +148,7 @@ def one_hot(labels):
 def load_pair(store_dir, n_files, class_a, class_b, split, expected):
     paths = [store_dir / "n{}_{}_{}.h5".format(n_files, cls, split)
              for cls in (class_a, class_b)]
-    loaded = [load_store(path) for path in paths]
+    loaded = [load_store(path, n_files) for path in paths]
     if len(loaded[0][0]) != len(loaded[1][0]):
         raise SystemExit("{} class counts differ: {} vs {}".format(
             split, len(loaded[0][0]), len(loaded[1][0])))
@@ -304,14 +316,14 @@ def store_provenance(path):
     }
 
 
-def dataset_provenance(store_dir, class_a, class_b):
+def dataset_provenance(store_dir, n_files, class_a, class_b):
     stores = {}
     for split in ("train", "val", "test"):
         stores[split] = {}
         for class_name in (class_a, class_b):
             path = (
                 Path(store_dir)
-                / "n{}_{}_{}.h5".format(N_FILES, class_name, split)
+                / "n{}_{}_{}.h5".format(n_files, class_name, split)
             )
             stores[split][class_name] = store_provenance(path)
     identity = {
@@ -397,6 +409,8 @@ def save_roc(path, y, scores, auc):
 
 def main():
     args = parse_args()
+    if args.n_files <= 0 or args.n_files % 42:
+        raise SystemExit("--n-files must be a positive multiple of 42")
     if args.dataset_tag.lower() not in args.label.lower():
         raise SystemExit(
             "dataset tag {!r} must occur in result label {!r}".format(
@@ -426,7 +440,7 @@ def main():
 
     store_dir = Path(args.store_dir).resolve()
     dataset = dataset_provenance(
-        store_dir, args.class_a, args.class_b
+        store_dir, args.n_files, args.class_a, args.class_b
     )
     if args.require_pfo_track_links:
         require_pfo_track_links(dataset)
@@ -442,7 +456,7 @@ def main():
         "label": args.label,
         "dataset_tag": args.dataset_tag,
         "classes": [args.class_a, args.class_b],
-        "n_files": N_FILES,
+        "n_files": args.n_files,
         "dataset": dataset,
         "features": list(FEATURES),
         "feature_definitions": FEATURE_DEFINITIONS,
@@ -467,7 +481,7 @@ def main():
 
     pairs = {
         split: load_pair(
-            store_dir, N_FILES, args.class_a, args.class_b, split,
+            store_dir, args.n_files, args.class_a, args.class_b, split,
             expected_events[split])
         for split in ("train", "val", "test")
     }
@@ -539,7 +553,7 @@ def main():
         "dataset_tag": args.dataset_tag,
         "class_a": args.class_a,
         "class_b": args.class_b,
-        "n_files": N_FILES,
+        "n_files": args.n_files,
         "dataset": dataset,
         "features": list(FEATURES),
         "feature_definitions": FEATURE_DEFINITIONS,

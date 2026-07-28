@@ -7,10 +7,16 @@ import h5py
 import numpy as np
 
 import reco_libtest_prepare_pools as pools
+import submit_reco_libtest_packed as submitter
 import train_reco_libtest_pfn as trainer
 
 
 class RecoSourceSplitTests(unittest.TestCase):
+    def test_n840_construction_uses_840_unique_or_20_rotated_files(self):
+        self.assertEqual(submitter.files_per_event(840, "U"), 840)
+        self.assertEqual(submitter.files_per_event(840, "null_b"), 840)
+        self.assertEqual(submitter.files_per_event(840, "R"), 20)
+
     def test_split_is_fixed_shuffled_and_source_disjoint(self):
         cycles = list(range(100))
         first = pools.split_cycles(cycles)
@@ -104,6 +110,23 @@ class RecoFeatureTests(unittest.TestCase):
                 h5.attrs["features"] = "pt,eta,phi,energy,mass,charge,type,px,py,pz"
             with self.assertRaisesRegex(ValueError, "unexpected features"):
                 trainer.load_store(path)
+
+    def test_store_n_files_must_match_requested_study(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "wrong_n.h5"
+            with h5py.File(path, "w") as h5:
+                h5.create_dataset(
+                    "particles",
+                    data=np.zeros((1, 1, len(trainer.RAW_FEATURES))),
+                )
+                h5.create_dataset(
+                    "source_file", data=np.asarray([b"file.root"])
+                )
+                h5.create_dataset("source_event", data=np.asarray([0]))
+                h5.attrs["features"] = ",".join(trainer.RAW_FEATURES)
+                h5.attrs["n_files"] = 420
+            with self.assertRaisesRegex(ValueError, "expected N=840"):
+                trainer.load_store(path, expected_n_files=840)
 
     def test_store_provenance_fingerprints_data_and_track_links(self):
         with tempfile.TemporaryDirectory() as directory:

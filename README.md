@@ -345,6 +345,65 @@ sbatch --dependency=afterok:"$train_job" \
 The store builder requires the exact declared event count and records the
 source-pool manifest path and SHA-256 fingerprint in every HDF5 store.
 
+### N=840 scale point
+
+The same pipeline accepts `--n-files 840`. This corresponds to 840 distinct
+norm1 files for U/null and 20 norm42 files for R (`20 x 42 = 840`), or about
+1.26% of a full bunch crossing. N=840 uses the 50/25/25 source pool, 2,000
+train, 2,000 validation, and 800 test events/class, the same seven PFO inputs,
+and the same stabilized-dropout EnergyFlow PFN. Its raw RECO, stores,
+checkpoints, null, and plots all have independent `n840` names. Files from an
+N=420 store are rejected when an N=840 model is requested.
+
+Produce all three N=840 partitions:
+
+```bash
+python3 submit_reco_libtest_packed.py \
+  --n-files 840 \
+  --pools "$PSCRATCH/mucoll/libtest/bib_pools_val25" \
+  --outdir "$PSCRATCH/mucoll/libtest/reco_n840_pfn_trackfix_val25" \
+  --splits train val test \
+  --train-events 2000 \
+  --val-events 2000 \
+  --test-events 800
+```
+
+The N=840 default is 16 hours and 16 GB per array task. After recording the
+printed packed job ID, queue its store, main-plus-null training, and evaluation
+on the 800-event/class held-out test cohort:
+
+```bash
+n840_store=$(sbatch --parsable --mem=64G \
+  --dependency=afterok:"$n840_cpu" \
+  submit_reco_libtest_stores.slurm val25 840)
+n840_train=$(sbatch --parsable --dependency=afterok:"$n840_store" \
+  submit_reco_libtest_recipe.slurm stabilized_dropout val25 840)
+```
+
+An N=840 model cannot use the N=420 confirmation cohort. A separate 5,000
+event/class confirmation production is supported when that additional CPU
+cost is wanted:
+
+```bash
+python3 submit_reco_libtest_confirmation.py \
+  --n-files 840 \
+  --study val25 \
+  --pools "$PSCRATCH/mucoll/libtest/bib_pools_val25" \
+  --outdir "$PSCRATCH/mucoll/libtest/reco_n840_confirmation"
+```
+
+Its store and evaluator must depend on confirmation production; evaluation
+must additionally depend on N=840 training:
+
+```bash
+n840_confirm_store=$(sbatch --parsable --mem=64G \
+  --dependency=afterok:"$n840_confirm_cpu" \
+  submit_reco_libtest_confirmation_stores.slurm 840)
+n840_eval=$(sbatch --parsable \
+  --dependency=afterok:"$n840_train":"$n840_confirm_store" \
+  submit_reco_libtest_confirmation_evaluate.slurm val25 840)
+```
+
 ## Checks
 
 The retained tests cover only failure modes that would change a result:

@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J reco420_confirm_eval
+#SBATCH -J reco_confirm_eval
 #SBATCH -p gpu-debug
 #SBATCH --gres=gpu:1
 #SBATCH -C l40s
@@ -8,31 +8,48 @@
 #SBATCH --mem=32G
 #SBATCH -t 00:30:00
 #SBATCH --exclude=gpu3005
-#SBATCH --output=reco420_confirm_eval_%j.out
-#SBATCH --error=reco420_confirm_eval_%j.err
+#SBATCH --output=reco_confirm_eval_%j.out
+#SBATCH --error=reco_confirm_eval_%j.err
 
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
 STUDY=${1:-charged7}
+N_FILES=${2:-420}
+if (( N_FILES <= 0 || N_FILES % 42 != 0 )); then
+    echo "N_FILES must be a positive multiple of 42" >&2
+    exit 2
+fi
 case "$STUDY" in
     charged7)
+        if [ "$N_FILES" -ne 420 ]; then
+            echo "charged7 is the legacy N=420 study; use val25 for N=$N_FILES" >&2
+            exit 2
+        fi
         DATASET_TAG=trackfix
-        CHECKPOINT_PREFIX=reco_n420_trackfix_directlog_charged7_stabilized_dropout
-        OUTPUT_PREFIX=reco_n420_trackfix_directlog_charged7_stabilized_dropout_confirmation
+        CHECKPOINT_PREFIX=reco_n${N_FILES}_trackfix_directlog_charged7_stabilized_dropout
+        OUTPUT_PREFIX=reco_n${N_FILES}_trackfix_directlog_charged7_stabilized_dropout_confirmation
         ;;
     val2000)
+        if [ "$N_FILES" -ne 420 ]; then
+            echo "val2000 is the legacy N=420 study; use val25 for N=$N_FILES" >&2
+            exit 2
+        fi
         DATASET_TAG=trackfix_val2000
-        CHECKPOINT_PREFIX=reco_n420_trackfix_val2000_directlog_charged7_stabilized_dropout
-        OUTPUT_PREFIX=reco_n420_trackfix_val2000_directlog_charged7_stabilized_dropout_confirmation
+        CHECKPOINT_PREFIX=reco_n${N_FILES}_trackfix_val2000_directlog_charged7_stabilized_dropout
+        OUTPUT_PREFIX=reco_n${N_FILES}_trackfix_val2000_directlog_charged7_stabilized_dropout_confirmation
         ;;
     val25)
-        DATASET_TAG=trackfix_val25
-        CHECKPOINT_PREFIX=reco_n420_trackfix_val25_directlog_charged7_stabilized_dropout
-        OUTPUT_PREFIX=reco_n420_trackfix_val25_directlog_charged7_stabilized_dropout_confirmation
+        if [ "$N_FILES" -eq 420 ]; then
+            DATASET_TAG=trackfix_val25
+        else
+            DATASET_TAG=n${N_FILES}_trackfix_val25
+        fi
+        CHECKPOINT_PREFIX=reco_n${N_FILES}_trackfix_val25_directlog_charged7_stabilized_dropout
+        OUTPUT_PREFIX=reco_n${N_FILES}_trackfix_val25_directlog_charged7_stabilized_dropout_confirmation
         ;;
     *)
-        echo "usage: sbatch $0 [charged7|val2000|val25]" >&2
+        echo "usage: sbatch $0 [charged7|val2000|val25] [N_FILES]" >&2
         exit 2
         ;;
 esac
@@ -40,7 +57,7 @@ esac
 module load ngc-tensorflow-container/25.02-tf2-py3-j4zj
 
 TRAIN_SITE=/oscar/scratch/$USER/mucoll/envs/reco-train-site-v1
-STORE_DIR=/oscar/scratch/$USER/mucoll/libtest/reco_n420_confirmation_stores
+STORE_DIR=/oscar/scratch/$USER/mucoll/libtest/reco_n${N_FILES}_confirmation_stores
 RESULT_DIR="$SLURM_SUBMIT_DIR/reco_pfn_results"
 if [ ! -d "$TRAIN_SITE/matplotlib" ]; then
     echo "ERROR: missing $TRAIN_SITE; run ./setup_oscar_reco_envs.sh first" >&2
@@ -58,6 +75,7 @@ evaluate() {
     apptainer exec --nv --bind /oscar:/oscar \
         "$NGC_TENSORFLOW_CONTAINER" \
         python evaluate_reco_libtest_confirmation.py \
+        --n-files "$N_FILES" \
         --store-dir "$STORE_DIR" \
         --checkpoint-dir "$RESULT_DIR/$checkpoint_label" \
         --class-b "$class_b" \

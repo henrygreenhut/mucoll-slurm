@@ -30,12 +30,13 @@ from train_reco_libtest_pfn import (
 )
 
 
-N_FILES = 420
+DEFAULT_N_FILES = 420
 JOB_PATTERN = re.compile(r"(?:^|/)job_(\d+)(?:/|$)")
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--n-files", type=int, default=DEFAULT_N_FILES)
     parser.add_argument("--store-dir", required=True)
     parser.add_argument("--checkpoint-dir", required=True)
     parser.add_argument("--class-b", choices=("R", "null_b"), required=True)
@@ -122,15 +123,21 @@ def paired_job_bootstrap(labels, scores, metadata, repetitions, seed):
     return aucs, int(len(keys))
 
 
-def validate_checkpoint(summary, class_b, expected_dataset_tag, weights):
+def validate_checkpoint(
+    summary, n_files, class_b, expected_dataset_tag, weights
+):
     if summary.get("class_a") != "U" or summary.get("class_b") != class_b:
         raise ValueError(
             "checkpoint classes are {} vs {}, requested U vs {}".format(
                 summary.get("class_a"), summary.get("class_b"), class_b
             )
         )
-    if summary.get("n_files") != N_FILES:
-        raise ValueError("checkpoint is not an N=420 model")
+    if summary.get("n_files") != n_files:
+        raise ValueError(
+            "checkpoint N={} does not match requested N={}".format(
+                summary.get("n_files"), n_files
+            )
+        )
     if tuple(summary.get("features", ())) != FEATURES:
         raise ValueError("checkpoint feature list does not match current features")
     if summary.get("feature_definitions") != FEATURE_DEFINITIONS:
@@ -174,12 +181,12 @@ def steps_per_epoch(summary):
     return max(int(training.get("decay_steps", 1)), 1)
 
 
-def load_confirmation(store_dir, class_b):
+def load_confirmation(store_dir, n_files, class_b):
     paths = [
-        store_dir / "n{}_{}_confirmation.h5".format(N_FILES, class_name)
+        store_dir / "n{}_{}_confirmation.h5".format(n_files, class_name)
         for class_name in ("U", class_b)
     ]
-    pair = [load_store(path) for path in paths]
+    pair = [load_store(path, n_files) for path in paths]
     if len(pair[0][0]) != len(pair[1][0]):
         raise ValueError(
             "confirmation class counts differ: {} vs {}".format(
@@ -190,12 +197,12 @@ def load_confirmation(store_dir, class_b):
     return combine_pair(pair, width)
 
 
-def confirmation_provenance(store_dir, class_b):
+def confirmation_provenance(store_dir, n_files, class_b):
     stores = {}
     for class_name in ("U", class_b):
         path = (
             Path(store_dir)
-            / "n{}_{}_confirmation.h5".format(N_FILES, class_name)
+            / "n{}_{}_confirmation.h5".format(n_files, class_name)
         )
         stores[class_name] = store_provenance(path)
     identity = {
@@ -229,6 +236,8 @@ def confirmation_provenance(store_dir, class_b):
 
 def main():
     args = parse_args()
+    if args.n_files <= 0 or args.n_files % 42:
+        raise SystemExit("--n-files must be a positive multiple of 42")
     if args.expected_training_dataset_tag.lower() not in args.label.lower():
         raise SystemExit(
             "training dataset tag {!r} must occur in evaluation label {!r}"
@@ -262,6 +271,7 @@ def main():
         )
     recipe = validate_checkpoint(
         checkpoint_summary,
+        args.n_files,
         args.class_b,
         args.expected_training_dataset_tag,
         weights,
@@ -276,7 +286,7 @@ def main():
         )
     result_dir.mkdir(parents=True, exist_ok=True)
     confirmation_dataset = confirmation_provenance(
-        store_dir, args.class_b
+        store_dir, args.n_files, args.class_b
     )
     context = {
         "status": "started",
@@ -292,7 +302,9 @@ def main():
     }
     write_json(result_dir / "evaluation_context.json", context)
 
-    x, labels, metadata = load_confirmation(store_dir, args.class_b)
+    x, labels, metadata = load_confirmation(
+        store_dir, args.n_files, args.class_b
+    )
     print(
         "confirmation: {} events/class, width {}, {} features".format(
             len(labels) // 2, x.shape[1], x.shape[2]
@@ -331,7 +343,7 @@ def main():
         "evaluation": "frozen-checkpoint confirmation",
         "class_a": "U",
         "class_b": args.class_b,
-        "n_files": N_FILES,
+        "n_files": args.n_files,
         "events_per_class": int(len(labels) // 2),
         "checkpoint": {
             "directory": str(checkpoint_dir),

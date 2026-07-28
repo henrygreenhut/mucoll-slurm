@@ -19,10 +19,12 @@ class ConfirmationManifestTests(unittest.TestCase):
                 for polarity in ("MUPLUS", "MUMINUS"):
                     path = pools / library / "test" / polarity
                     path.mkdir(parents=True)
-                    (path / "cycle_1.root").touch()
+                    count = 42 if library == "norm1" else 1
+                    for index in range(count):
+                        (path / "cycle_{}.root".format(index)).touch()
 
             rows, skipped = submitter.manifest_rows(
-                pools, output, events_per_class=75
+                pools, output, n_files=42, events_per_class=75
             )
 
         self.assertEqual(skipped, 0)
@@ -40,20 +42,30 @@ class ConfirmationManifestTests(unittest.TestCase):
             self.assertTrue(all("/test/" in row[8] for row in sample_rows))
         reused = [row for row in rows if row[0] == "R"]
         unique = [row for row in rows if row[0] == "U"]
-        self.assertTrue(all(int(row[9]) == 10 for row in reused))
-        self.assertTrue(all(int(row[9]) == 420 for row in unique))
+        self.assertTrue(all(int(row[9]) == 1 for row in reused))
+        self.assertTrue(all(int(row[9]) == 42 for row in unique))
 
     def test_followups_require_frozen_checkpoint_weights(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             with self.assertRaisesRegex(SystemExit, "missing checkpoint files"):
-                submitter.require_checkpoints(root)
-            for label in submitter.CHECKPOINTS:
+                submitter.require_checkpoints(root, 420, "charged7")
+            prefix = submitter.checkpoint_prefix(420, "charged7")
+            for label in (prefix + "_U_vs_R", prefix + "_null"):
                 checkpoint = root / "reco_pfn_results" / label
                 checkpoint.mkdir(parents=True)
                 (checkpoint / "summary.json").write_text("{}")
                 (checkpoint / "best.weights.h5").write_bytes(b"weights")
-            submitter.require_checkpoints(root)
+            submitter.require_checkpoints(root, 420, "charged7")
+
+    def test_n840_val25_checkpoint_label_is_unambiguous(self):
+        self.assertEqual(
+            submitter.checkpoint_prefix(840, "val25"),
+            (
+                "reco_n840_trackfix_val25_directlog_charged7_"
+                "stabilized_dropout"
+            ),
+        )
 
 
 class ConfirmationEvaluationTests(unittest.TestCase):
@@ -130,18 +142,22 @@ class ConfirmationEvaluationTests(unittest.TestCase):
             }
             self.assertEqual(
                 evaluator.validate_checkpoint(
-                    summary, "R", "trackfix", weights
+                    summary, 420, "R", "trackfix", weights
                 ),
                 "stabilized_dropout",
             )
+            with self.assertRaisesRegex(ValueError, "does not match"):
+                evaluator.validate_checkpoint(
+                    summary, 840, "R", "trackfix", weights
+                )
             with self.assertRaisesRegex(ValueError, "dataset tag"):
                 evaluator.validate_checkpoint(
-                    summary, "R", "simple", weights
+                    summary, 420, "R", "simple", weights
                 )
             weights.write_bytes(b"different checkpoint")
             with self.assertRaisesRegex(ValueError, "weight hash"):
                 evaluator.validate_checkpoint(
-                    summary, "R", "trackfix", weights
+                    summary, 420, "R", "trackfix", weights
                 )
 
 

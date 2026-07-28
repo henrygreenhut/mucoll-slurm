@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Submit a fresh, test-only N=420 RECO confirmation cohort on OSCAR.
+"""Submit a fresh, test-only RECO confirmation cohort on OSCAR.
 
 The original 800-event/class test outputs are deliberately left untouched.
 This script uses new job IDs (and therefore new particle-gun and digitization
@@ -13,30 +13,43 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
+from submit_reco_libtest_packed import files_per_event
+
 
 SAMPLES = ("U", "R", "null_b")
 LIBRARY = {"U": "norm1", "R": "norm42", "null_b": "norm1"}
 DIGI_OFFSET = {"U": 0, "R": 0, "null_b": 1_000_000}
-N_FILES = 420
+DEFAULT_N_FILES = 420
 EVENTS_PER_JOB = 50
-EVENTS_PER_CLASS = 5000
+DEFAULT_EVENTS_PER_CLASS = 5000
 JOB_ID_START = 300_000
-CHECKPOINTS = (
-    "reco_n420_trackfix_directlog_charged7_stabilized_dropout_U_vs_R",
-    "reco_n420_trackfix_directlog_charged7_stabilized_dropout_null",
-)
 
 
 def parse_args():
     scratch = "/oscar/scratch/{}".format(os.environ.get("USER", ""))
     parser = argparse.ArgumentParser()
-    parser.add_argument("--time", default="08:00:00")
+    parser.add_argument("--n-files", type=int, default=DEFAULT_N_FILES)
+    parser.add_argument(
+        "--study", choices=("charged7", "val2000", "val25"),
+        default="charged7",
+    )
+    parser.add_argument(
+        "--events-per-class", type=int, default=DEFAULT_EVENTS_PER_CLASS
+    )
+    parser.add_argument(
+        "--time",
+        help="SBATCH time override (default: 8 hours at N=420, 16 otherwise)",
+    )
+    parser.add_argument(
+        "--memory",
+        help="memory per array task (default: 8G at N=420, 16G otherwise)",
+    )
     parser.add_argument(
         "--pools", default=scratch + "/mucoll/libtest/bib_pools_simple"
     )
     parser.add_argument(
         "--outdir",
-        default=scratch + "/mucoll/libtest/reco_n420_confirmation",
+        help="output root; defaults from OSCAR scratch and --n-files",
     )
     parser.add_argument(
         "--with-followups",
@@ -50,7 +63,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def manifest_rows(pools, outdir, events_per_class):
+def manifest_rows(pools, outdir, n_files, events_per_class):
     if events_per_class <= 0:
         raise ValueError("events_per_class must be positive")
 
@@ -61,12 +74,20 @@ def manifest_rows(pools, outdir, events_per_class):
         library = LIBRARY[sample]
         plus = pools / library / "test" / "MUPLUS"
         minus = pools / library / "test" / "MUMINUS"
+        bib_number = files_per_event(n_files, sample)
         for directory in (plus, minus):
-            if not directory.is_dir() or not any(directory.glob("*.root")):
-                raise SystemExit("empty or missing held-out pool: {}".format(directory))
+            available = (
+                len(list(directory.glob("*.root")))
+                if directory.is_dir() else 0
+            )
+            if available < bib_number:
+                raise SystemExit(
+                    "held-out pool {} has {} files; need {}".format(
+                        directory, available, bib_number
+                    )
+                )
 
-        bib_number = N_FILES if sample != "R" else N_FILES // 42
-        study = "reco_libtest_n{}_{}/confirmation".format(N_FILES, sample)
+        study = "reco_libtest_n{}_{}/confirmation".format(n_files, sample)
         for index in range(n_jobs):
             job_id = JOB_ID_START + index
             first = index * EVENTS_PER_JOB
@@ -98,7 +119,7 @@ def manifest_rows(pools, outdir, events_per_class):
     return rows, skipped
 
 
-def submit_followups(repo, production_job=None):
+def submit_followups(repo, n_files, study, production_job=None):
     store_command = ["sbatch", "--parsable"]
     if production_job is not None:
         store_command.append(
@@ -107,6 +128,7 @@ def submit_followups(repo, production_job=None):
     store_command.append(
         str(repo / "submit_reco_libtest_confirmation_stores.slurm")
     )
+    store_command.append(str(n_files))
     store_result = subprocess.run(
         store_command,
         check=True,
@@ -123,6 +145,8 @@ def submit_followups(repo, production_job=None):
             "--parsable",
             "--dependency=afterok:{}".format(store_job),
             str(repo / "submit_reco_libtest_confirmation_evaluate.slurm"),
+            study,
+            str(n_files),
         ],
         check=True,
         universal_newlines=True,
@@ -133,10 +157,29 @@ def submit_followups(repo, production_job=None):
     print("submitted frozen-evaluation job {}".format(evaluate_job))
 
 
-def require_checkpoints(repo):
+def checkpoint_prefix(n_files, study):
+    if study == "charged7" and n_files == 420:
+        return "reco_n420_trackfix_directlog_charged7_stabilized_dropout"
+    if study == "val2000" and n_files == 420:
+        return (
+            "reco_n420_trackfix_val2000_directlog_charged7_"
+            "stabilized_dropout"
+        )
+    if study == "val25":
+        return (
+            "reco_n{}_trackfix_val25_directlog_charged7_"
+            "stabilized_dropout".format(n_files)
+        )
+    raise ValueError("unsupported study/N combination: {}/{}".format(
+        study, n_files
+    ))
+
+
+def require_checkpoints(repo, n_files, study):
     result_dir = repo / "reco_pfn_results"
     missing = []
-    for label in CHECKPOINTS:
+    prefix = checkpoint_prefix(n_files, study)
+    for label in (prefix + "_U_vs_R", prefix + "_null"):
         directory = result_dir / label
         for name in ("summary.json", "best.weights.h5"):
             path = directory / name
@@ -152,11 +195,29 @@ def require_checkpoints(repo):
 
 def main():
     args = parse_args()
+    if args.n_files <= 0 or args.n_files % 42:
+        raise SystemExit("--n-files must be a positive multiple of 42")
+    if args.events_per_class <= 0:
+        raise SystemExit("--events-per-class must be positive")
+    if args.study in ("charged7", "val2000") and args.n_files != 420:
+        raise SystemExit("use --study val25 for N={}".format(args.n_files))
     repo = Path(__file__).resolve().parent
     if args.with_followups and not args.dry_run:
-        require_checkpoints(repo)
+        require_checkpoints(repo, args.n_files, args.study)
     pools = Path(args.pools).resolve()
-    outdir = Path(args.outdir).resolve()
+    outdir = Path(
+        args.outdir
+        or (
+            "/oscar/scratch/{}/mucoll/libtest/reco_n{}_confirmation"
+            .format(os.environ.get("USER", ""), args.n_files)
+        )
+    ).resolve()
+    walltime = args.time or (
+        "08:00:00" if args.n_files == DEFAULT_N_FILES else "16:00:00"
+    )
+    memory = args.memory or (
+        "8G" if args.n_files == DEFAULT_N_FILES else "16G"
+    )
     scratch = Path("/oscar/scratch") / os.environ.get("USER", "")
     try:
         outdir.relative_to(scratch)
@@ -167,29 +228,36 @@ def main():
             )
         )
 
-    rows, skipped = manifest_rows(pools, outdir, EVENTS_PER_CLASS)
+    rows, skipped = manifest_rows(
+        pools, outdir, args.n_files, args.events_per_class
+    )
     if not rows:
         print("All confirmation RECO outputs already exist; nothing to submit.")
         if args.with_followups:
             if args.dry_run:
                 print(
-                    "sbatch {}".format(
-                        repo / "submit_reco_libtest_confirmation_stores.slurm"
+                    "sbatch {} {}".format(
+                        repo / "submit_reco_libtest_confirmation_stores.slurm",
+                        args.n_files,
                     )
                 )
                 print(
-                    "then submit {} after the store job succeeds".format(
-                        repo / "submit_reco_libtest_confirmation_evaluate.slurm"
+                    "then submit {} {} {} after the store job succeeds".format(
+                        repo / "submit_reco_libtest_confirmation_evaluate.slurm",
+                        args.study,
+                        args.n_files,
                     )
                 )
             else:
-                submit_followups(repo)
+                submit_followups(repo, args.n_files, args.study)
         return
 
     logs = repo / "logs"
     logs.mkdir(exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    manifest = logs / "reco_n420_confirmation_{}.tsv".format(stamp)
+    manifest = logs / "reco_n{}_confirmation_{}.tsv".format(
+        args.n_files, stamp
+    )
     with manifest.open("w") as handle:
         for row in rows:
             handle.write("\t".join(row) + "\n")
@@ -197,7 +265,8 @@ def main():
     command = [
         "sbatch",
         "--parsable",
-        "--time={}".format(args.time),
+        "--time={}".format(walltime),
+        "--mem={}".format(memory),
         str(repo / "submit_reco_libtest_packed.slurm"),
         str(manifest),
     ]
@@ -207,7 +276,7 @@ def main():
     )
     print(
         "confirmation target: {} fresh events/class from held-out test pools"
-        .format(EVENTS_PER_CLASS)
+        .format(args.events_per_class)
     )
     print(" ".join(command))
     if args.dry_run:
@@ -215,12 +284,12 @@ def main():
             print(
                 "sbatch --dependency=afterok:<production_job_id> {}".format(
                     repo / "submit_reco_libtest_confirmation_stores.slurm"
-                )
+                ) + " {}".format(args.n_files)
             )
             print(
                 "sbatch --dependency=afterok:<store_job_id> {}".format(
                     repo / "submit_reco_libtest_confirmation_evaluate.slurm"
-                )
+                ) + " {} {}".format(args.study, args.n_files)
             )
         return
 
@@ -235,7 +304,9 @@ def main():
     print("submitted confirmation job {}".format(production_job))
 
     if args.with_followups:
-        submit_followups(repo, production_job)
+        submit_followups(
+            repo, args.n_files, args.study, production_job
+        )
 
 
 if __name__ == "__main__":

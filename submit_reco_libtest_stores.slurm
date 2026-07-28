@@ -1,24 +1,33 @@
 #!/bin/bash
-#SBATCH -J reco420_stores
+#SBATCH -J reco_stores
 #SBATCH -p batch
 #SBATCH -N 1
 #SBATCH -n 1
 #SBATCH -c 2
 #SBATCH --mem=32G
 #SBATCH -t 04:00:00
-#SBATCH --output=reco420_stores_%j.out
-#SBATCH --error=reco420_stores_%j.err
+#SBATCH --output=reco_stores_%j.out
+#SBATCH --error=reco_stores_%j.err
 
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
 ENV_DIR=/oscar/scratch/$USER/mucoll/envs/reco-store
 STUDY=${1:-charged7}
+N_FILES=${2:-420}
 BASE=/oscar/scratch/$USER/mucoll/libtest
+if (( N_FILES <= 0 || N_FILES % 42 != 0 )); then
+    echo "N_FILES must be a positive multiple of 42" >&2
+    exit 2
+fi
 case "$STUDY" in
     charged7)
-        DEFAULT_RECO_DIR=$BASE/reco_n420_pfn_trackfix
-        DEFAULT_STORE_DIR=$BASE/reco_n420_pfn_stores_trackfix
+        if [ "$N_FILES" -ne 420 ]; then
+            echo "charged7 is the legacy N=420 study; use val25 for N=$N_FILES" >&2
+            exit 2
+        fi
+        DEFAULT_RECO_DIR=$BASE/reco_n${N_FILES}_pfn_trackfix
+        DEFAULT_STORE_DIR=$BASE/reco_n${N_FILES}_pfn_stores_trackfix
         DEFAULT_TRAIN_RECO_DIR=$DEFAULT_RECO_DIR
         DEFAULT_VAL_RECO_DIR=$DEFAULT_RECO_DIR
         DEFAULT_TEST_RECO_DIR=$DEFAULT_RECO_DIR
@@ -27,27 +36,36 @@ case "$STUDY" in
         DEFAULT_TEST_POOL_MANIFEST=$DEFAULT_POOL_MANIFEST
         ;;
     val2000)
-        DEFAULT_RECO_DIR=$BASE/reco_n420_pfn_trackfix
-        DEFAULT_STORE_DIR=$BASE/reco_n420_pfn_stores_trackfix_val2000
+        if [ "$N_FILES" -ne 420 ]; then
+            echo "val2000 is the legacy N=420 study; use val25 for N=$N_FILES" >&2
+            exit 2
+        fi
+        DEFAULT_RECO_DIR=$BASE/reco_n${N_FILES}_pfn_trackfix
+        DEFAULT_STORE_DIR=$BASE/reco_n${N_FILES}_pfn_stores_trackfix_val2000
         DEFAULT_TRAIN_RECO_DIR=$DEFAULT_RECO_DIR
-        DEFAULT_VAL_RECO_DIR=$BASE/reco_n420_pfn_trackfix_val2000
+        DEFAULT_VAL_RECO_DIR=$BASE/reco_n${N_FILES}_pfn_trackfix_val2000
         DEFAULT_TEST_RECO_DIR=$DEFAULT_RECO_DIR
         DEFAULT_VAL_EVENTS=2000
         DEFAULT_POOL_MANIFEST=$BASE/bib_pools_simple/manifest.json
         DEFAULT_TEST_POOL_MANIFEST=$DEFAULT_POOL_MANIFEST
         ;;
     val25)
-        DEFAULT_RECO_DIR=$BASE/reco_n420_pfn_trackfix_val25
-        DEFAULT_STORE_DIR=$BASE/reco_n420_pfn_stores_trackfix_val25
+        DEFAULT_RECO_DIR=$BASE/reco_n${N_FILES}_pfn_trackfix_val25
+        DEFAULT_STORE_DIR=$BASE/reco_n${N_FILES}_pfn_stores_trackfix_val25
         DEFAULT_TRAIN_RECO_DIR=$DEFAULT_RECO_DIR
         DEFAULT_VAL_RECO_DIR=$DEFAULT_RECO_DIR
-        DEFAULT_TEST_RECO_DIR=$BASE/reco_n420_pfn_trackfix
         DEFAULT_VAL_EVENTS=2000
         DEFAULT_POOL_MANIFEST=$BASE/bib_pools_val25/manifest.json
-        DEFAULT_TEST_POOL_MANIFEST=$BASE/bib_pools_simple/manifest.json
+        if [ "$N_FILES" -eq 420 ]; then
+            DEFAULT_TEST_RECO_DIR=$BASE/reco_n420_pfn_trackfix
+            DEFAULT_TEST_POOL_MANIFEST=$BASE/bib_pools_simple/manifest.json
+        else
+            DEFAULT_TEST_RECO_DIR=$DEFAULT_RECO_DIR
+            DEFAULT_TEST_POOL_MANIFEST=$DEFAULT_POOL_MANIFEST
+        fi
         ;;
     *)
-        echo "usage: sbatch $0 [charged7|val2000|val25]" >&2
+        echo "usage: sbatch $0 [charged7|val2000|val25] [N_FILES]" >&2
         exit 2
         ;;
 esac
@@ -73,6 +91,7 @@ export OPENBLAS_NUM_THREADS=$SLURM_CPUS_PER_TASK
 export MKL_NUM_THREADS=$SLURM_CPUS_PER_TASK
 
 "$ENV_DIR/bin/python" make_reco_libtest_stores.py \
+    --n-files "$N_FILES" \
     --reco-dir "$RECO_DIR" \
     --train-reco-dir "$TRAIN_RECO_DIR" \
     --val-reco-dir "$VAL_RECO_DIR" \

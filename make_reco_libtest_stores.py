@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert N=420 RECO events into PFO, selected-track, and cluster stores."""
+"""Convert RECO events into PFO, selected-track, and cluster stores."""
 
 import argparse
 import glob
@@ -16,7 +16,7 @@ import uproot
 
 SAMPLES = ("U", "R", "null_b")
 SPLITS = ("train", "val", "test")
-N_FILES = 420
+DEFAULT_N_FILES = 420
 CURVATURE_TO_PT = 0.00015
 PFO_FEATURES = (
     "pt", "eta", "phi", "energy", "mass", "charge", "pdg", "px", "py", "pz",
@@ -31,17 +31,14 @@ CLUSTER_FEATURES = ("energy", "eta", "phi", "r", "z", "n_hits")
 def parse_args():
     scratch = os.environ.get("PSCRATCH", "")
     parser = argparse.ArgumentParser()
+    parser.add_argument("--n-files", type=int, default=DEFAULT_N_FILES)
     parser.add_argument(
         "--reco-dir",
-        default=(scratch + "/mucoll/libtest/reco_n420_pfn_trackfix")
-        if scratch else None,
-        required=not bool(scratch),
+        help="default input root; defaults from PSCRATCH and --n-files",
     )
     parser.add_argument(
         "--outdir",
-        default=(scratch + "/mucoll/libtest/reco_n420_pfn_stores_trackfix")
-        if scratch else None,
-        required=not bool(scratch),
+        help="store output root; defaults from PSCRATCH and --n-files",
     )
     parser.add_argument(
         "--pool-manifest",
@@ -68,7 +65,23 @@ def parse_args():
             default={"train": 2000, "val": 400, "test": 800}[split],
             help="required events per class in the {} store".format(split),
         )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.n_files <= 0 or args.n_files % 42:
+        parser.error("--n-files must be a positive multiple of 42")
+    if not args.reco_dir:
+        if not scratch:
+            parser.error("--reco-dir is required when PSCRATCH is unset")
+        args.reco_dir = "{}/mucoll/libtest/reco_n{}_pfn_trackfix".format(
+            scratch, args.n_files
+        )
+    if not args.outdir:
+        if not scratch:
+            parser.error("--outdir is required when PSCRATCH is unset")
+        args.outdir = (
+            "{}/mucoll/libtest/reco_n{}_pfn_stores_trackfix"
+            .format(scratch, args.n_files)
+        )
+    return args
 
 
 def find_root_files(directory):
@@ -381,6 +394,7 @@ def main():
         pool_attrs[split], pool_cycles[split] = pool_provenance(
             manifest_arg, split
         )
+        pool_attrs[split]["n_files"] = args.n_files
     if all(pool_cycles.values()):
         for left, right in (
             ("train", "val"),
@@ -403,11 +417,11 @@ def main():
         for split in SPLITS:
             source = (
                 split_roots[split]
-                / "reco_libtest_n{}_{}".format(N_FILES, sample)
+                / "reco_libtest_n{}_{}".format(args.n_files, sample)
                 / split
             )
             output = outdir / "n{}_{}_{}.h5".format(
-                N_FILES, sample, split
+                args.n_files, sample, split
             )
             print("\n{} / {}".format(sample, split))
             write_store(
