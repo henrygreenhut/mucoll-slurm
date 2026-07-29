@@ -17,6 +17,11 @@ class RecoSourceSplitTests(unittest.TestCase):
         self.assertEqual(submitter.files_per_event(840, "null_b"), 840)
         self.assertEqual(submitter.files_per_event(840, "R"), 20)
 
+    def test_n1260_construction_uses_1260_unique_or_30_rotated_files(self):
+        self.assertEqual(submitter.files_per_event(1260, "U"), 1260)
+        self.assertEqual(submitter.files_per_event(1260, "null_b"), 1260)
+        self.assertEqual(submitter.files_per_event(1260, "R"), 30)
+
     def test_split_is_fixed_shuffled_and_source_disjoint(self):
         cycles = list(range(100))
         first = pools.split_cycles(cycles)
@@ -47,7 +52,6 @@ class RecoSourceSplitTests(unittest.TestCase):
             set(enlarged["val"]) - set(original["val"]),
             set(original["train"]) - set(enlarged["train"]),
         )
-
 
 class RecoFeatureTests(unittest.TestCase):
     def test_only_charge_derived_category_is_a_model_input(self):

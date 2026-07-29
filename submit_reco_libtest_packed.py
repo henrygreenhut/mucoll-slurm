@@ -46,11 +46,21 @@ def parse_args():
     )
     parser.add_argument(
         "--time",
-        help="SBATCH time override (default: 8 hours at N=420, 16 otherwise)",
+        help=(
+            "SBATCH time override (default: 8h at N=420, 16h at N=840, "
+            "24h above N=840)"
+        ),
     )
     parser.add_argument(
         "--memory",
-        help="memory per array task (default: 8G at N=420, 16G otherwise)",
+        help=(
+            "memory per array task (default: 8G at N=420, 16G at N=840, "
+            "40G above N=840)"
+        ),
+    )
+    parser.add_argument(
+        "--dependency",
+        help="optional Slurm dependency, e.g. afterok:4358400",
     )
     parser.add_argument("--pools", default=scratch + "/mucoll/libtest/bib_pools_simple")
     parser.add_argument(
@@ -92,12 +102,14 @@ def main():
             .format(os.environ.get("USER", ""), args.n_files)
         )
     ).resolve()
-    walltime = args.time or (
-        "08:00:00" if args.n_files == DEFAULT_N_FILES else "16:00:00"
-    )
-    memory = args.memory or (
-        "8G" if args.n_files == DEFAULT_N_FILES else "16G"
-    )
+    if args.n_files <= DEFAULT_N_FILES:
+        default_walltime, default_memory = "08:00:00", "8G"
+    elif args.n_files <= 840:
+        default_walltime, default_memory = "16:00:00", "16G"
+    else:
+        default_walltime, default_memory = "24:00:00", "40G"
+    walltime = args.time or default_walltime
+    memory = args.memory or default_memory
     oscar_scratch = Path("/oscar/scratch") / os.environ.get("USER", "")
     try:
         outdir.relative_to(oscar_scratch)
@@ -172,8 +184,12 @@ def main():
         "sbatch", "--parsable",
         "--time={}".format(walltime),
         "--mem={}".format(memory),
-        str(slurm), str(manifest),
     ]
+    if args.dependency:
+        if any(character.isspace() for character in args.dependency):
+            raise SystemExit("--dependency cannot contain whitespace")
+        command.append("--dependency={}".format(args.dependency))
+    command.extend([str(slurm), str(manifest)])
     print("manifest: {}".format(manifest))
     print("tasks: {} ({} existing outputs skipped)".format(len(rows), skipped))
     print("allocation: fixed 64-way array (OSCAR batch partition MaxTRESPU=cpu=64),"

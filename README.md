@@ -404,6 +404,44 @@ n840_eval=$(sbatch --parsable \
   submit_reco_libtest_confirmation_evaluate.slurm val25 840)
 ```
 
+### N=1260 scale point
+
+N=1260 corresponds to 1,260 distinct norm1 files for U/null and 30 norm42
+files for R (`30 x 42 = 1260`), or about 1.89% of a full bunch crossing. It
+uses the same 3,326/1,664/1,664 train/validation/test source-cycle pool as
+N=840, so source partitions, event counts, features, and training remain
+fixed while only the BIB overlay size changes.
+
+Queue the entire N=1260 pipeline behind the N=840 training job. The packed
+submitter defaults to 24 hours and 40 GB per array task above N=840:
+
+```bash
+output=$(python3 submit_reco_libtest_packed.py \
+  --n-files 1260 \
+  --pools "$PSCRATCH/mucoll/libtest/bib_pools_val25" \
+  --outdir "$PSCRATCH/mucoll/libtest/reco_n1260_pfn_trackfix_val25" \
+  --splits train val test \
+  --train-events 2000 \
+  --val-events 2000 \
+  --test-events 800 \
+  --dependency "afterok:${n840_train}")
+echo "$output"
+n1260_cpu=$(echo "$output" | awk '/submitted packed job/{print $4}')
+
+n1260_store=$(sbatch --parsable --mem=96G \
+  --dependency=afterok:"$n1260_cpu" \
+  submit_reco_libtest_stores.slurm val25 1260)
+n1260_train=$(sbatch --parsable --dependency=afterok:"$n1260_store" \
+  submit_reco_libtest_recipe.slurm stabilized_dropout val25 1260)
+
+printf 'N=1260: CPU=%s store=%s train=%s\n' \
+  "$n1260_cpu" "$n1260_store" "$n1260_train"
+```
+
+This pipeline performs the standard 800-event/class held-out test for the
+main U-versus-R classifier and its matched null. It does not queue the optional
+5,000-event/class confirmation production.
+
 ## Checks
 
 The retained tests cover only failure modes that would change a result:

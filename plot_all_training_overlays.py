@@ -171,6 +171,18 @@ RUNS = (
      "RECO N=840 — charged-flag null, 25% validation cycles",
      "reco_n840_trackfix/"
      "reco_n840_trackfix_charged7_val25_null.pdf"),
+    ("reco_pfn_results/"
+     "reco_n1260_trackfix_val25_directlog_charged7_"
+     "stabilized_dropout_U_vs_R",
+     "RECO N=1260 — charged-flag PFN, 25% validation cycles",
+     "reco_n1260_trackfix/"
+     "reco_n1260_trackfix_charged7_val25.pdf"),
+    ("reco_pfn_results/"
+     "reco_n1260_trackfix_val25_directlog_charged7_"
+     "stabilized_dropout_null",
+     "RECO N=1260 — charged-flag null, 25% validation cycles",
+     "reco_n1260_trackfix/"
+     "reco_n1260_trackfix_charged7_val25_null.pdf"),
 )
 
 
