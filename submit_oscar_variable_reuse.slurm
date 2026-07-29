@@ -14,6 +14,11 @@
 # Usage:
 #   sbatch submit_oscar_variable_reuse.slurm \
 #       {1v5|5v10|1v10|10v42} {main|null} [train|smoke]
+#
+# A fresh long-training diagnostic can be requested without changing the
+# default production labels:
+#   sbatch --export=ALL,RUN_TAG=min80,EPOCHS=120,MIN_EPOCHS=80 \
+#       submit_oscar_variable_reuse.slurm 1v5 main
 
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
@@ -54,14 +59,20 @@ fi
 LABEL="n420_k${K0}_vs_k${K1}_scaled_lr1e-4_mseed1"
 [ "$RUN" = null ] && LABEL="${LABEL}_null"
 [ "$MODE" = smoke ] && LABEL="${LABEL}_smoke"
+RUN_TAG=${RUN_TAG:-}
+[ -n "$RUN_TAG" ] && LABEL="${LABEL}_${RUN_TAG}"
+EPOCHS=${EPOCHS:-80}
+MIN_EPOCHS=${MIN_EPOCHS:-0}
 
-echo "label=$LABEL comparison=$COMPARISON run=$RUN mode=$MODE"
+echo "label=$LABEL comparison=$COMPARISON run=$RUN mode=$MODE epochs=$EPOCHS min_epochs=$MIN_EPOCHS"
 apptainer exec --nv "$NGC_TENSORFLOW_CONTAINER" \
     python -u pfn_variable_reuse_train.py \
         --mother-store "$MOTHER_STORE" \
         --label "$LABEL" \
         --reuse-k "$K0" "$K1" \
         --model-seed 1 \
+        --epochs "$EPOCHS" \
+        --min-epochs "$MIN_EPOCHS" \
         --max-minutes 1400 \
         $NULL_ARG \
         $SMOKE_ARG

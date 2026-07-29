@@ -225,8 +225,8 @@ class SharedTrainingEngineTests(unittest.TestCase):
             progress_every=25,
         )
         config = variable_trainer.scientific_config(
-            args, epochs=80, patience=15, units=500, val_units=300,
-            test_units=300, norm_units=100)
+            args, epochs=80, patience=15, min_epochs=0, units=500,
+            val_units=300, test_units=300, norm_units=100)
         expected = {
             "features": "expanded",
             "architecture": "energyflow-scaled-sum",
@@ -265,6 +265,24 @@ class SharedTrainingEngineTests(unittest.TestCase):
         }
         for key, value in expected.items():
             self.assertEqual(config[key], value, key)
+
+    def test_variable_recipe_can_require_eighty_epochs(self):
+        args = SimpleNamespace(
+            mother_store="/tmp/mothers.h5",
+            label="test_min80",
+            reuse_k=(1, 5),
+            model_seed=1,
+            null_test=False,
+            max_minutes=1400.0,
+            progress_every=25,
+        )
+        config = variable_trainer.scientific_config(
+            args, epochs=120, patience=15, min_epochs=80, units=500,
+            val_units=300, test_units=300, norm_units=100)
+
+        self.assertEqual(config["epochs"], 120)
+        self.assertEqual(config["min_epochs"], 80)
+        self.assertEqual(config["patience"], 15)
 
     def test_scaled_energyflow_model_is_built_by_shared_engine(self):
         sentinel = object()

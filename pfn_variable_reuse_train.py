@@ -51,6 +51,11 @@ def parse_args():
     parser.add_argument("--reuse-k", type=int, nargs=2, default=(10, 42),
                         metavar=("K0", "K1"))
     parser.add_argument("--model-seed", type=int, default=1)
+    parser.add_argument("--epochs", type=int, default=EPOCHS)
+    parser.add_argument(
+        "--min-epochs", type=int, default=0,
+        help="do not early-stop before completing this many epochs",
+    )
     parser.add_argument("--null-test", action="store_true")
     parser.add_argument("--max-minutes", type=float, default=1400.0)
     parser.add_argument("--progress-every", type=int, default=25)
@@ -58,8 +63,8 @@ def parse_args():
     return parser.parse_args()
 
 
-def scientific_config(args, epochs, patience, units, val_units, test_units,
-                      norm_units):
+def scientific_config(args, epochs, patience, min_epochs, units, val_units,
+                      test_units, norm_units):
     steps_per_epoch = 2 * units // BATCH_SIZE
     return {
         "config_schema_version": CONFIG_SCHEMA_VERSION,
@@ -102,7 +107,7 @@ def scientific_config(args, epochs, patience, units, val_units, test_units,
             "permutation of labels over the same k{}-vs-k{} units".format(
                 args.reuse_k[0], args.reuse_k[1])),
         "selection_metric": "validation loss",
-        "min_epochs": 0,
+        "min_epochs": min_epochs,
         # Ignored for loss selection, but retained at the successful N=420
         # value so the recorded optimizer/selection recipe matches exactly.
         "min_delta": 1.0e-4,
@@ -305,14 +310,18 @@ def main():
             raise SystemExit(
                 "{} mother-equivalents is not divisible by k={}".format(
                     MOTHER_EQUIVALENTS, k))
+    if args.epochs < 1:
+        raise SystemExit("--epochs must be positive")
+    if args.min_epochs < 0 or args.min_epochs > args.epochs:
+        raise SystemExit("--min-epochs must be between 0 and --epochs")
 
     if args.smoke:
         units, val_units, test_units = 4, 4, 4
-        epochs, patience, norm_units = 2, 2, 2
+        epochs, patience, min_epochs, norm_units = 2, 2, 0, 2
     else:
         units, val_units, test_units, norm_units = (
             UNITS_PER_EPOCH, VAL_UNITS, TEST_UNITS, NORM_STAT_UNITS)
-        epochs, patience = EPOCHS, PATIENCE
+        epochs, patience, min_epochs = args.epochs, PATIENCE, args.min_epochs
 
     start_time = time.time()
     result_dir = os.path.join("variable_k_results", args.label)
@@ -323,7 +332,8 @@ def main():
         return
 
     config = scientific_config(
-        args, epochs, patience, units, val_units, test_units, norm_units)
+        args, epochs, patience, min_epochs, units, val_units, test_units,
+        norm_units)
     write_or_validate_config(
         os.path.join(result_dir, "config.json"), config)
 
@@ -421,7 +431,7 @@ def main():
         "min_delta_sigma": 1.0,
         "epochs": epochs,
         "patience": patience,
-        "min_epochs": 0,
+        "min_epochs": min_epochs,
         "units_per_epoch": units,
         "batch_size": BATCH_SIZE,
         "max_minutes": args.max_minutes,

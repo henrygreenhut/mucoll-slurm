@@ -148,6 +148,21 @@ while preserving the full input construction. Evaluations use overlapping
 pseudo-events from the held-out source-cycle pool and report a point AUC;
 cycle-level uncertainty is run separately if needed.
 
+The original 1-vs-5 run early-stopped after 20 epochs, before the successful
+1-vs-10 comparison first developed a clear validation signal at epoch 24.
+The following controlled rerun keeps the same source split, sampled-unit
+seeds, architecture, optimizer, model seed, validation-loss checkpoint rule,
+and main/null construction. It raises the epoch cap to 120 and prevents early
+stopping before epoch 80. Fresh labels prevent the old epoch-4 checkpoint from
+being resumed:
+
+```bash
+sbatch --export=ALL,RUN_TAG=min80,EPOCHS=120,MIN_EPOCHS=80 \
+  submit_oscar_variable_reuse.slurm 1v5 main
+sbatch --export=ALL,RUN_TAG=min80,EPOCHS=120,MIN_EPOCHS=80 \
+  submit_oscar_variable_reuse.slurm 1v5 null
+```
+
 ## 3. N=420 reconstructed-PFO study
 
 This fixed study overlays, per beam polarity and reconstructed event:
