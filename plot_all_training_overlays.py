@@ -25,7 +25,7 @@ RUNS = (
 
     # Final N=420 architecture and reproducibility studies.
     ("pfn_results/n420_recipe_bs4_expanded_scaled_lr1e-4_mseed1_pointonly",
-     "GEN N=420 — scaled sum, LR $10^{-4}$",
+     "GEN-Level PFN at N=420",
      "gen_n420_recipe/gen_n420_scaled_lr1e-4.pdf"),
     ("pfn_results/n420_recipe_bs4_expanded_scaled_lr1e-4_mseed1_repro1_pointonly",
      "GEN N=420 — scaled sum, independent repeat",

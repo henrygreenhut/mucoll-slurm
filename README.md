@@ -256,22 +256,25 @@ seven-feature charged-flag ablation uses
 
 The extended stores also retain selected `SiTracks` (mapped to their
 `AllTracks` IP states), `PandoraClusters`, and the number of PFO-to-track
-links. Plot the complete U and R samples, combining the train, validation, and
-test partitions only for these descriptive distributions:
+links. Plot the matched N=420 and N=840 `val25` samples, combining the train,
+validation, and test partitions only for these descriptive distributions:
 
 ```bash
-sbatch submit_reco_distributions.slurm
+sbatch submit_reco_distributions.slurm all
 ```
 
-This writes the U-versus-R and matched-null PFO, track, and cluster
-distributions, a numerical summary, and descriptive whole-sample
-single-observable AUCs to
-`plots/reco_n420_charged7_whole_distributions/`. The PFO object plots use
-the exact seven direct-log inputs consumed by the current PFN; the pre-existing
-distribution directories are not overwritten. Positive track momentum and
-cluster-energy object distributions also use plain natural logarithms.
-Event-level sums retain a zero-safe display because the samples contain
-zero-object events; those aggregate quantities are not PFN inputs.
+Pass `420` or `840` instead of `all` to plot one size. This writes separate
+U-versus-R and matched-null directories under
+`plots/reco_n420_trackfix_val25_whole_distributions/` and
+`plots/reco_n840_trackfix_val25_whole_distributions/`. Each contains
+event-level PFO, track, and cluster multiplicities; all seven PFO inputs
+consumed by the PFN; all stored selected-track and Pandora-cluster features;
+additional event-level sums; a numerical summary; and descriptive
+single-observable AUCs. Positive track momentum and cluster-energy object
+distributions use plain natural logarithms. Event-level sums retain a
+zero-safe display because the samples contain zero-object events; those
+aggregate quantities are not PFN inputs. Existing distribution directories
+are not overwritten.
 
 After the unchanged baseline, two fixed optimizer studies reuse the same
 stores, source split, features, architecture, batch size, and seed. Both use

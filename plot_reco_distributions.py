@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plot whole-sample RECO distributions for the fixed N=420 reuse study."""
+"""Plot whole-sample RECO distributions for one RECO reuse study."""
 
 import argparse
 import csv
@@ -14,7 +14,6 @@ import numpy as np
 
 from reco_libtest_features import FEATURES, RAW_FEATURES, pfn_features
 
-N_FILES = 420
 SAMPLES = ("U", "R", "null_b")
 SPLITS = ("train", "val", "test")
 PFO_FEATURES = RAW_FEATURES
@@ -23,30 +22,52 @@ TRACK_FEATURES = (
     "tan_lambda",
 )
 CLUSTER_FEATURES = ("energy", "eta", "phi", "r", "z", "n_hits")
-SAMPLE_LABELS = {
-    "U": "Unique mothers (420 unrotated files)",
-    "R": r"Reused mothers (10 files $\times$ 42)",
-    "null_b": "Independent unrotated reconstruction",
-}
 COLORS = {"U": "#0072B2", "R": "#D55E00", "null_b": "#009E73"}
 
 
 def parse_args():
     scratch = os.environ.get("PSCRATCH", "")
-    default_store = (
-        scratch + "/mucoll/libtest/reco_n420_pfn_stores_trackfix"
-        if scratch else None
-    )
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--store-dir", default=default_store, required=default_store is None,
-        help="directory containing the nine extended N=420 RECO stores",
+        "--n-files", type=int, default=420,
+        help="nominal unrotated-file equivalents per reconstructed event",
     )
     parser.add_argument(
-        "--outdir", default="plots/reco_n420_charged7_whole_distributions",
-        help="output directory",
+        "--store-dir",
+        help="directory containing the nine extended RECO stores",
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--outdir", help="output directory",
+    )
+    args = parser.parse_args()
+    if args.n_files <= 0 or args.n_files % 42:
+        parser.error("--n-files must be a positive multiple of 42")
+    if args.store_dir is None:
+        if not scratch:
+            parser.error("--store-dir is required when PSCRATCH is unset")
+        args.store_dir = (
+            scratch
+            + "/mucoll/libtest/reco_n{}_pfn_stores_trackfix_val25".format(
+                args.n_files
+            )
+        )
+    if args.outdir is None:
+        args.outdir = (
+            "plots/reco_n{}_trackfix_val25_whole_distributions".format(
+                args.n_files
+            )
+        )
+    return args
+
+
+def sample_labels(n_files):
+    return {
+        "U": "Unique mothers ({} unrotated files)".format(n_files),
+        "R": r"Reused mothers ({} files $\times$ 42)".format(
+            n_files // 42
+        ),
+        "null_b": "Independent unrotated reconstruction",
+    }
 
 
 def decode_attr(value):
@@ -166,21 +187,27 @@ def extract_store(path):
         "track_z0": tracks[:, :, track["z0"]][track_mask],
         "track_chi2_ndf": tracks[:, :, track["chi2_ndf"]][track_mask],
         "track_n_holes": tracks[:, :, track["n_holes"]][track_mask],
+        "track_omega": tracks[:, :, track["omega"]][track_mask],
+        "track_tan_lambda": tracks[
+            :, :, track["tan_lambda"]
+        ][track_mask],
         "cluster_energy": clusters[:, :, cluster["energy"]][cluster_mask],
         "cluster_eta": clusters[:, :, cluster["eta"]][cluster_mask],
         "cluster_phi": clusters[:, :, cluster["phi"]][cluster_mask],
+        "cluster_r": clusters[:, :, cluster["r"]][cluster_mask],
+        "cluster_z": clusters[:, :, cluster["z"]][cluster_mask],
         "cluster_n_hits": clusters[:, :, cluster["n_hits"]][cluster_mask],
     }
     return {"events": events, "objects": objects}
 
 
-def load_all(store_dir):
+def load_all(store_dir, n_files):
     by_split = {}
     for sample in SAMPLES:
         by_split[sample] = []
         for split in SPLITS:
             path = store_dir / "n{}_{}_{}.h5".format(
-                N_FILES, sample, split
+                n_files, sample, split
             )
             if not path.is_file():
                 raise SystemExit("missing store: {}".format(path))
@@ -227,7 +254,7 @@ def histogram_bins(arrays, integer, bins=50):
     return np.linspace(low, high, bins + 1)
 
 
-def plot_distribution(data, samples, group, key, output, xlabel,
+def plot_distribution(data, samples, labels, group, key, output, xlabel,
                       integer=False, transform=None, log_y=False):
     arrays = []
     for sample in samples:
@@ -237,12 +264,12 @@ def plot_distribution(data, samples, group, key, output, xlabel,
         arrays.append(values)
     bins = histogram_bins(arrays, integer)
 
-    figure, axis = plt.subplots(figsize=(6.2, 4.2))
+    figure, axis = plt.subplots(figsize=(7.8, 4.2))
     for sample, values in zip(samples, arrays):
         weights = np.full(len(values), 1.0 / max(len(values), 1))
         axis.hist(
             values, bins=bins, weights=weights, histtype="step",
-            linewidth=1.9, color=COLORS[sample], label=SAMPLE_LABELS[sample],
+            linewidth=1.9, color=COLORS[sample], label=labels[sample],
         )
     axis.set_xlabel(xlabel)
     axis.set_ylabel(
@@ -251,7 +278,10 @@ def plot_distribution(data, samples, group, key, output, xlabel,
     if log_y:
         axis.set_yscale("log")
     axis.grid(alpha=0.18)
-    axis.legend(frameon=False)
+    axis.legend(
+        frameon=False, loc="upper left", bbox_to_anchor=(1.01, 1.0),
+        borderaxespad=0.0,
+    )
     figure.tight_layout()
     figure.savefig(output)
     plt.close(figure)
@@ -336,7 +366,8 @@ def main():
     store_dir = Path(args.store_dir).expanduser().resolve()
     outdir = Path(args.outdir).expanduser().resolve()
     outdir.mkdir(parents=True, exist_ok=True)
-    data = load_all(store_dir)
+    data = load_all(store_dir, args.n_files)
+    labels = sample_labels(args.n_files)
 
     event_plots = {
         "pfo_multiplicity": ("n_pfos", "PFOs per event", True, None, True),
@@ -425,6 +456,12 @@ def main():
         "track_n_holes": (
             "track_n_holes", "Track holes", True, None, True,
         ),
+        "track_omega": (
+            "track_omega", r"Track $\omega$", False, None, False,
+        ),
+        "track_tan_lambda": (
+            "track_tan_lambda", r"Track $\tan\lambda$", False, None, False,
+        ),
         "cluster_energy": (
             "cluster_energy", r"$\ln(E/\mathrm{GeV})$",
             False, natural_log_positive, False,
@@ -434,6 +471,12 @@ def main():
         ),
         "cluster_phi": (
             "cluster_phi", r"Cluster $\phi$", False, None, False,
+        ),
+        "cluster_r": (
+            "cluster_r", r"Cluster $r$ [mm]", False, None, False,
+        ),
+        "cluster_z": (
+            "cluster_z", r"Cluster $z$ [mm]", False, None, False,
         ),
         "cluster_n_hits": (
             "cluster_n_hits", "Calorimeter hits per cluster",
@@ -449,15 +492,17 @@ def main():
         directory.mkdir(exist_ok=True)
         for name, (key, xlabel, integer, transform, log_y) in event_plots.items():
             plot_distribution(
-                data, samples, "events", key, directory / (name + ".pdf"),
-                xlabel, integer=integer, transform=transform, log_y=log_y,
+                data, samples, labels, "events", key,
+                directory / (name + ".pdf"), xlabel, integer=integer,
+                transform=transform, log_y=log_y,
             )
         for name, (
             key, xlabel, integer, transform, log_y
         ) in object_plots.items():
             plot_distribution(
-                data, samples, "objects", key, directory / (name + ".pdf"),
-                xlabel, integer=integer, transform=transform,
+                data, samples, labels, "objects", key,
+                directory / (name + ".pdf"), xlabel, integer=integer,
+                transform=transform,
                 log_y=log_y,
             )
 
