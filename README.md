@@ -254,6 +254,23 @@ six-feature ablation uses
 seven-feature charged-flag ablation uses
 `reco_n420_trackfix_directlog_charged7_stabilized_dropout_*`.
 
+The canonical PFO-phi plot has a deliberately separate, one-file workflow:
+
+```text
+RECO ROOT files -> PandoraPFO momentum.x/y -> atan2(py, px) -> PDF
+```
+
+It reads every U and R event across the train, validation, and test
+directories directly; it does not read or create an HDF5 store:
+
+```bash
+$PSCRATCH/mucoll/envs/reco-store/bin/python plot_reco_phi.py
+```
+
+The default output is
+`plots/reco_n420_trackfix_direct_root_phi.pdf`. This is a descriptive
+whole-dataset plot, not a held-out performance measurement.
+
 The extended stores also retain selected `SiTracks` (mapped to their
 `AllTracks` IP states), `PandoraClusters`, and the number of PFO-to-track
 links. Plot the matched N=420 and N=840 `val25` samples, combining the train,
