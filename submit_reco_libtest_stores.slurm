@@ -64,8 +64,22 @@ case "$STUDY" in
             DEFAULT_TEST_POOL_MANIFEST=$DEFAULT_POOL_MANIFEST
         fi
         ;;
+    test2000)
+        if [ "$N_FILES" -ne 1260 ]; then
+            echo "test2000 currently identifies the N=1260 extension" >&2
+            exit 2
+        fi
+        DEFAULT_RECO_DIR=$BASE/reco_n1260_pfn_trackfix_val25
+        DEFAULT_STORE_DIR=$BASE/reco_n1260_pfn_stores_trackfix_val25_test2000
+        DEFAULT_TRAIN_RECO_DIR=$DEFAULT_RECO_DIR
+        DEFAULT_VAL_RECO_DIR=$DEFAULT_RECO_DIR
+        DEFAULT_TEST_RECO_DIR=$DEFAULT_RECO_DIR
+        DEFAULT_VAL_EVENTS=2000
+        DEFAULT_POOL_MANIFEST=$BASE/bib_pools_val25/manifest.json
+        DEFAULT_TEST_POOL_MANIFEST=$DEFAULT_POOL_MANIFEST
+        ;;
     *)
-        echo "usage: sbatch $0 [charged7|val2000|val25] [N_FILES]" >&2
+        echo "usage: sbatch $0 [charged7|val2000|val25|test2000] [N_FILES]" >&2
         exit 2
         ;;
 esac
@@ -80,6 +94,12 @@ VAL_EVENTS=${VAL_EVENTS:-$DEFAULT_VAL_EVENTS}
 TEST_EVENTS=${TEST_EVENTS:-800}
 POOL_MANIFEST=${POOL_MANIFEST:-$DEFAULT_POOL_MANIFEST}
 TEST_POOL_MANIFEST=${TEST_POOL_MANIFEST:-$DEFAULT_TEST_POOL_MANIFEST}
+if [ "$STUDY" = test2000 ]; then
+    TEST_EVENTS=2000
+    STORE_SPLITS=(test)
+else
+    STORE_SPLITS=(train val test)
+fi
 
 if [ ! -x "$ENV_DIR/bin/python" ]; then
     echo "ERROR: missing $ENV_DIR; run ./setup_oscar_reco_envs.sh first"
@@ -99,6 +119,7 @@ export MKL_NUM_THREADS=$SLURM_CPUS_PER_TASK
     --train-events "$TRAIN_EVENTS" \
     --val-events "$VAL_EVENTS" \
     --test-events "$TEST_EVENTS" \
+    --splits "${STORE_SPLITS[@]}" \
     --pool-manifest "$POOL_MANIFEST" \
     --test-pool-manifest "$TEST_POOL_MANIFEST" \
     --outdir "$STORE_DIR"

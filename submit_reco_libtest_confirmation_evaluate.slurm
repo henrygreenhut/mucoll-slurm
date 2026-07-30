@@ -16,6 +16,9 @@ cd "$SLURM_SUBMIT_DIR"
 
 STUDY=${1:-charged7}
 N_FILES=${2:-420}
+STORE_SPLIT=confirmation
+EVALUATION_NAME=confirmation
+EVALUATION_ARGS=()
 if (( N_FILES <= 0 || N_FILES % 42 != 0 )); then
     echo "N_FILES must be a positive multiple of 42" >&2
     exit 2
@@ -48,8 +51,24 @@ case "$STUDY" in
         CHECKPOINT_PREFIX=reco_n${N_FILES}_trackfix_val25_directlog_charged7_stabilized_dropout
         OUTPUT_PREFIX=reco_n${N_FILES}_trackfix_val25_directlog_charged7_stabilized_dropout_confirmation
         ;;
+    test2000)
+        if [ "$N_FILES" -ne 1260 ]; then
+            echo "test2000 currently identifies the N=1260 extension" >&2
+            exit 2
+        fi
+        DATASET_TAG=n1260_trackfix_val25
+        CHECKPOINT_PREFIX=reco_n1260_trackfix_val25_directlog_charged7_stabilized_dropout
+        OUTPUT_PREFIX=reco_n1260_trackfix_val25_directlog_charged7_stabilized_dropout_test2000
+        STORE_SPLIT=test
+        EVALUATION_NAME=test2000
+        EVALUATION_ARGS=(
+            --evaluation-note
+            "Additional pseudo-events from the same held-out test source-cycle pool"
+            --allow-code-commit-mismatch
+        )
+        ;;
     *)
-        echo "usage: sbatch $0 [charged7|val2000|val25] [N_FILES]" >&2
+        echo "usage: sbatch $0 [charged7|val2000|val25|test2000] [N_FILES]" >&2
         exit 2
         ;;
 esac
@@ -57,7 +76,11 @@ esac
 module load ngc-tensorflow-container/25.02-tf2-py3-j4zj
 
 TRAIN_SITE=/oscar/scratch/$USER/mucoll/envs/reco-train-site-v1
-STORE_DIR=/oscar/scratch/$USER/mucoll/libtest/reco_n${N_FILES}_confirmation_stores
+if [ "$STUDY" = test2000 ]; then
+    STORE_DIR=/oscar/scratch/$USER/mucoll/libtest/reco_n1260_pfn_stores_trackfix_val25_test2000
+else
+    STORE_DIR=/oscar/scratch/$USER/mucoll/libtest/reco_n${N_FILES}_confirmation_stores
+fi
 RESULT_DIR="$SLURM_SUBMIT_DIR/reco_pfn_results"
 if [ ! -d "$TRAIN_SITE/matplotlib" ]; then
     echo "ERROR: missing $TRAIN_SITE; run ./setup_oscar_reco_envs.sh first" >&2
@@ -80,6 +103,9 @@ evaluate() {
         --checkpoint-dir "$RESULT_DIR/$checkpoint_label" \
         --class-b "$class_b" \
         --expected-training-dataset-tag "$DATASET_TAG" \
+        --store-split "$STORE_SPLIT" \
+        --evaluation-name "$EVALUATION_NAME" \
+        "${EVALUATION_ARGS[@]}" \
         --require-clean-code \
         --label "$output_label" \
         --outdir "$RESULT_DIR"

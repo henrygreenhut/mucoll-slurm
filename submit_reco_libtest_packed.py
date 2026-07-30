@@ -37,6 +37,10 @@ def files_per_event(n_files, sample):
     return n_files if sample != "R" else n_files // 42
 
 
+def jobs_for_events(number_of_events):
+    return math.ceil(number_of_events / EVENTS_PER_JOB)
+
+
 def parse_args():
     scratch = f"/oscar/scratch/{os.environ.get('USER', '')}"
     parser = argparse.ArgumentParser()
@@ -135,7 +139,7 @@ def main():
     skipped = 0
     for split in args.splits:
         n_events = split_events[split]
-        n_jobs = math.ceil(n_events / EVENTS_PER_JOB)
+        n_jobs = jobs_for_events(n_events)
         for sample in LIBRARY:
             library = LIBRARY[sample]
             plus = pools / library / split / "MUPLUS"

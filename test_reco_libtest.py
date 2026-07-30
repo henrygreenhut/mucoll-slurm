@@ -22,6 +22,16 @@ class RecoSourceSplitTests(unittest.TestCase):
         self.assertEqual(submitter.files_per_event(1260, "null_b"), 1260)
         self.assertEqual(submitter.files_per_event(1260, "R"), 30)
 
+    def test_n1260_test2000_adds_only_the_missing_events(self):
+        original_jobs = submitter.jobs_for_events(800)
+        extended_jobs = submitter.jobs_for_events(2000)
+        missing_jobs_per_class = extended_jobs - original_jobs
+
+        self.assertEqual(original_jobs, 16)
+        self.assertEqual(extended_jobs, 40)
+        self.assertEqual(missing_jobs_per_class, 24)
+        self.assertEqual(missing_jobs_per_class * 3, 72)
+
     def test_split_is_fixed_shuffled_and_source_disjoint(self):
         cycles = list(range(100))
         first = pools.split_cycles(cycles)

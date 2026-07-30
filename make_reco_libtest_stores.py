@@ -44,6 +44,13 @@ def parse_args():
         "--pool-manifest",
         help="default source-pool manifest recorded in every store",
     )
+    parser.add_argument(
+        "--splits",
+        nargs="+",
+        choices=SPLITS,
+        default=SPLITS,
+        help="store partitions to build",
+    )
     for split in SPLITS:
         parser.add_argument(
             "--{}-reco-dir".format(split),
@@ -386,7 +393,7 @@ def main():
     outdir = Path(args.outdir).resolve()
     pool_attrs = {}
     pool_cycles = {}
-    for split in SPLITS:
+    for split in args.splits:
         manifest_arg = (
             getattr(args, "{}_pool_manifest".format(split))
             or args.pool_manifest
@@ -395,12 +402,14 @@ def main():
             manifest_arg, split
         )
         pool_attrs[split]["n_files"] = args.n_files
-    if all(pool_cycles.values()):
+    if len(args.splits) > 1 and all(pool_cycles.values()):
         for left, right in (
             ("train", "val"),
             ("train", "test"),
             ("val", "test"),
         ):
+            if left not in args.splits or right not in args.splits:
+                continue
             overlap = pool_cycles[left] & pool_cycles[right]
             if overlap:
                 raise SystemExit(
@@ -411,10 +420,10 @@ def main():
         split: Path(
             getattr(args, "{}_reco_dir".format(split)) or reco_dir
         ).resolve()
-        for split in SPLITS
+        for split in args.splits
     }
     for sample in SAMPLES:
-        for split in SPLITS:
+        for split in args.splits:
             source = (
                 split_roots[split]
                 / "reco_libtest_n{}_{}".format(args.n_files, sample)

@@ -477,6 +477,37 @@ This pipeline performs the standard 800-event/class held-out test for the
 main U-versus-R classifier and its matched null. It does not queue the optional
 5,000-event/class confirmation production.
 
+Extend the same held-out test pool to 2,000 events per class without
+retraining or overwriting the original result:
+
+```bash
+output=$(python3 submit_reco_libtest_packed.py \
+  --n-files 1260 \
+  --pools "$PSCRATCH/mucoll/libtest/bib_pools_val25" \
+  --outdir "$PSCRATCH/mucoll/libtest/reco_n1260_pfn_trackfix_val25" \
+  --splits test \
+  --test-events 2000)
+echo "$output"
+test2000_cpu=$(echo "$output" | awk '/submitted packed job/{print $4}')
+
+test2000_store=$(sbatch --parsable --mem=96G \
+  --dependency=afterok:"$test2000_cpu" \
+  submit_reco_libtest_stores.slurm test2000 1260)
+
+test2000_eval=$(sbatch --parsable \
+  --dependency=afterok:"$test2000_store" \
+  submit_reco_libtest_confirmation_evaluate.slurm test2000 1260)
+
+printf 'N=1260 test2000: CPU=%s store=%s eval=%s\n' \
+  "$test2000_cpu" "$test2000_store" "$test2000_eval"
+```
+
+The submitter skips the existing 800 events and produces only the 1,200
+missing events per class. The store and evaluation use separate `test2000`
+paths and the frozen original checkpoint. This refines performance for the
+same held-out source-cycle pool; it does not constitute an independent
+source-cycle fold.
+
 ## Checks
 
 The retained tests cover only failure modes that would change a result:

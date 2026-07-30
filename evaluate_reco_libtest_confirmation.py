@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Evaluate a frozen RECO PFN on a separately produced confirmation cohort."""
+"""Evaluate a frozen RECO PFN on a named reconstructed-event cohort."""
 
 import argparse
 import csv
@@ -42,6 +42,14 @@ def parse_args():
     parser.add_argument("--class-b", choices=("R", "null_b"), required=True)
     parser.add_argument("--expected-training-dataset-tag", required=True)
     parser.add_argument("--label", required=True)
+    parser.add_argument(
+        "--store-split",
+        choices=("confirmation", "test"),
+        default="confirmation",
+    )
+    parser.add_argument("--evaluation-name", default="confirmation")
+    parser.add_argument("--evaluation-note")
+    parser.add_argument("--allow-code-commit-mismatch", action="store_true")
     parser.add_argument("--require-clean-code", action="store_true")
     parser.add_argument("--outdir", default="reco_pfn_results")
     parser.add_argument("--batch-size", type=int, default=32)
@@ -93,7 +101,7 @@ def paired_job_bootstrap(labels, scores, metadata, repetitions, seed):
     keys_b = set(groups[1])
     if keys_a != keys_b:
         raise ValueError(
-            "confirmation classes do not have paired job IDs: "
+            "evaluation classes do not have paired job IDs: "
             "{} U-only, {} class-B-only".format(
                 len(keys_a - keys_b), len(keys_b - keys_a)
             )
@@ -147,7 +155,7 @@ def validate_checkpoint(
     recipe = summary.get("training", {}).get("recipe")
     if recipe not in ("stabilized", "stabilized_dropout"):
         raise ValueError(
-            "confirmation evaluator requires a stabilized checkpoint; got {!r}"
+            "frozen evaluator requires a stabilized checkpoint; got {!r}"
             .format(recipe)
         )
     actual_tag = summary.get("dataset_tag")
@@ -181,15 +189,17 @@ def steps_per_epoch(summary):
     return max(int(training.get("decay_steps", 1)), 1)
 
 
-def load_confirmation(store_dir, n_files, class_b):
+def load_evaluation(store_dir, n_files, class_b, store_split):
     paths = [
-        store_dir / "n{}_{}_confirmation.h5".format(n_files, class_name)
+        store_dir / "n{}_{}_{}.h5".format(
+            n_files, class_name, store_split
+        )
         for class_name in ("U", class_b)
     ]
     pair = [load_store(path, n_files) for path in paths]
     if len(pair[0][0]) != len(pair[1][0]):
         raise ValueError(
-            "confirmation class counts differ: {} vs {}".format(
+            "evaluation class counts differ: {} vs {}".format(
                 len(pair[0][0]), len(pair[1][0])
             )
         )
@@ -197,12 +207,12 @@ def load_confirmation(store_dir, n_files, class_b):
     return combine_pair(pair, width)
 
 
-def confirmation_provenance(store_dir, n_files, class_b):
+def evaluation_provenance(store_dir, n_files, class_b, store_split):
     stores = {}
     for class_name in ("U", class_b):
         path = (
             Path(store_dir)
-            / "n{}_{}_confirmation.h5".format(n_files, class_name)
+            / "n{}_{}_{}.h5".format(n_files, class_name, store_split)
         )
         stores[class_name] = store_provenance(path)
     identity = {
@@ -227,7 +237,7 @@ def confirmation_provenance(store_dir, n_files, class_b):
     ]
     if missing:
         raise ValueError(
-            "confirmation stores have no PFO-track links: {}".format(
+            "evaluation stores have no PFO-track links: {}".format(
                 ", ".join(missing)
             )
         )
@@ -242,6 +252,10 @@ def main():
         raise SystemExit(
             "training dataset tag {!r} must occur in evaluation label {!r}"
             .format(args.expected_training_dataset_tag, args.label)
+        )
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", args.evaluation_name):
+        raise SystemExit(
+            "--evaluation-name may contain only letters, numbers, ., _, and -"
         )
     code = git_provenance()
     if args.require_clean_code and code["dirty"]:
@@ -264,9 +278,17 @@ def main():
     with checkpoint_summary_path.open() as handle:
         checkpoint_summary = json.load(handle)
     training_commit = checkpoint_summary.get("code", {}).get("commit")
-    if not training_commit or code.get("commit") != training_commit:
+    code_matches_training = bool(
+        training_commit and code.get("commit") == training_commit
+    )
+    if not code_matches_training and not args.allow_code_commit_mismatch:
         raise ValueError(
             "evaluation code commit {!r} differs from training commit {!r}"
+            .format(code.get("commit"), training_commit)
+        )
+    if not code_matches_training:
+        print(
+            "WARNING: evaluation commit {} differs from training commit {}"
             .format(code.get("commit"), training_commit)
         )
     recipe = validate_checkpoint(
@@ -285,29 +307,37 @@ def main():
             )
         )
     result_dir.mkdir(parents=True, exist_ok=True)
-    confirmation_dataset = confirmation_provenance(
-        store_dir, args.n_files, args.class_b
+    evaluation_dataset = evaluation_provenance(
+        store_dir, args.n_files, args.class_b, args.store_split
+    )
+    evaluation_type = "frozen-checkpoint {}".format(args.evaluation_name)
+    dataset_key = (
+        "confirmation_dataset"
+        if args.evaluation_name == "confirmation"
+        else "evaluation_dataset"
     )
     context = {
         "status": "started",
         "label": args.label,
-        "evaluation": "frozen-checkpoint confirmation",
+        "evaluation": evaluation_type,
+        "evaluation_note": args.evaluation_note,
         "training_dataset_tag": args.expected_training_dataset_tag,
         "checkpoint_summary": str(checkpoint_summary_path),
         "checkpoint_weights": str(weights),
         "checkpoint_weights_sha256": sha256_file(weights),
-        "confirmation_dataset": confirmation_dataset,
+        dataset_key: evaluation_dataset,
         "code": code,
+        "training_code_matches_evaluation": code_matches_training,
         "runtime": runtime_provenance(),
     }
     write_json(result_dir / "evaluation_context.json", context)
 
-    x, labels, metadata = load_confirmation(
-        store_dir, args.n_files, args.class_b
+    x, labels, metadata = load_evaluation(
+        store_dir, args.n_files, args.class_b, args.store_split
     )
     print(
-        "confirmation: {} events/class, width {}, {} features".format(
-            len(labels) // 2, x.shape[1], x.shape[2]
+        "{}: {} events/class, width {}, {} features".format(
+            args.evaluation_name, len(labels) // 2, x.shape[1], x.shape[2]
         )
     )
 
@@ -328,11 +358,18 @@ def main():
     )
     low, high = np.percentile(bootstrap_aucs, [2.5, 97.5])
 
-    scores_path = result_dir / "confirmation_scores.csv"
+    scores_path = result_dir / "{}_scores.csv".format(args.evaluation_name)
     if scores_path.exists():
         scores_path.unlink()
-    write_scores(scores_path, "confirmation", labels, scores, metadata)
-    save_roc(result_dir / "confirmation_roc.pdf", labels, scores, auc)
+    write_scores(
+        scores_path, args.evaluation_name, labels, scores, metadata
+    )
+    save_roc(
+        result_dir / "{}_roc.pdf".format(args.evaluation_name),
+        labels,
+        scores,
+        auc,
+    )
     with (result_dir / "job_bootstrap_auc.csv").open("w", newline="") as handle:
         writer = csv.writer(handle)
         writer.writerow(["repetition", "auc"])
@@ -340,7 +377,8 @@ def main():
 
     summary = {
         "label": args.label,
-        "evaluation": "frozen-checkpoint confirmation",
+        "evaluation": evaluation_type,
+        "evaluation_note": args.evaluation_note,
         "class_a": "U",
         "class_b": args.class_b,
         "n_files": args.n_files,
@@ -357,8 +395,9 @@ def main():
             "recipe": recipe,
             "original_test": checkpoint_summary.get("results", {}).get("test"),
         },
-        "confirmation_dataset": confirmation_dataset,
+        dataset_key: evaluation_dataset,
         "code": context["code"],
+        "training_code_matches_evaluation": code_matches_training,
         "runtime": context["runtime"],
         "results": {
             "auc": auc,
@@ -379,17 +418,18 @@ def main():
             ),
         },
     }
-    write_json(result_dir / "confirmation_summary.json", summary)
+    summary_path = result_dir / "{}_summary.json".format(
+        args.evaluation_name
+    )
+    write_json(summary_path, summary)
     context["status"] = "complete"
     context["completed_utc"] = utc_now()
-    context["summary"] = str(
-        (result_dir / "confirmation_summary.json").resolve()
-    )
+    context["summary"] = str(summary_path.resolve())
     write_json(result_dir / "evaluation_context.json", context)
 
-    print("confirmation AUC = {:.6f}".format(auc))
-    print("confirmation loss = {:.6f} (ln2 = {:.6f})".format(
-        loss, np.log(2.0)))
+    print("{} AUC = {:.6f}".format(args.evaluation_name, auc))
+    print("{} loss = {:.6f} (ln2 = {:.6f})".format(
+        args.evaluation_name, loss, np.log(2.0)))
     print(
         "paired-job bootstrap 95% interval = [{:.6f}, {:.6f}]".format(
             low, high
