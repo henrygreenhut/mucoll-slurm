@@ -32,7 +32,7 @@ trap 'rm -rf "$WORKDIR"' EXIT
 
 LOOP="$WORKDIR/run.sh"
 {
-    echo "set -euo pipefail"
+    echo "set -eo pipefail"
     echo "source /opt/setup_mucoll.sh"
     echo "source '$BENCH/setup_config.sh' '$BENCH' MAIA_v0"
     echo "cd '$WORKDIR'"
