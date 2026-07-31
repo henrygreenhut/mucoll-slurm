@@ -321,6 +321,24 @@ class UnitSampler:
         return lc.sample_unit_positions(rng, self.positions[split], self.files_per_unit)
 
 
+def sample_normalization_stats(samplers, units_per_class, rng):
+    multiplicities = []
+
+    def feature_arrays():
+        for sampler in samplers:
+            for _ in range(units_per_class):
+                positions = sampler.random_unit(rng, "train")
+                raw = sampler.store.file_arrays(positions)
+                features = lc.build_features(
+                    raw, feature_set=sampler.feature_set)
+                del raw
+                multiplicities.append(len(features))
+                yield features
+
+    mean, std = lc.compute_norm_stats(feature_arrays())
+    return mean, std, multiplicities
+
+
 def _padded_batch(chunk, samplers, mean, std):
     """Materialize and pad one batch of (class_id, source positions)."""
     feats = [samplers[c].build(pos, mean, std) for c, pos in chunk]
@@ -509,21 +527,15 @@ def main():
                 "value. Use a new --label for a different feature set.")
     else:
         rng = np.random.default_rng(args.data_seed)
-        sample_feats = []
-        for cls in (0, 1):
-            for _ in range(args.norm_stat_units):
-                pos = samplers[cls].random_unit(rng, "train")
-                raw = samplers[cls].store.file_arrays(pos)
-                sample_feats.append(lc.build_features(raw, feature_set=args.features))
-        mean, std = lc.compute_norm_stats(sample_feats)
+        mean, std, multiplicities = sample_normalization_stats(
+            samplers, args.norm_stat_units, rng)
         if args.latent_scale == "auto":
-            latent_scale = 1.0 / float(np.median([len(f) for f in sample_feats]))
+            latent_scale = 1.0 / float(np.median(multiplicities))
         elif args.latent_scale == "none":
             latent_scale = 1.0
         else:
             latent_scale = float(args.latent_scale)
         lc.save_norm_stats(stats_path, mean, std, expected_names, latent_scale)
-        del sample_feats
     n_features = len(mean)
     print(f"  features: {n_features} ('{args.features}')"
           f" | latent scale 1/{1.0 / latent_scale:.0f}")

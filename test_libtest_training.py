@@ -27,6 +27,50 @@ from pfn_training_engine import (
 
 
 class LibtestNormalizationTests(unittest.TestCase):
+    def test_training_normalization_streams_units_without_changing_statistics(self):
+        class Store:
+            def __init__(self, offset):
+                self.arrays = [
+                    np.full((size, 3), offset + index, dtype=np.float32)
+                    for index, size in enumerate((2, 5, 3, 7, 4, 6))
+                ]
+
+            def file_arrays(self, positions):
+                return np.concatenate([
+                    self.arrays[int(position)] for position in positions
+                ])
+
+        samplers = [
+            file_trainer.UnitSampler(
+                Store(offset), {"train": np.arange(6)}, 2, "expanded")
+            for offset in (0, 10)
+        ]
+        reference_arrays = []
+        reference_multiplicities = []
+        reference_rng = np.random.default_rng(23)
+        for sampler in samplers:
+            for _ in range(4):
+                positions = sampler.random_unit(reference_rng, "train")
+                array = sampler.store.file_arrays(positions)
+                reference_arrays.append(array)
+                reference_multiplicities.append(len(array))
+        reference_mean, reference_std = lc.compute_norm_stats(reference_arrays)
+
+        with mock.patch.object(
+                lc, "build_features",
+                side_effect=lambda raw, feature_set: raw):
+            with mock.patch.object(
+                    lc, "compute_norm_stats",
+                    wraps=lc.compute_norm_stats) as compute:
+                mean, std, multiplicities = (
+                    file_trainer.sample_normalization_stats(
+                        samplers, 4, np.random.default_rng(23)))
+
+        self.assertNotIsInstance(compute.call_args.args[0], list)
+        np.testing.assert_array_equal(mean, reference_mean)
+        np.testing.assert_array_equal(std, reference_std)
+        self.assertEqual(multiplicities, reference_multiplicities)
+
     def test_streaming_moments_remain_correct_beyond_float32_integer_limit(self):
         # Reusing one chunk keeps the test small while the logical particle
         # count exceeds 2**24, where the previous axis-zero float32 reduction
