@@ -178,6 +178,54 @@ class OptimizerConfigurationTests(unittest.TestCase):
         self.assertAlmostEqual(schedule.kwargs["alpha"], 1e-6 / 3e-4)
 
 
+class GradientAccumulationTests(unittest.TestCase):
+    def test_two_microbatches_match_one_full_batch_update(self):
+        import tensorflow as tf
+
+        def build_model():
+            inputs = tf.keras.Input(shape=(3,))
+            outputs = tf.keras.layers.Dense(
+                2, activation="softmax",
+                kernel_initializer=tf.keras.initializers.GlorotUniform(seed=7),
+                bias_initializer="zeros",
+            )(inputs)
+            model = tf.keras.Model(inputs, outputs)
+            model.compile(
+                optimizer=tf.keras.optimizers.SGD(learning_rate=0.05),
+                loss="categorical_crossentropy",
+            )
+            return model
+
+        x = np.asarray([
+            [0.2, -0.4, 0.7],
+            [1.1, 0.3, -0.2],
+            [-0.8, 0.5, 0.6],
+            [0.4, 0.9, -1.2],
+        ], dtype=np.float32)
+        labels = np.asarray([0, 1, 0, 1], dtype=np.int32)
+        y = np.eye(2, dtype=np.float32)[labels]
+
+        full = build_model()
+        accumulated = build_model()
+        accumulated.set_weights(full.get_weights())
+
+        full.train_on_batch(x, y)
+        microbatches = iter([
+            (x[[0, 1]], y[[0, 1]], labels[[0, 1]]),
+            (x[[2, 3]], y[[2, 3]], labels[[2, 3]]),
+        ])
+        losses = engine.accumulated_train_step(
+            accumulated, microbatches, 2, tf)
+
+        self.assertEqual(len(losses), 2)
+        self.assertEqual(int(full.optimizer.iterations.numpy()), 1)
+        self.assertEqual(int(accumulated.optimizer.iterations.numpy()), 1)
+        for observed, expected in zip(
+                accumulated.get_weights(), full.get_weights()):
+            np.testing.assert_allclose(
+                observed, expected, rtol=1e-6, atol=1e-7)
+
+
 class SourceSplitTests(unittest.TestCase):
     def test_saved_split_is_shuffled_disjoint_and_reused(self):
         cycles = np.arange(1000, 1100)
@@ -233,6 +281,8 @@ class RunMetadataTests(unittest.TestCase):
             write_or_validate_config(path, base)
             changed_runtime = dict(base, max_minutes=90, progress_every=10)
             write_or_validate_config(path, changed_runtime)
+            write_or_validate_config(
+                path, dict(changed_runtime, gradient_accumulation_steps=1))
             with self.assertRaisesRegex(SystemExit, "changed scientific"):
                 write_or_validate_config(path, dict(base, lr=3e-4))
 

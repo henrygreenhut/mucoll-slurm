@@ -38,7 +38,14 @@ for n_files in "$@"; do
     fi
 
     label="diag_n${n_files}_scaled_lr1e-4"
+    batch_size=4
+    accumulation_steps=1
+    if (( n_files > 840 )); then
+        batch_size=2
+        accumulation_steps=2
+    fi
     echo "===== N=$n_files ====="
+    echo "microbatch=$batch_size accumulation=$accumulation_steps effective_batch=4"
 
     apptainer exec --nv "$NGC_TENSORFLOW_CONTAINER" \
         python -u pfn_libtest_train.py \
@@ -49,7 +56,8 @@ for n_files in "$@"; do
         --n-files "$n_files" \
         --units-per-epoch 4 \
         --val-units 4 \
-        --batch-size 4 \
+        --batch-size "$batch_size" \
+        --gradient-accumulation-steps "$accumulation_steps" \
         --epochs 1 \
         --patience 1 \
         --latent-scale auto \

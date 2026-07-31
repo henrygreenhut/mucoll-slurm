@@ -12,6 +12,7 @@ validation metrics, best-model selection, early stopping, and history.
 """
 
 import csv
+import itertools
 import json
 import os
 import time
@@ -86,6 +87,8 @@ def write_or_validate_config(path, config):
         return
     with open(path) as handle:
         saved = json.load(handle)
+    saved.setdefault("gradient_accumulation_steps", 1)
+    config.setdefault("gradient_accumulation_steps", 1)
     if saved.get("config_schema_version") != CONFIG_SCHEMA_VERSION:
         raise SystemExit(
             "{} is a legacy/incompatible run. Use a new --label.".format(path))
@@ -172,6 +175,44 @@ def _build_model(config):
     raise ValueError("unknown PFN architecture {!r}".format(config["arch"]))
 
 
+def accumulated_train_step(model, batches, accumulation_steps, tf):
+    gradient_sums = [None] * len(model.trainable_variables)
+    losses = []
+
+    for x, y, _ in batches:
+        with tf.GradientTape() as tape:
+            predictions = model(x, training=True)
+            loss = model.compiled_loss(
+                tf.convert_to_tensor(y),
+                predictions,
+                regularization_losses=model.losses,
+            )
+        gradients = tape.gradient(loss, model.trainable_variables)
+        for index, gradient in enumerate(gradients):
+            if gradient is None:
+                continue
+            gradient = tf.convert_to_tensor(gradient)
+            gradient_sums[index] = (
+                gradient if gradient_sums[index] is None
+                else gradient_sums[index] + gradient
+            )
+        losses.append(float(loss.numpy()))
+        del x, y, predictions, loss, gradients
+
+    if len(losses) != accumulation_steps:
+        raise RuntimeError(
+            "received {} microbatches; expected {}".format(
+                len(losses), accumulation_steps))
+    gradients_and_variables = [
+        (gradient / float(accumulation_steps), variable)
+        for gradient, variable in zip(
+            gradient_sums, model.trainable_variables)
+        if gradient is not None
+    ]
+    model.optimizer.apply_gradients(gradients_and_variables)
+    return losses
+
+
 def run_binary_pfn_training(config, train_batches, predict_validation,
                             start_time=None):
     """Fit one binary PFN using data-adapter callbacks.
@@ -207,8 +248,16 @@ def run_binary_pfn_training(config, train_batches, predict_validation,
     history_path = os.path.join(result_dir, "history.csv")
     best_weights = os.path.join(result_dir, "best.weights.h5")
     last_weights = os.path.join(result_dir, "last.weights.h5")
-    steps_per_epoch = (
+    accumulation_steps = int(config.get("gradient_accumulation_steps", 1))
+    if accumulation_steps < 1:
+        raise ValueError("gradient_accumulation_steps must be positive")
+    microbatches_per_epoch = (
         2 * config["units_per_epoch"] // config["batch_size"])
+    if microbatches_per_epoch % accumulation_steps:
+        raise ValueError(
+            "microbatches per epoch must be divisible by "
+            "gradient_accumulation_steps")
+    steps_per_epoch = microbatches_per_epoch // accumulation_steps
 
     model = _build_model(config)
     print(
@@ -216,6 +265,13 @@ def run_binary_pfn_training(config, train_batches, predict_validation,
         .format(
             config["jit"], getattr(model, "_jit_compile", None),
             bool(getattr(model.optimizer, "jit_compile", False))))
+    if accumulation_steps > 1:
+        print(
+            "  gradient accumulation: {} microbatches x {} events "
+            "= effective batch {}, {} optimizer updates/epoch".format(
+                accumulation_steps, config["batch_size"],
+                accumulation_steps * config["batch_size"],
+                steps_per_epoch))
     if hasattr(model.optimizer, "build"):
         model.optimizer.build(model.trainable_variables)
 
@@ -264,10 +320,23 @@ def run_binary_pfn_training(config, train_batches, predict_validation,
         lr_value = current_learning_rate(model)
         train_start = time.time()
         losses = []
-        for step, (x, y, _) in enumerate(train_batches(epoch), 1):
-            output = model.train_on_batch(x, y)
-            losses.append(float(
-                output[0] if isinstance(output, (list, tuple)) else output))
+        batches = iter(train_batches(epoch))
+        for step in range(1, steps_per_epoch + 1):
+            if accumulation_steps == 1:
+                try:
+                    x, y, _ = next(batches)
+                except StopIteration:
+                    raise RuntimeError(
+                        "data adapter ended before optimizer update {}".format(
+                            step))
+                output = model.train_on_batch(x, y)
+                losses.append(float(
+                    output[0] if isinstance(output, (list, tuple)) else output))
+            else:
+                microbatches = itertools.islice(
+                    batches, accumulation_steps)
+                losses.extend(accumulated_train_step(
+                    model, microbatches, accumulation_steps, tf))
             if (
                     config["progress_every"]
                     and (step == 1
@@ -278,10 +347,18 @@ def run_binary_pfn_training(config, train_batches, predict_validation,
                         step, steps_per_epoch, np.mean(losses),
                         time.time() - train_start),
                     flush=True)
-        if len(losses) != steps_per_epoch:
+        try:
+            next(batches)
+        except StopIteration:
+            pass
+        else:
             raise RuntimeError(
-                "data adapter yielded {} batches; expected {}".format(
-                    len(losses), steps_per_epoch))
+                "data adapter yielded more than {} microbatches".format(
+                    microbatches_per_epoch))
+        if len(losses) != microbatches_per_epoch:
+            raise RuntimeError(
+                "recorded {} microbatch losses; expected {}".format(
+                    len(losses), microbatches_per_epoch))
         train_seconds = time.time() - train_start
 
         val_start = time.time()

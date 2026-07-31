@@ -94,6 +94,10 @@ def parse_args():
              "independent-unit bootstrap uncertainty is reported (default 0 "
              "uses disjoint blocked test units)")
     parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument(
+        "--gradient-accumulation-steps", type=int, default=1,
+        help="microbatches averaged before each optimizer update (default 1)",
+    )
     parser.add_argument("--epochs", type=int, default=None,
                         help="max epochs (default: 200, or 40 for --null-test "
                              "-- a null has nothing to converge to, so it "
@@ -457,13 +461,21 @@ def main():
     if args.units_per_epoch % (args.batch_size // 2):
         raise SystemExit(
             "--units-per-epoch must be divisible by --batch-size/2")
+    if args.gradient_accumulation_steps < 1:
+        raise SystemExit("--gradient-accumulation-steps must be positive")
+    effective_batch_size = (
+        args.batch_size * args.gradient_accumulation_steps)
+    if 2 * args.units_per_epoch % effective_batch_size:
+        raise SystemExit(
+            "2 * --units-per-epoch must be divisible by the effective "
+            "batch size")
     if args.decay_epochs < 0 or args.warmup_epochs < 0:
         raise SystemExit("--warmup-epochs and --decay-epochs must be non-negative")
     if args.decay_epochs > 0 and not 0.0 <= args.min_lr <= args.lr:
         raise SystemExit("--min-lr must be between zero and --lr")
     if args.progress_every < 0:
         raise SystemExit("--progress-every must be non-negative")
-    steps_per_epoch = 2 * args.units_per_epoch // args.batch_size
+    steps_per_epoch = 2 * args.units_per_epoch // effective_batch_size
     args.warmup_steps = round(args.warmup_epochs * steps_per_epoch)
     args.decay_steps = round(args.decay_epochs * steps_per_epoch)
     args.steps_per_epoch = steps_per_epoch
@@ -590,6 +602,7 @@ def main():
         "min_epochs": args.min_epochs,
         "units_per_epoch": args.units_per_epoch,
         "batch_size": args.batch_size,
+        "gradient_accumulation_steps": args.gradient_accumulation_steps,
         "max_minutes": args.max_minutes,
         "progress_every": args.progress_every,
     }
