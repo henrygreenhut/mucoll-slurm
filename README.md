@@ -134,6 +134,8 @@ used by the existing norm1-versus-norm42 trainer.
 ```bash
 sbatch submit_oscar_variable_reuse.slurm 1v5 main
 sbatch submit_oscar_variable_reuse.slurm 1v5 null
+sbatch submit_oscar_variable_reuse.slurm 1v7 main
+sbatch submit_oscar_variable_reuse.slurm 1v7 null
 sbatch submit_oscar_variable_reuse.slurm 5v10 main
 sbatch submit_oscar_variable_reuse.slurm 5v10 null
 sbatch submit_oscar_variable_reuse.slurm 1v10 main
