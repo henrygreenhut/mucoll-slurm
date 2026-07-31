@@ -18,6 +18,7 @@ CONTAINER=/oscar/data/mleblan6/mucoll/mucoll-sim-ubuntu24:v3.0.sif
 OUT=/oscar/scratch/$USER/mucoll/libtest/reco_variable_k_smoke
 WORKDIR=$(mktemp -d "/oscar/scratch/$USER/recok_smoke.XXXXXX")
 trap 'rm -rf "$WORKDIR"' EXIT
+find "$OUT/GEN" -type f -name '*.partial.*' -delete 2>/dev/null || true
 
 for polarity in MUPLUS MUMINUS; do
     for k in 1 5 7 10 21; do

@@ -328,6 +328,7 @@ def write_gen_file(particles, path):
         particle.getVertex().z = float(particles["vz"][index])
     event.put(cppyy.gbl.std.move(collection), "MCParticles")
     writer.write_frame(event, "events")
+    writer._writer.finish()
 
 
 def validate_gen_file(path, expected):
@@ -401,12 +402,16 @@ def write_gen(args):
             particles = rotate_chunk(raw, owners, angles, args.reuse_k)
             add_mass_charge(particles, properties)
             temporary = output.with_name(
-                output.stem + ".partial.{}.root".format(os.getpid())
+                "." + output.name + ".partial.{}".format(os.getpid())
             )
-            write_gen_file(particles, temporary)
-            if args.validate:
-                validate_gen_file(temporary, particles)
-            os.replace(temporary, output)
+            try:
+                write_gen_file(particles, temporary)
+                if args.validate:
+                    validate_gen_file(temporary, particles)
+                os.replace(temporary, output)
+            finally:
+                if temporary.exists():
+                    temporary.unlink()
             if number % 25 == 0 or number == len(indices):
                 print(
                     "  {}/{} chunks; last={} primaries".format(
