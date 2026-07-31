@@ -185,6 +185,17 @@ class RecoFeatureTests(unittest.TestCase):
 
 
 class RecoRecipeTests(unittest.TestCase):
+    def test_label_permutation_null_is_balanced_fixed_and_split_specific(self):
+        labels = np.asarray([0] * 100 + [1] * 100, dtype=np.int32)
+        train = trainer.permuted_labels(labels, "train")
+        repeated = trainer.permuted_labels(labels, "train")
+        validation = trainer.permuted_labels(labels, "val")
+
+        np.testing.assert_array_equal(train, repeated)
+        self.assertEqual(np.bincount(train).tolist(), [100, 100])
+        self.assertFalse(np.array_equal(train, labels))
+        self.assertFalse(np.array_equal(train, validation))
+
     def test_stabilized_recipes_only_differ_by_dropout(self):
         plain = trainer.recipe_config("stabilized", steps_per_epoch=125)
         dropout = trainer.recipe_config(

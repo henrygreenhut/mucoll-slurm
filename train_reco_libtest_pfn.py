@@ -102,6 +102,11 @@ def parse_args():
         "--test-events", type=int, default=DEFAULT_EXPECTED_EVENTS["test"]
     )
     parser.add_argument("--recipe", choices=tuple(RECIPES), default="baseline")
+    parser.add_argument(
+        "--permute-labels",
+        action="store_true",
+        help="label-permutation null using the same two physical samples",
+    )
     return parser.parse_args()
 
 
@@ -168,6 +173,12 @@ def combine_pair(pair, width):
         metadata.extend((class_id, f.decode() if isinstance(f, bytes) else str(f), int(e))
                         for f, e in zip(files, events))
     return x, y, metadata
+
+
+def permuted_labels(labels, split):
+    split_number = {"train": 0, "val": 1, "test": 2}[split]
+    rng = np.random.default_rng(TRAINING_SEED + 50000 + split_number)
+    return rng.permutation(labels)
 
 
 def recipe_config(name, steps_per_epoch):
@@ -456,6 +467,10 @@ def main():
         "label": args.label,
         "dataset_tag": args.dataset_tag,
         "classes": [args.class_a, args.class_b],
+        "label_mode": (
+            "deterministic split-wise permutation"
+            if args.permute_labels else "physical class"
+        ),
         "n_files": args.n_files,
         "dataset": dataset,
         "features": list(FEATURES),
@@ -487,6 +502,11 @@ def main():
     }
     width = max(item[0].shape[1] for pair in pairs.values() for item in pair)
     data = {split: combine_pair(pair, width) for split, pair in pairs.items()}
+    if args.permute_labels:
+        data = {
+            split: (values[0], permuted_labels(values[1], split), values[2])
+            for split, values in data.items()
+        }
     for split, (x, y, _) in data.items():
         print("{}: {} events, width {}".format(split, len(y), x.shape[1]))
 
@@ -553,6 +573,10 @@ def main():
         "dataset_tag": args.dataset_tag,
         "class_a": args.class_a,
         "class_b": args.class_b,
+        "label_mode": (
+            "deterministic split-wise permutation"
+            if args.permute_labels else "physical class"
+        ),
         "n_files": args.n_files,
         "dataset": dataset,
         "features": list(FEATURES),
@@ -591,6 +615,10 @@ def main():
             "events_per_class": expected_events,
         },
         "seed": TRAINING_SEED,
+        "label_permutation_seed": (
+            "training_seed + 50000 + split_index"
+            if args.permute_labels else None
+        ),
         "epochs_run": len(history.history["loss"]),
         "selection": {
             "best_epoch": int(np.argmin(history.history["val_loss"]) + 1),

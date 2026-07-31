@@ -11,12 +11,18 @@
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
+POLARITY=${1:-MUPLUS}
+if [ "$POLARITY" != MUPLUS ] && [ "$POLARITY" != MUMINUS ]; then
+    echo "usage: sbatch $0 {MUPLUS|MUMINUS}" >&2
+    exit 2
+fi
+
 module load ngc-tensorflow-container/25.02-tf2-py3-j4zj
 
 FLUKA_DIR=/oscar/data/mleblan6/mucoll/bib/FLUKA
 TASKLIST=/oscar/data/mleblan6/mucoll/bib/logs/gen/tasklist.txt
 BENCHMARKS_DIR="$SLURM_SUBMIT_DIR/../mucoll-benchmarks"
-OUTPUT=/oscar/data/mleblan6/mucoll/hgreenhu/mucoll/libtest/stores/gen_split_mothers_MUPLUS.h5
+OUTPUT=/oscar/data/mleblan6/mucoll/hgreenhu/mucoll/libtest/stores/gen_split_mothers_${POLARITY}.h5
 PARTIAL="${OUTPUT}.partial.${SLURM_JOB_ID}"
 
 if [ -e "$OUTPUT" ]; then
@@ -31,7 +37,7 @@ apptainer exec --bind /oscar:/oscar "$NGC_TENSORFLOW_CONTAINER" \
         --tasklist "$TASKLIST" \
         --benchmarks-dir "$BENCHMARKS_DIR" \
         --output "$PARTIAL" \
-        --polarity MUPLUS \
+        --polarity "$POLARITY" \
         --exclude-cycle 6291
 
 mv "$PARTIAL" "$OUTPUT"

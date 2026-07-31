@@ -152,6 +152,86 @@ while preserving the full input construction. Evaluations use overlapping
 pseudo-events from the held-out source-cycle pool and report a point AUC;
 cycle-level uncertainty is run separately if needed.
 
+### Variable reuse after detector simulation
+
+The matched RECO study uses the same 29,400 mother-equivalents per polarity
+as the GEN study. Source cycles are split 50/25/25 before their mothers are
+shuffled into immutable chunks of 140 distinct mothers. Every K library uses
+the same chunk partition and the first K angles from one deterministic
+21-angle sequence per mother. The exact overlay is:
+
+| K | distinct mothers/event | rotated mothers/chunk | SIM files/event/polarity |
+|---:|---:|---:|---:|
+| 1 | 29,400 | 140 | 210 |
+| 5 | 5,880 | 700 | 42 |
+| 7 | 4,200 | 980 | 30 |
+| 10 | 2,940 | 1,400 | 21 |
+| 21 | 1,400 | 2,940 | 10 |
+
+Build the missing MUMINUS mother bank, immutable chunk manifest, and one
+validated GEN→SIM file at every K before committing to full production:
+
+```bash
+minus=$(sbatch --parsable submit_oscar_mother_store.slurm MUMINUS)
+prepare=$(sbatch --parsable --dependency=afterok:"$minus" \
+  submit_reco_variable_k_prepare.slurm)
+smoke=$(sbatch --parsable --dependency=afterok:"$prepare" \
+  submit_reco_variable_k_smoke.slurm)
+printf 'MUMINUS=%s prepare=%s smoke=%s\n' "$minus" "$prepare" "$smoke"
+```
+
+After checking the smoke timing and file sizes, write the complete GEN
+libraries. These ten 64-way arrays together remain below OSCAR's submitted-job
+limit:
+
+```bash
+for polarity in MUPLUS MUMINUS; do
+  for k in 1 5 7 10 21; do
+    sbatch submit_reco_variable_k_gen.slurm "$k" "$polarity"
+  done
+done
+```
+
+Wait for GEN production to finish before submitting the ten SIM arrays; queuing
+both stages at once would exceed the account's submitted-job limit:
+
+```bash
+for polarity in MUPLUS MUMINUS; do
+  for k in 1 5 7 10 21; do
+    sbatch submit_reco_variable_k_ddsim.slurm "$k" "$polarity"
+  done
+done
+```
+
+The RECO submitter refuses to run until every expected SIM chunk exists.
+It creates 2,000 train, 2,000 validation, and 2,000 test neutrino-gun events
+for each K, using the established packed reconstruction chain:
+
+```bash
+python3 submit_reco_variable_k.py
+```
+
+This production is resumable. Rerun the same command after a timeout; existing
+RECO outputs are skipped. Once it reports that everything already exists,
+build the five stores:
+
+```bash
+sbatch submit_reco_variable_k_stores.slurm
+```
+
+Train each physical comparison and its label-permutation null:
+
+```bash
+for comparison in 1v5 1v7 1v10 1v21; do
+  sbatch submit_reco_variable_k_train.slurm "$comparison" main
+  sbatch submit_reco_variable_k_train.slurm "$comparison" null
+done
+```
+
+K=1 is reconstructed once and shared by all four comparisons. A null does not
+require new detector production: labels are deterministically permuted within
+each split over the same two physical K samples.
+
 The original 1-vs-5 run early-stopped after 20 epochs, before the successful
 1-vs-10 comparison first developed a clear validation signal at epoch 24.
 The following controlled rerun keeps the same source split, sampled-unit

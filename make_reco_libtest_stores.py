@@ -33,6 +33,15 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--n-files", type=int, default=DEFAULT_N_FILES)
     parser.add_argument(
+        "--samples", nargs="+", default=SAMPLES,
+        help="sample names to convert (default: U R null_b)",
+    )
+    parser.add_argument(
+        "--study-template",
+        default="reco_libtest_n{n_files}_{sample}",
+        help="input directory template relative to each RECO root",
+    )
+    parser.add_argument(
         "--reco-dir",
         help="default input root; defaults from PSCRATCH and --n-files",
     )
@@ -373,7 +382,10 @@ def pool_provenance(manifest_arg, split):
     manifest_path = Path(manifest_arg).resolve()
     payload = manifest_path.read_bytes()
     manifest = json.loads(payload)
-    cycles = [int(value) for value in manifest["splits"][split]]
+    split_payload = manifest["splits"][split]
+    if isinstance(split_payload, dict):
+        split_payload = split_payload["cycles"]
+    cycles = [int(value) for value in split_payload]
     cycle_payload = ",".join(map(str, cycles)).encode()
     return {
         "source_pool_manifest": str(manifest_path),
@@ -422,11 +434,13 @@ def main():
         ).resolve()
         for split in args.splits
     }
-    for sample in SAMPLES:
+    for sample in args.samples:
         for split in args.splits:
             source = (
                 split_roots[split]
-                / "reco_libtest_n{}_{}".format(args.n_files, sample)
+                / args.study_template.format(
+                    n_files=args.n_files, sample=sample
+                )
                 / split
             )
             output = outdir / "n{}_{}_{}.h5".format(
