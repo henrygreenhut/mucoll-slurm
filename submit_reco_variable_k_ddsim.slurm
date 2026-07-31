@@ -6,8 +6,8 @@
 #SBATCH --mem=12G
 #SBATCH -t 24:00:00
 #SBATCH --array=0-63
-#SBATCH -o recok_ddsim_%A_%a.out
-#SBATCH -e recok_ddsim_%A_%a.err
+#SBATCH -o /oscar/data/mleblan6/mucoll/hgreenhu/mucoll/reco_variable_k/logs/recok_ddsim_%A_%a.out
+#SBATCH -e /oscar/data/mleblan6/mucoll/hgreenhu/mucoll/reco_variable_k/logs/recok_ddsim_%A_%a.err
 
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
