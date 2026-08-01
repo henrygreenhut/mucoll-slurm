@@ -97,6 +97,8 @@ def assign_cycle_ids(paths):
 PDG_ONEHOT = ["pdg_gamma", "pdg_n", "pdg_e", "pdg_mu", "pdg_other"]
 FEATURE_SETS = {
     "paper": ["logpt", "theta", "cosphi", "sinphi"] + PDG_ONEHOT,
+    "expanded_no_position": ["logpt", "theta", "cosphi", "sinphi",
+                             "loge", "asinh_t"] + PDG_ONEHOT,
     "expanded": ["logpt", "theta", "cosphi", "sinphi", "loge",
                  "asinh_t", "asinh_vz", "asinh_vr"] + PDG_ONEHOT,
 }

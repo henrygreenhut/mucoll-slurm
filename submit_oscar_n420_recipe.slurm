@@ -17,6 +17,7 @@
 # Set RUN_TAG for a clean repeat with identical seeds/configuration:
 #   sbatch --export=ALL,RUN_TAG=repro1 submit_oscar_n420_recipe.slurm \
 #       scaled 1e-4 1 main
+# Set FEATURE_SET=expanded_no_position to remove vertex-z and vertex-radius.
 # Backward-compatible:
 #   sbatch -p gpu-debug -t 00:15:00 submit_oscar_n420_recipe.slurm \
 #       scaled 1e-4 1 smoke
@@ -62,6 +63,12 @@ esac
 
 module load ngc-tensorflow-container/25.02-tf2-py3-j4zj
 
+FEATURE_SET=${FEATURE_SET:-expanded}
+case "$FEATURE_SET" in
+    paper|expanded_no_position|expanded) ;;
+    *) echo "FEATURE_SET must be paper, expanded_no_position, or expanded"; exit 2 ;;
+esac
+
 NORM1_STORE="$HOME/mucoll/stores/gen_norm1_reconstructed_MUPLUS.h5"
 NORM42_STORE="/oscar/scratch/$USER/mucoll/stores/gen_norm42_MUPLUS.h5"
 for store in "$NORM1_STORE" "$NORM42_STORE"; do
@@ -72,7 +79,7 @@ for store in "$NORM1_STORE" "$NORM42_STORE"; do
 done
 
 LR_LABEL=${LR/./p}
-LABEL="n420_recipe_bs4_expanded_${VARIANT}_lr${LR_LABEL}_mseed${MODEL_SEED}"
+LABEL="n420_recipe_bs4_${FEATURE_SET}_${VARIANT}_lr${LR_LABEL}_mseed${MODEL_SEED}"
 [ "$RUN" = null ] && LABEL="${LABEL}_null"
 RUN_TAG=${RUN_TAG:-}
 if [[ "$RUN_TAG" =~ [^A-Za-z0-9_-] ]]; then
@@ -91,7 +98,7 @@ COMMON_ARGS=(
     --phi-sizes 100,100,128
     --f-sizes 200,200,200
     --arch energyflow
-    --features expanded
+    --features "$FEATURE_SET"
     --lr "$LR"
     --warmup-epochs 1
     --decay-epochs 30

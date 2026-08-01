@@ -158,8 +158,9 @@ def parse_args():
                         choices=list(lc.FEATURE_SETS),
                         help="'paper' = momentum direction/magnitude + PDG "
                              "one-hot only (arXiv:1810.05165 recipe, adapted "
-                             "for BIB). 'expanded' = paper + log energy, "
-                             "asinh time/vertex-z/vertex-radius "
+                             "for BIB). 'expanded_no_position' also adds "
+                             "log energy and asinh time. 'expanded' further "
+                             "adds asinh vertex-z/vertex-radius "
                              "-- maximum GEN-level truth sensitivity, not "
                              "meant to be realistic (reco-level features "
                              "would be smeared); see FEATURE_SETS in "
