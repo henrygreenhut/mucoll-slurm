@@ -23,7 +23,7 @@ N_FILES = 420
 CLONE_FACTOR = 42
 SPLIT_FRACS = (0.50, 0.25, 0.25)
 DATA_SEED = 1701
-N_EXAMPLES = 50
+N_EXAMPLES = 25
 OUT_PNG = "plots/bib_example_unit_feature_plots.png"
 
 LABEL0 = "unique mothers"
