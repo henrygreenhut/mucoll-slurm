@@ -4,7 +4,10 @@ import inspect
 import os
 import sys
 import tempfile
+import threading
+import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from unittest import mock
 
@@ -356,6 +359,8 @@ class SharedTrainingEngineTests(unittest.TestCase):
             "min_delta_sigma": 1.0,
             "norm_stat_units_per_class": 100,
             "test_events_overlap_sources": True,
+            "materialization_workers": 4,
+            "prefetch_batches": 1,
         }
         for key, value in expected.items():
             self.assertEqual(config[key], value, key)
@@ -527,6 +532,57 @@ class SharedTrainingEngineTests(unittest.TestCase):
 
 
 class VariableReuseDefinitionTests(unittest.TestCase):
+    def test_parallel_materialization_preserves_event_order_and_contents(self):
+        definitions = [(0, 1, 11), (1, 7, 22), (0, 1, 33), (1, 7, 44)]
+
+        def fake_unit_features(_store, _pool, physical_k, seed):
+            time.sleep((50 - seed) / 5000.0)
+            return np.full((physical_k + 1, 2), seed, dtype=np.float32)
+
+        with mock.patch.object(
+                variable_trainer, "unit_features",
+                side_effect=fake_unit_features):
+            sequential = variable_trainer.padded_batch(
+                definitions, None, None, np.zeros(2), np.ones(2))
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                parallel = variable_trainer.padded_batch(
+                    definitions, None, None, np.zeros(2), np.ones(2),
+                    executor=executor)
+
+        for actual, expected in zip(parallel, sequential):
+            np.testing.assert_array_equal(actual, expected)
+
+    def test_parallel_materialization_uses_multiple_workers(self):
+        definitions = [(0, 1, seed) for seed in range(4)]
+        lock = threading.Lock()
+        active = 0
+        maximum = 0
+
+        def fake_unit_features(_store, _pool, _physical_k, seed):
+            nonlocal active, maximum
+            with lock:
+                active += 1
+                maximum = max(maximum, active)
+            time.sleep(0.02)
+            with lock:
+                active -= 1
+            return np.full((2, 2), seed, dtype=np.float32)
+
+        with mock.patch.object(
+                variable_trainer, "unit_features",
+                side_effect=fake_unit_features):
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                variable_trainer.padded_batch(
+                    definitions, None, None, np.zeros(2), np.ones(2),
+                    executor=executor)
+
+        self.assertGreater(maximum, 1)
+
+    def test_prefetch_preserves_order(self):
+        self.assertEqual(
+            list(variable_trainer.prefetch_one(iter(range(8)))),
+            list(range(8)))
+
     def test_main_definitions_map_labels_to_physical_reuse(self):
         with tempfile.TemporaryDirectory() as directory:
             definitions = variable_trainer.load_or_create_seed_definitions(

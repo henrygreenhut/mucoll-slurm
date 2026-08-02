@@ -7,6 +7,7 @@ class difference is therefore within-event mother reuse.
 """
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import csv
 import json
 import math
@@ -42,6 +43,8 @@ DECAY_EPOCHS = 30
 MIN_LEARNING_RATE = 1.0e-6
 DATA_SEED = 1701
 NORM_STAT_UNITS = 100
+MATERIALIZATION_WORKERS = 4
+PREFETCH_BATCHES = 1
 
 
 def parse_args():
@@ -115,6 +118,8 @@ def scientific_config(args, epochs, patience, min_epochs, units, val_units,
         "norm_stat_units_per_class": norm_units,
         "norm_particle_weighting": "all particles, matching N=420 recipe",
         "test_events_overlap_sources": True,
+        "materialization_workers": MATERIALIZATION_WORKERS,
+        "prefetch_batches": PREFETCH_BATCHES,
         "max_minutes": args.max_minutes,
         "progress_every": args.progress_every,
     }
@@ -179,11 +184,21 @@ def unit_features(store, mother_pool, physical_k, seed):
     return lc.build_features(raw, feature_set=FEATURE_SET)
 
 
-def padded_batch(chunk, store, mother_pool, mean, std):
-    arrays = [
-        (unit_features(store, mother_pool, physical_k, seed) - mean) / std
-        for _, physical_k, seed in chunk
-    ]
+def standardized_unit(definition, store, mother_pool, mean, std):
+    _, physical_k, seed = definition
+    return (
+        unit_features(store, mother_pool, physical_k, seed) - mean) / std
+
+
+def padded_batch(chunk, store, mother_pool, mean, std, executor=None):
+    def build(definition):
+        return standardized_unit(
+            definition, store, mother_pool, mean, std)
+
+    if executor is None:
+        arrays = [build(definition) for definition in chunk]
+    else:
+        arrays = list(executor.map(build, chunk))
     labels = np.asarray([label for label, _, _ in chunk], dtype=np.int32)
     max_particles = max(len(array) for array in arrays)
     x = np.zeros(
@@ -195,7 +210,8 @@ def padded_batch(chunk, store, mother_pool, mean, std):
     return x, y, labels
 
 
-def balanced_batches(definitions, store, mother_pool, mean, std, rng):
+def balanced_batches(definitions, store, mother_pool, mean, std, rng,
+                     executor=None):
     by_label = [
         [definition for definition in definitions if definition[0] == label]
         for label in (0, 1)
@@ -212,22 +228,40 @@ def balanced_batches(definitions, store, mother_pool, mean, std, rng):
             + [by_label[1][i] for i in orders[1][start:start + half]]
         )
         rng.shuffle(chunk)
-        yield padded_batch(chunk, store, mother_pool, mean, std)
+        yield padded_batch(
+            chunk, store, mother_pool, mean, std, executor=executor)
 
 
-def ordinary_batches(definitions, store, mother_pool, mean, std):
+def ordinary_batches(definitions, store, mother_pool, mean, std,
+                     executor=None):
     for start in range(0, len(definitions), BATCH_SIZE):
         yield padded_batch(
-            definitions[start:start + BATCH_SIZE],
-            store, mother_pool, mean, std)
+            definitions[start:start + BATCH_SIZE], store, mother_pool,
+            mean, std, executor=executor)
+
+
+def prefetch_one(iterable):
+    iterator = iter(iterable)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(next, iterator)
+        while True:
+            try:
+                item = future.result()
+            except StopIteration:
+                return
+            future = executor.submit(next, iterator)
+            yield item
 
 
 def predict(model, definitions, store, mother_pool, mean, std,
-            progress_every=0, label="validation"):
+            progress_every=0, label="validation", executor=None):
     labels, scores = [], []
     n_batches = math.ceil(len(definitions) / BATCH_SIZE)
-    for step, (x, _, batch_labels) in enumerate(
-            ordinary_batches(definitions, store, mother_pool, mean, std), 1):
+    batches = ordinary_batches(
+        definitions, store, mother_pool, mean, std, executor=executor)
+    if PREFETCH_BATCHES:
+        batches = prefetch_one(batches)
+    for step, (x, _, batch_labels) in enumerate(batches, 1):
         probabilities = np.asarray(model.predict_on_batch(x))
         labels.extend(batch_labels.tolist())
         scores.extend(probabilities[:, 1].tolist())
@@ -393,20 +427,8 @@ def main():
     print("  EnergyFlow scaled sum | batch {} | LR {} | "
           "{}-epoch warmup + {}-epoch cosine decay".format(
               BATCH_SIZE, LEARNING_RATE, WARMUP_EPOCHS, DECAY_EPOCHS))
-
-    def train_batches_for_epoch(epoch):
-        # Use one epoch RNG for unit definitions and batch shuffling, exactly
-        # as the successful file-level trainer does.
-        rng = np.random.default_rng(DATA_SEED * 100003 + epoch)
-        definitions = epoch_definitions(
-            reuse_k, units, epoch, args.null_test, rng=rng)
-        return balanced_batches(
-            definitions, store, pools["train"], mean, std, rng)
-
-    def predict_validation(model):
-        return predict(
-            model, val_definitions, store, pools["val"], mean, std,
-            args.progress_every)
+    print("  input pipeline: {} event workers + {}-batch prefetch".format(
+        MATERIALIZATION_WORKERS, PREFETCH_BATCHES))
 
     training_config = {
         "result_dir": result_dir,
@@ -437,15 +459,31 @@ def main():
         "max_minutes": args.max_minutes,
         "progress_every": args.progress_every,
     }
-    model, state, training_complete = run_binary_pfn_training(
-        training_config, train_batches_for_epoch, predict_validation,
-        start_time=start_time)
-    if not training_complete:
-        return
+    with ThreadPoolExecutor(
+            max_workers=MATERIALIZATION_WORKERS) as materializer:
+        def train_batches_for_epoch(epoch):
+            rng = np.random.default_rng(DATA_SEED * 100003 + epoch)
+            definitions = epoch_definitions(
+                reuse_k, units, epoch, args.null_test, rng=rng)
+            batches = balanced_batches(
+                definitions, store, pools["train"], mean, std, rng,
+                executor=materializer)
+            return prefetch_one(batches) if PREFETCH_BATCHES else batches
 
-    labels, scores = predict(
-        model, test_definitions, store, pools["test"], mean, std,
-        args.progress_every, label="test")
+        def predict_validation(model):
+            return predict(
+                model, val_definitions, store, pools["val"], mean, std,
+                args.progress_every, executor=materializer)
+
+        model, state, training_complete = run_binary_pfn_training(
+            training_config, train_batches_for_epoch, predict_validation,
+            start_time=start_time)
+        if not training_complete:
+            return
+
+        labels, scores = predict(
+            model, test_definitions, store, pools["test"], mean, std,
+            args.progress_every, label="test", executor=materializer)
     save_test_outputs(
         result_dir, test_definitions, labels, scores, reuse_k, test_units,
         state, args)

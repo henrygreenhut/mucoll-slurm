@@ -15,10 +15,8 @@
 #   sbatch submit_oscar_variable_reuse.slurm \
 #       {1v5|1v7|1v21|5v10|1v10|10v42} {main|null} [train|smoke]
 #
-# A fresh long-training diagnostic can be requested without changing the
-# default production labels:
-#   sbatch --export=ALL,RUN_TAG=min80,EPOCHS=120,MIN_EPOCHS=80 \
-#       submit_oscar_variable_reuse.slurm 1v5 main
+# Main production runs complete at least 80 epochs. Nulls retain ordinary
+# validation-loss early stopping.
 
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
@@ -62,9 +60,19 @@ LABEL="n420_k${K0}_vs_k${K1}_scaled_lr1e-4_mseed1"
 [ "$RUN" = null ] && LABEL="${LABEL}_null"
 [ "$MODE" = smoke ] && LABEL="${LABEL}_smoke"
 RUN_TAG=${RUN_TAG:-}
-[ -n "$RUN_TAG" ] && LABEL="${LABEL}_${RUN_TAG}"
 EPOCHS=${EPOCHS:-80}
-MIN_EPOCHS=${MIN_EPOCHS:-0}
+if [ "$RUN" = main ] && [ "$MODE" = train ]; then
+    MIN_EPOCHS=${MIN_EPOCHS:-80}
+    RUN_TAG=${RUN_TAG:-min${MIN_EPOCHS}}
+else
+    MIN_EPOCHS=${MIN_EPOCHS:-0}
+fi
+[ -n "$RUN_TAG" ] && LABEL="${LABEL}_${RUN_TAG}"
+
+if [ "$MIN_EPOCHS" -gt "$EPOCHS" ]; then
+    echo "MIN_EPOCHS cannot exceed EPOCHS"
+    exit 2
+fi
 
 echo "label=$LABEL comparison=$COMPARISON run=$RUN mode=$MODE epochs=$EPOCHS min_epochs=$MIN_EPOCHS"
 apptainer exec --nv "$NGC_TENSORFLOW_CONTAINER" \

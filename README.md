@@ -146,6 +146,10 @@ sbatch submit_oscar_variable_reuse.slurm 10v42 main
 sbatch submit_oscar_variable_reuse.slurm 10v42 null
 ```
 
+Main variable-reuse runs use four deterministic event-building workers,
+prefetch one batch, and run at least 80 epochs. Their default labels end in
+`_min80`. Null runs retain validation-loss early stopping.
+
 Each null permutes labels over the same sampled units as its corresponding
 main comparison, removing the association between reuse factor and target
 while preserving the full input construction. Evaluations use overlapping
