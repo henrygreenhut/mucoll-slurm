@@ -37,7 +37,7 @@ RUNS = (
      "GEN N=420 — raw sum, LR $10^{-4}$",
      "gen_n420_recipe/gen_n420_raw_lr1e-4.pdf"),
     ("pfn_results/n420_recipe_bs4_expanded_scaled_lr1e-4_mseed1_null_pointonly",
-     "GEN N=420 — scaled-sum null",
+     "GEN-Level PFN at N=420 Null",
      "gen_n420_recipe/gen_n420_scaled_lr1e-4_null.pdf"),
 
     # Synthetic mother-level reuse scan.
@@ -162,7 +162,7 @@ RUNS = (
     ("reco_pfn_results/"
      "reco_n420_trackfix_val25_directlog_charged7_"
      "stabilized_dropout_null",
-     "RECO N=420 — charged-flag null, 25% validation cycles",
+     "RECO-level PFN at N=420: Null",
      "reco_n420_trackfix_validation/"
      "reco_n420_trackfix_charged7_val25_null.pdf"),
     ("reco_pfn_results/"
