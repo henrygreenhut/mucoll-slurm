@@ -23,7 +23,7 @@ N_FILES = 420
 CLONE_FACTOR = 42
 SPLIT_FRACS = (0.50, 0.25, 0.25)
 DATA_SEED = 1701
-N_EXAMPLES = 20
+N_EXAMPLES = 50
 OUT_PNG = "plots/bib_example_unit_feature_plots.png"
 
 LABEL0 = "unique mothers"
@@ -132,12 +132,13 @@ def main():
     fig.legend(
         handles, labels, loc="upper center", ncol=2, frameon=False,
         bbox_to_anchor=(0.5, 0.955))
-    fig.suptitle("GEN PFN inputs for N=420 BIB pseudo-events", fontsize=16)
+    fig.suptitle("GEN PFN inputs at equal N=420 BIB", fontsize=16)
     fig.text(
         0.5, 0.01,
-        f"{N_EXAMPLES} training events per class; "
-        f"unique: {unique.files_per_unit} norm1 files/event; "
-        f"reuse: {reused.files_per_unit} norm42 files/event",
+        f"{N_EXAMPLES} pseudo-events per class; "
+        f"unique: {unique.files_per_unit} source cycles; "
+        f"reused: {reused.files_per_unit} source cycles x "
+        f"{CLONE_FACTOR} rotations",
         ha="center", fontsize=10)
     fig.tight_layout(rect=(0, 0.035, 1, 0.93))
 
