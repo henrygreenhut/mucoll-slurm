@@ -37,9 +37,9 @@ def coordinates(points):
 
 variable_runs = {
     5: "n420_k1_vs_k5_scaled_lr1e-4_mseed1_min80",
-    7: "n420_k1_vs_k7_scaled_lr1e-4_mseed1",
+    7: "n420_k1_vs_k7_scaled_lr1e-4_mseed1_min80",
     10: "n420_k1_vs_k10_scaled_lr1e-4_mseed1",
-    21: "n420_k1_vs_k21_scaled_lr1e-4_mseed1",
+    21: "n420_k1_vs_k21_scaled_lr1e-4_mseed1_min80",
 }
 
 variable_main = available([

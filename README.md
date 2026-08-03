@@ -146,6 +146,10 @@ sbatch submit_oscar_variable_reuse.slurm 10v42 main
 sbatch submit_oscar_variable_reuse.slurm 10v42 null
 ```
 
+Every new training run saves `best.weights.h5` using the declared selection
+metric and independently saves `best_auc.weights.h5` at the maximum validation
+AUC.
+
 Main variable-reuse runs use four deterministic event-building workers,
 prefetch one batch, and run at least 80 epochs. Their default labels end in
 `_min80`. Null runs retain validation-loss early stopping.
@@ -155,6 +159,41 @@ main comparison, removing the association between reuse factor and target
 while preserving the full input construction. Evaluations use overlapping
 pseudo-events from the held-out source-cycle pool and report a point AUC;
 cycle-level uncertainty is run separately if needed.
+
+### Fixed rotated GEN libraries
+
+The fixed-library study matches the original norm1-versus-norm42 input
+structure. Rotation happens once while building each HDF5 library, never in
+the training loop. One stored entry remains one source cycle. At N=420 the
+unique class samples 420 native, unrotated mother-bank cycles, while class k samples
+`420/k` entries whose mothers already have k fixed azimuthal copies.
+
+Only the reused classes are materialized. Build the k=5 and k=7 stores from
+the native mother bank:
+
+```bash
+sbatch submit_oscar_fixed_reuse_store.slurm 5
+sbatch submit_oscar_fixed_reuse_store.slurm 7
+```
+
+The random rotations are deterministic. The first five angles in the k=7
+store equal the k=5 angles for the same mother. Train through the original
+`pfn_libtest_train.py` path with the successful scaled-sum N=420 recipe and
+an 80-epoch cosine decay:
+
+```bash
+sbatch submit_oscar_fixed_reuse_train.slurm 5 main smoke
+sbatch submit_oscar_fixed_reuse_train.slurm 7 main smoke
+sbatch submit_oscar_fixed_reuse_train.slurm 5 main
+sbatch submit_oscar_fixed_reuse_train.slurm 7 main
+sbatch submit_oscar_fixed_reuse_train.slurm 5 null
+sbatch submit_oscar_fixed_reuse_train.slurm 7 null
+```
+
+Each fixed-library null is reuse-versus-reuse at its named k: both labels use
+the same fixed rotated store and independently sample `420/k` cycles. The
+historical unique-versus-unique null remains the default in
+`pfn_libtest_train.py` for older studies.
 
 ### Variable reuse after detector simulation
 

@@ -17,7 +17,7 @@ if [ "$POLARITY" != MUPLUS ] && [ "$POLARITY" != MUMINUS ]; then
     exit 2
 fi
 
-module load ngc-tensorflow-container/25.02-tf2-py3-j4zj
+module load ngc-tensorflow-container/25.02-tf2-py3-azkb
 
 FLUKA_DIR=/oscar/data/mleblan6/mucoll/bib/FLUKA
 TASKLIST=/oscar/data/mleblan6/mucoll/bib/logs/gen/tasklist.txt

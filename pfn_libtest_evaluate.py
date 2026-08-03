@@ -22,7 +22,8 @@ import time
 import numpy as np
 
 import libtest_common as lc
-from pfn_libtest_train import PHI_SIZES, F_SIZES, UnitSampler, predict_units
+from pfn_libtest_train import (
+    PHI_SIZES, F_SIZES, UnitSampler, class_layout, predict_units)
 
 
 def parse_args():
@@ -120,12 +121,16 @@ def main():
     clone_factor = int(cfg(config, "clone_factor", 42))
     split_fracs = tuple(cfg(config, "split_fracs", (0.60, 0.15, 0.25)))
     null_test = bool(cfg(config, "null_test", False))
+    null_source = cfg(config, "null_source", "unique")
     if null_test and cfg(config, "null_partition", "shared") != "shared":
         raise SystemExit("paired-cycle evaluation requires a shared-pool null")
 
-    store1 = lc.Store(config["norm1_store"])
-    store_b = store1 if null_test else lc.Store(config["norm42_store"])
-    common, pos1, pos_b = lc.common_positions(store1, store_b)
+    store_unique = lc.Store(config["norm1_store"])
+    store_reuse = lc.Store(config["norm42_store"])
+    store_a, store_b, files_a, files_b = class_layout(
+        store_unique, store_reuse, n_files, clone_factor,
+        null_test, null_source)
+    common, pos_a, pos_b = lc.common_positions(store_a, store_b)
     split_path = os.path.join(source_dir, "source_split.npz")
     if os.path.isfile(split_path):
         cycle_split = lc.load_or_create_cycle_split(
@@ -135,15 +140,14 @@ def main():
     else:
         splits = lc.split_indices(len(common), split_fracs)
     test_indices = splits["test"]
-    pool_a = pos1[test_indices]
-    pool_b = pos1[test_indices] if null_test else pos_b[test_indices]
-    files_b = n_files if null_test else n_files // clone_factor
-    files_per_unit = (n_files, files_b)
+    pool_a = pos_a[test_indices]
+    pool_b = pos_b[test_indices]
+    files_per_unit = (files_a, files_b)
 
     dummy_splits_a = {"test": pool_a}
     dummy_splits_b = {"test": pool_b}
     samplers = [
-        UnitSampler(store1, dummy_splits_a, n_files,
+        UnitSampler(store_a, dummy_splits_a, files_a,
                     cfg(config, "features", "paper")),
         UnitSampler(store_b, dummy_splits_b, files_b,
                     cfg(config, "features", "paper")),
@@ -174,6 +178,7 @@ def main():
         "n_files": n_files,
         "clone_factor": clone_factor,
         "null_test": null_test,
+        "null_source": null_source,
         "split_fracs": split_fracs,
         "n_paired_test_cycles": int(len(test_indices)),
         "point_units_per_class": args.point_units,

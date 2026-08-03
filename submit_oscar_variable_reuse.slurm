@@ -48,7 +48,7 @@ case "$MODE" in
     *) echo "third argument must be train or smoke"; exit 2 ;;
 esac
 
-module load ngc-tensorflow-container/25.02-tf2-py3-j4zj
+module load ngc-tensorflow-container/25.02-tf2-py3-azkb
 
 MOTHER_STORE=/oscar/data/mleblan6/mucoll/hgreenhu/mucoll/libtest/stores/gen_split_mothers_MUPLUS.h5
 if [ ! -f "$MOTHER_STORE" ]; then

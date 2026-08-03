@@ -26,7 +26,8 @@ import os
 import numpy as np
 
 import libtest_common as lc
-from pfn_libtest_train import PHI_SIZES, F_SIZES, UnitSampler, predict_units
+from pfn_libtest_train import (
+    PHI_SIZES, F_SIZES, UnitSampler, class_layout, predict_units)
 
 
 def parse_args():
@@ -71,6 +72,7 @@ def main():
     clone_factor = config.get("clone_factor", 42)
     split_fracs = tuple(config.get("split_fracs", (0.5, 0.25, 0.25)))
     null_test = config.get("null_test", False)
+    null_source = config.get("null_source", "unique")
     arch = config.get("arch", "local")
     batch_size = args.batch_size or config.get("batch_size", 4)
     # Read the actual architecture used for this checkpoint, not the
@@ -79,9 +81,12 @@ def main():
     phi_sizes = tuple(config.get("phi_sizes", PHI_SIZES))
     f_sizes = tuple(config.get("f_sizes", F_SIZES))
 
-    store1 = lc.Store(config["norm1_store"])
-    store_b = store1 if null_test else lc.Store(config["norm42_store"])
-    common, pos1, pos_b = lc.common_positions(store1, store_b)
+    store_unique = lc.Store(config["norm1_store"])
+    store_reuse = lc.Store(config["norm42_store"])
+    store_a, store_b, files_a, files_b = class_layout(
+        store_unique, store_reuse, n_files, clone_factor,
+        null_test, null_source)
+    common, pos_a, pos_b = lc.common_positions(store_a, store_b)
     split_path = os.path.join(source_dir, "source_split.npz")
     if os.path.isfile(split_path):
         cycle_split = lc.load_or_create_cycle_split(
@@ -92,11 +97,10 @@ def main():
         splits = lc.split_indices(len(common), split_fracs)
     val_idx = splits["val"]
 
-    files_b = n_files if null_test else n_files // clone_factor
     samplers = [
-        UnitSampler(store1, {"val": pos1[val_idx]}, n_files,
+        UnitSampler(store_a, {"val": pos_a[val_idx]}, files_a,
                     config.get("features", "paper")),
-        UnitSampler(store_b, {"val": (pos1 if null_test else pos_b)[val_idx]},
+        UnitSampler(store_b, {"val": pos_b[val_idx]},
                    files_b, config.get("features", "paper")),
     ]
 
@@ -113,7 +117,7 @@ def main():
     model.load_weights(os.path.join(source_dir, "best.weights.h5"))
 
     n_val_cycles = len(val_idx)
-    reuse_factor = args.val_units * n_files / n_val_cycles
+    reuse_factor = args.val_units * files_a / n_val_cycles
     print(f"source: {args.source_label} (arch={arch}, n_files={n_files})")
     print(f"val pool: {n_val_cycles} cycles; {args.val_units} units/class/"
           f"redraw -> avg cycle reuse within one redraw: {reuse_factor:.1f}x")

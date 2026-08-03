@@ -11,7 +11,7 @@ GEN particles of one (library, polarity), file by file:
 
 A "unit" (pseudo-crossing) is a list of file positions into one store:
     unique class = n_files norm1 cycles
-    reuse  class = n_files / clone_factor norm42 cycles
+    reuse  class = n_files / clone_factor fixed-rotated cycles
 Both represent the same decay statistics; splits are by cycle so no mother
 appears in more than one of train/val/test.
 
@@ -120,7 +120,15 @@ class Store:
     def __init__(self, path):
         self.path = path
         with h5py.File(path, "r") as f:
-            self.offsets = f["offsets"][:]
+            if "offsets" in f:
+                self.offsets = f["offsets"][:]
+            elif "mother_offsets" in f and "cycle_offsets" in f:
+                mother_offsets = f["mother_offsets"][:]
+                self.offsets = mother_offsets[f["cycle_offsets"][:]]
+            else:
+                raise ValueError(
+                    "store has neither cycle particle offsets nor mother offsets"
+                )
             self.cycle_ids = f["cycle_ids"][:]
             available = set(f["particles"].keys())
             self.raw = {k: f["particles"][k][:] for k in RAW_KEYS if k in available}
@@ -464,6 +472,8 @@ def build_pfn_energyflow_scaled(input_dim, latent_scale,
     optimizer/compile is irrelevant and discarded, since the OUTER wrapper
     model built here gets its own fresh compile() with our optimizer.
     """
+    import random
+
     import tensorflow as tf
     import tf_keras
 
@@ -474,9 +484,17 @@ def build_pfn_energyflow_scaled(input_dim, latent_scale,
             "energyflow is not installed in this environment; "
             "`pip install --user energyflow` or use --arch local")
 
-    efn_model = EFN(input_dim=input_dim, Phi_sizes=phi_sizes, F_sizes=f_sizes,
-                    latent_dropout=latent_dropout, F_dropouts=f_dropouts,
-                    Phi_l2_regs=phi_l2, F_l2_regs=f_l2).model
+    original_randint = random.Random.randint
+    random.Random.randint = (
+        lambda generator, low, high:
+        original_randint(generator, int(low), int(high)))
+    try:
+        efn_model = EFN(
+            input_dim=input_dim, Phi_sizes=phi_sizes, F_sizes=f_sizes,
+            latent_dropout=latent_dropout, F_dropouts=f_dropouts,
+            Phi_l2_regs=phi_l2, F_l2_regs=f_l2).model
+    finally:
+        random.Random.randint = original_randint
     inp = tf_keras.layers.Input(shape=(None, input_dim), name="particles")
     z = tf_keras.layers.Lambda(
         lambda x: tf.cast(tf.reduce_any(tf.not_equal(x, 0.0), axis=-1),

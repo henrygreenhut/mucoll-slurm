@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Train a PFN to distinguish unique-mother (norm1) from cloned-mother
-(norm42-RandomRot) GEN pseudo-crossings.
+"""Train a PFN to distinguish unique-mother from fixed-reuse GEN crossings.
 
 Units are whole variable-length particle sets (no capping, no random
-subsampling): unique = --n-files norm1 cycles, reuse = n_files/42 norm42
-cycles, same decay statistics. A saved, shuffled 50/25/25 split of paired
+subsampling): unique = --n-files norm1 cycles, reuse = n_files/k fixed-rotated
+cycles, where k is --clone-factor. A saved, shuffled 50/25/25 split of paired
 source cycles prevents train/validation/test mother leakage; within a split
 both classes use the same cycles, so mother identity carries no label
 information.
@@ -79,6 +78,9 @@ def parse_args():
     parser.add_argument("--outdir", default="pfn_results")
     parser.add_argument("--n-files", type=int, default=42,
                         help="norm1 files per unit (must be multiple of clone factor)")
+    parser.add_argument("--clone-factor", type=int, default=CLONE_FACTOR,
+                        help="stored rotations per class-B source cycle "
+                             "(default: 42)")
     parser.add_argument("--units-per-epoch", type=int, default=2000, help="per class")
     # --- validation & early stopping ----------------------------------
     # A fresh random draw of --units-per-epoch/class every epoch (not the
@@ -153,7 +155,12 @@ def parse_args():
                         help="stop after training (for short smoke tests)")
     # --- what the model sees --------------------------------------------
     parser.add_argument("--null-test", action="store_true",
-                        help="norm1-vs-norm1 control (expect AUC 0.5)")
+                        help="same-distribution control (expect AUC 0.5)")
+    parser.add_argument(
+        "--null-source", choices=("unique", "reuse"), default="unique",
+        help="physical class used on both sides of --null-test: 'unique' "
+             "uses n_files native cycles; 'reuse' uses n_files/clone_factor "
+             "fixed-rotated cycles (default: unique)")
     parser.add_argument("--features", default="paper",
                         choices=list(lc.FEATURE_SETS),
                         help="'paper' = momentum direction/magnitude + PDG "
@@ -289,7 +296,6 @@ def parse_args():
     if abs(sum(args.split_fracs) - 1.0) > 1e-6:
         raise SystemExit(f"--split-fracs must sum to 1, got {args.split_fracs}")
     # Persist fixed scientific choices in every result config.
-    args.clone_factor = CLONE_FACTOR
     args.split_fracs = tuple(args.split_fracs)
     args.norm_stat_units = NORM_STAT_UNITS
     args.null_partition = "shared"
@@ -324,6 +330,18 @@ class UnitSampler:
 
     def random_unit(self, rng, split):
         return lc.sample_unit_positions(rng, self.positions[split], self.files_per_unit)
+
+
+def class_layout(store_unique, store_reuse, n_files, clone_factor,
+                 null_test=False, null_source="unique"):
+    if not null_test:
+        return store_unique, store_reuse, n_files, n_files // clone_factor
+    if null_source == "unique":
+        return store_unique, store_unique, n_files, n_files
+    if null_source == "reuse":
+        reuse_files = n_files // clone_factor
+        return store_reuse, store_reuse, reuse_files, reuse_files
+    raise ValueError("unknown null source: {}".format(null_source))
 
 
 def sample_normalization_stats(samplers, units_per_class, rng):
@@ -451,6 +469,8 @@ def main():
     os.makedirs(outdir, exist_ok=True)
     stats_path = os.path.join(outdir, "norm_stats.json")
 
+    if args.clone_factor < 1:
+        raise SystemExit("--clone-factor must be positive")
     if args.n_files % args.clone_factor != 0:
         raise SystemExit("--n-files must be a multiple of --clone-factor")
     if args.overlap_test_units < 0:
@@ -489,33 +509,26 @@ def main():
     write_or_validate_config(os.path.join(outdir, "config.json"), vars(args))
 
     print(f"[{args.label}] loading stores")
-    store1 = lc.Store(args.norm1_store)
-    if args.null_test:
-        store_b = store1
-    else:
-        store_b = lc.Store(args.norm42_store)
-    common, pos1, pos_b = lc.common_positions(store1, store_b)
+    store_unique = lc.Store(args.norm1_store)
+    store_reuse = lc.Store(args.norm42_store)
+    store_a, store_b, files_a, files_b = class_layout(
+        store_unique, store_reuse, args.n_files, args.clone_factor,
+        args.null_test, args.null_source)
+
+    common, pos_a, pos_b = lc.common_positions(store_a, store_b)
     print(f"  paired cycles: {len(common)}"
-          f" (norm1 files: {store1.n_files}, classB files: {store_b.n_files})")
+          f" (classA store: {store_a.n_files}, classB store: {store_b.n_files})")
     cycle_split = lc.load_or_create_cycle_split(
         os.path.join(outdir, "source_split.npz"), common,
         tuple(args.split_fracs), args.data_seed)
     splits = lc.cycle_split_positions(common, cycle_split)
 
-    if args.null_test:
-        # Label-independent null: both classes independently sample the same
-        # source pool. Train/validation/test remain cycle-disjoint.
-        split_a = {k: pos1[v] for k, v in splits.items()}
-        split_b = {k: pos1[v] for k, v in splits.items()}
-        files_b = args.n_files
-    else:
-        split_a = {k: pos1[v] for k, v in splits.items()}
-        split_b = {k: pos_b[v] for k, v in splits.items()}
-        files_b = args.n_files // args.clone_factor
+    split_a = {k: pos_a[v] for k, v in splits.items()}
+    split_b = {k: pos_b[v] for k, v in splits.items()}
 
     samplers = [
-        UnitSampler(store1, split_a, args.n_files, args.features),   # class 0: unique
-        UnitSampler(store_b, split_b, files_b, args.features),       # class 1: reuse
+        UnitSampler(store_a, split_a, files_a, args.features),
+        UnitSampler(store_b, split_b, files_b, args.features),
     ]
     for cls, sampler in enumerate(samplers):
         for split_name, positions in sampler.positions.items():
@@ -556,10 +569,10 @@ def main():
     # --- fixed validation units ------------------------------------------
     val_rows = load_or_create_validation_units(
         os.path.join(outdir, "validation_units.npz"),
-        cycle_split["val"], (args.n_files, files_b),
+        cycle_split["val"], (files_a, files_b),
         args.val_units, args.data_seed + 999)
     val_defs = validation_defs_from_cycles(
-        val_rows, (store1, store_b if not args.null_test else store1))
+        val_rows, (store_a, store_b))
 
     # --- shared model/training engine --------------------------------------
     def train_batches_for_epoch(epoch):
@@ -633,7 +646,7 @@ def main():
 
     pool_a = split_a["test"]
     pool_b = split_b["test"]
-    files_per_unit = (args.n_files, files_b)
+    files_per_unit = (files_a, files_b)
 
     # 1) optional secondary: disjoint blocked cross-check
     if args.skip_disjoint_check:
@@ -642,7 +655,7 @@ def main():
         disjoint_std = None
         print("disjoint cross-check skipped")
     else:
-        blocks_a = lc.blocked_unit_positions(pool_a, args.n_files)
+        blocks_a = lc.blocked_unit_positions(pool_a, files_a)
         positions_b = pool_b
         if args.null_test:
             rng_blocks = np.random.default_rng(args.data_seed + 2027)

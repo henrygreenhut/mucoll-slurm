@@ -247,6 +247,7 @@ def run_binary_pfn_training(config, train_batches, predict_validation,
     state_path = os.path.join(result_dir, "state.json")
     history_path = os.path.join(result_dir, "history.csv")
     best_weights = os.path.join(result_dir, "best.weights.h5")
+    best_auc_weights = os.path.join(result_dir, "best_auc.weights.h5")
     last_weights = os.path.join(result_dir, "last.weights.h5")
     accumulation_steps = int(config.get("gradient_accumulation_steps", 1))
     if accumulation_steps < 1:
@@ -371,10 +372,13 @@ def run_binary_pfn_training(config, train_batches, predict_validation,
             np.std(unit_losses, ddof=1) / np.sqrt(len(unit_losses)))
 
         state["epoch"] = epoch + 1
+        new_max_auc = val_auc > state["max_val_auc"]
         improved = update_validation_state(
             state, val_auc, val_loss, val_loss_sem,
             config["select_metric"], config["min_delta"],
             config["min_delta_sigma"], epoch)
+        if new_max_auc:
+            model.save_weights(best_auc_weights)
         if improved:
             model.save_weights(best_weights)
         model.save_weights(last_weights)

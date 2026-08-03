@@ -19,6 +19,7 @@ import pfn_training_engine as engine
 import pfn_variable_reuse_train as variable_trainer
 from pfn_libtest_train import (
     balanced_chunks,
+    class_layout,
     load_or_create_validation_units,
 )
 from pfn_training_engine import (
@@ -27,6 +28,23 @@ from pfn_training_engine import (
     update_validation_state,
     write_or_validate_config,
 )
+
+
+class LibtestClassLayoutTests(unittest.TestCase):
+    def test_main_uses_unique_and_reuse_stores(self):
+        unique, reuse = object(), object()
+        actual = class_layout(unique, reuse, 420, 5)
+        self.assertEqual(actual, (unique, reuse, 420, 84))
+
+    def test_unique_null_is_unique_vs_unique(self):
+        unique, reuse = object(), object()
+        actual = class_layout(unique, reuse, 420, 7, True, "unique")
+        self.assertEqual(actual, (unique, unique, 420, 420))
+
+    def test_reuse_null_is_reuse_vs_reuse(self):
+        unique, reuse = object(), object()
+        actual = class_layout(unique, reuse, 420, 7, True, "reuse")
+        self.assertEqual(actual, (reuse, reuse, 60, 60))
 
 
 class LibtestNormalizationTests(unittest.TestCase):
@@ -618,6 +636,7 @@ class VariableReuseDefinitionTests(unittest.TestCase):
         scores = np.where(labels == 1, 0.8, 0.2)
         state = engine.initial_state("loss")
         state.update(epoch=2, best_epoch=1, max_val_auc=0.75,
+                     max_val_auc_epoch=1,
                      min_val_loss=0.6, done=True)
         args = SimpleNamespace(label="smoke", null_test=False)
         with tempfile.TemporaryDirectory() as directory:
