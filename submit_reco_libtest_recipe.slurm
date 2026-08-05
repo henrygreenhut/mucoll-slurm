@@ -15,12 +15,13 @@ set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
 if [ "$#" -lt 1 ] || [ "$#" -gt 3 ]; then
-    echo "usage: sbatch $0 {stabilized|stabilized_dropout} [charged7|val2000|val25] [N_FILES]" >&2
+    echo "usage: sbatch $0 {stabilized|stabilized_dropout} [charged7|val2000|val25|calo_unconed] [N_FILES]" >&2
     exit 2
 fi
 RECIPE=$1
 STUDY=${2:-charged7}
 N_FILES=${3:-420}
+TEST_EVENTS=800
 if (( N_FILES <= 0 || N_FILES % 42 != 0 )); then
     echo "N_FILES must be a positive multiple of 42" >&2
     exit 2
@@ -65,6 +66,17 @@ case "$STUDY" in
         fi
         VAL_EVENTS=2000
         ;;
+    calo_unconed)
+        if [ "$N_FILES" -ne 420 ]; then
+            echo "calo_unconed is currently defined only for N=420" >&2
+            exit 2
+        fi
+        STORE_NAME=reco_n420_pfn_stores_calo_unconed_val25
+        DATASET_TAG=calo_unconed_val25
+        LABEL_PREFIX=reco_n420_calo_unconed_val25_directlog_charged7
+        VAL_EVENTS=2000
+        TEST_EVENTS=2000
+        ;;
     *)
         echo "unknown study: $STUDY" >&2
         exit 2
@@ -100,7 +112,7 @@ run_training() {
         --require-pfo-track-links \
         --train-events 2000 \
         --val-events "$VAL_EVENTS" \
-        --test-events 800 \
+        --test-events "$TEST_EVENTS" \
         --recipe "$RECIPE" \
         --label "$label"
 }

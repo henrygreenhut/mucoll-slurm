@@ -421,8 +421,17 @@ overlay count, random seed, configuration hashes, commits, and stage timings.
 Build the nine HDF5 stores only after all array tasks succeed:
 
 ```bash
-sbatch submit_reco_calo_unconed_stores.slurm
+store_job=$(sbatch --parsable submit_reco_calo_unconed_stores.slurm)
+train_job=$(sbatch --parsable \
+  --dependency=afterok:"$store_job" \
+  submit_reco_libtest_recipe.slurm stabilized_dropout calo_unconed 420)
+echo "stores=$store_job training=$train_job"
 ```
+
+The training job runs the physical U-versus-R comparison and the U-versus-
+null comparison sequentially on one GPU. Both use the corrected unconed
+stores, the seven-feature EnergyFlow PFN, and 2,000 events per class in each
+of train, validation, and held-out test.
 
 Prepare immutable source pools:
 
