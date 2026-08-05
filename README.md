@@ -316,6 +316,49 @@ charged PFOs and PFO-to-track links are absent. Such output is not equivalent
 to the intended RECO configuration and must not be used for the final PFN
 comparison.
 
+### Calorimeter-coning correction
+
+MAIA normally keeps calorimeter hits only inside a 34-degree cone around each
+generator particle. BIB MCParticles were not merged into the particle-gun
+event, so the old RECO samples selected calorimeter hits around the neutrino
+gun rather than around the BIB. The corrected study keeps the existing
+energy/time hit selection but passes `--disableCaloConing` during DIGI.
+
+It reuses one signal SIM chunk for all three classes at each split and chunk:
+
+- train and validation use U signal SIM from `reco_n420_pfn_trackfix_val25`;
+- test uses U signal SIM from `reco_n420_confirmation`;
+- U overlays 420 norm1 files per polarity;
+- R overlays 10 norm42 files per polarity;
+- null_b repeats U with a digitization-seed offset of 1,000,000.
+
+The frozen `bib_pools_val25` source split is used throughout. The production
+contains 2,000 train, 2,000 validation, and 2,000 test events per class. It
+runs only DIGI and RECO; GEN and SIM are not repeated.
+
+After applying `patches/maia_disable_calo_coning.patch` to the OSCAR
+MAIAConfig checkout, first run the two-chunk benchmark:
+
+```bash
+python3 submit_reco_calo_unconed.py --benchmark
+```
+
+Inspect both array tasks, then submit the full idempotent production:
+
+```bash
+python3 submit_reco_calo_unconed.py
+```
+
+The full manifest has 360 logical 50-event chunks packed across 64 OSCAR CPU
+array shards. A rerun skips a chunk only when both its RECO file and completion
+marker exist. Each completed chunk records the signal SIM, source pools,
+overlay count, random seed, configuration hashes, commits, and stage timings.
+Build the nine HDF5 stores only after all array tasks succeed:
+
+```bash
+sbatch submit_reco_calo_unconed_stores.slurm
+```
+
 Prepare immutable source pools:
 
 ```bash
