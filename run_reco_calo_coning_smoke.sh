@@ -70,8 +70,8 @@ echo "signal_sim=$SIM_INPUT"
 echo "bib_muplus=$BIB_MUPLUS"
 echo "bib_muminus=$BIB_MUMINUS"
 
-/usr/bin/time -v -o digi.time.log \
-    k4run "$MUCOLL_CONFIG/$MUCOLL_CONFIG_NAME/digi_steer.py" \
+DIGI_START=$(date +%s)
+k4run "$MUCOLL_CONFIG/$MUCOLL_CONFIG_NAME/digi_steer.py" \
     -n 1 \
     --inputFiles "$SIM_INPUT" \
     --outputFile digi_output.edm4hep.root \
@@ -81,12 +81,14 @@ echo "bib_muminus=$BIB_MUMINUS"
     --OverlayFullPathToMuMinus "$BIB_MUMINUS" \
     --OverlayFullNumberBackground "$BIB_NUMBER" \
     "${CALO_ARGS[@]}"
+echo "elapsed_seconds=$(($(date +%s) - DIGI_START))" > digi.time.log
 
-/usr/bin/time -v -o reco.time.log \
-    k4run "$MUCOLL_CONFIG/$MUCOLL_CONFIG_NAME/reco_steer.py" \
+RECO_START=$(date +%s)
+k4run "$MUCOLL_CONFIG/$MUCOLL_CONFIG_NAME/reco_steer.py" \
     -n 1 \
     --inputFiles digi_output.edm4hep.root \
     --outputFile reco_output.edm4hep.root
+echo "elapsed_seconds=$(($(date +%s) - RECO_START))" > reco.time.log
 
 mkdir -p "$OUTPUT"
 {
