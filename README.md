@@ -160,6 +160,65 @@ while preserving the full input construction. Evaluations use overlapping
 pseudo-events from the held-out source-cycle pool and report a point AUC;
 cycle-level uncertainty is run separately if needed.
 
+### Unified Perlmutter GEN reruns
+
+The controlled Perlmutter study runs three comparisons through one
+fixed-library training path: k=1 versus synthetic k=5, k=1 versus synthetic
+k=42, and k=1 versus the production norm42 library. The synthetic stores are
+built from the split-mother GEN bank at
+`$PSCRATCH/mucoll/libtest/stores/gen_split_mothers_MUPLUS.h5`. That bank was
+built from the Perlmutter library
+`bib-v3p0-fmt2-norm1-split-mother-norot/GEN/MUPLUS`, retains 6,665 source
+cycles after excluding cycle 6291, and contains 467,045 mother events. The
+production comparison uses the already-converted real
+`gen_norm42_MUPLUS.h5` library.
+
+Every pseudo-event has N=420 file-equivalents. The k=1 class draws 420 native,
+unrotated source cycles. Class k draws `420/k` stored source cycles whose
+mothers each have k fixed azimuthal copies. All daughters of one mother-copy
+share one angle. The first five rotations of every source in the synthetic
+k=42 store are identical to its k=5 rotations. Whole source cycles are split
+50/25/25 before pseudo-events are sampled. Because visible mothers per cycle
+fluctuate, 29,400 mother-equivalents is the approximate average event size,
+not an exact per-event constraint.
+
+All three comparisons use the same EnergyFlow scaled-sum PFN, expanded GEN
+features, batch size four, 500 events per class per epoch, 300 fixed
+validation and test events per class, peak learning rate `1e-4`, one warmup
+epoch, an 80-epoch cosine decay, validation-loss selection, and model seed 1.
+Main runs have a 120-epoch cap and cannot early-stop before epoch 80. Each null
+is k-versus-k. These fresh labels intentionally do not resume historical runs
+whose k=1 class was rotated, whose event construction was on the fly, or whose
+optimizer schedule differed.
+
+After pulling the current branch on Perlmutter, build the synthetic k=5 and
+k=42 stores. The existing production k=42 store is left unchanged:
+
+```bash
+sbatch submit_perlmutter_gen_k_stores.slurm
+```
+
+After that job succeeds, run one four-GPU debug smoke:
+
+```bash
+sbatch submit_perlmutter_gen_k_smoke.slurm
+```
+
+Then submit the three physical comparisons and their matched nulls as one-GPU
+shared jobs:
+
+```bash
+sbatch submit_perlmutter_gen_k.slurm 5 main
+sbatch submit_perlmutter_gen_k.slurm 5 null
+sbatch submit_perlmutter_gen_k.slurm 42-synthetic main
+sbatch submit_perlmutter_gen_k.slurm 42-synthetic null
+sbatch submit_perlmutter_gen_k.slurm 42-production main
+sbatch submit_perlmutter_gen_k.slurm 42-production null
+```
+
+If a 48-hour job reaches its wall-clock guard before completing, submit the
+same command again. It resumes from the saved epoch and optimizer state.
+
 ### Fixed rotated GEN libraries
 
 The fixed-library study matches the original norm1-versus-norm42 input

@@ -65,10 +65,13 @@ class FixedReuseStoreTests(unittest.TestCase):
                 atol=1e-6,
             )
 
-    def test_k5_angles_are_nested_inside_k7(self):
+    def test_smaller_k_angles_are_nested_inside_k42(self):
         k5 = cycle_angles(8, cycle=123, reuse_k=5, seed=1701)
         k7 = cycle_angles(8, cycle=123, reuse_k=7, seed=1701)
+        k42 = cycle_angles(8, cycle=123, reuse_k=42, seed=1701)
         np.testing.assert_array_equal(k5, k7[:, :5])
+        np.testing.assert_array_equal(k5, k42[:, :5])
+        np.testing.assert_array_equal(k7, k42[:, :7])
 
     def test_refuses_to_build_a_k1_bank(self):
         with tempfile.TemporaryDirectory() as directory:
