@@ -25,14 +25,13 @@ def load(n, comparison):
 
 def main():
     main_auc = [load(n, "U_vs_R") for n in N_VALUES]
-    null_auc = [load(n, "null") for n in N_VALUES]
 
     PLOTS.mkdir(exist_ok=True)
 
     with (PLOTS / "reco_auc_vs_n.csv").open("w", newline="") as handle:
         writer = csv.writer(handle)
-        writer.writerow(("N", "unique_vs_reused_auc", "null_auc"))
-        writer.writerows(zip(N_VALUES, main_auc, null_auc))
+        writer.writerow(("N", "unique_vs_reused_auc"))
+        writer.writerows(zip(N_VALUES, main_auc))
 
     plt.rcParams["font.family"] = "serif"
     fig, axis = plt.subplots(figsize=(6.2, 4.4))
@@ -44,15 +43,6 @@ def main():
         linewidth=2,
         color="#0072B2",
         label="Unique vs 42× reuse",
-    )
-    axis.plot(
-        N_VALUES,
-        null_auc,
-        marker="o",
-        markersize=7,
-        linewidth=2,
-        color="#D55E00",
-        label="Null: unique vs unique",
     )
     axis.axhline(0.5, color="0.45", linewidth=1, linestyle="--")
     axis.set_xticks(N_VALUES)

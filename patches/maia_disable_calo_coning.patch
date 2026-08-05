@@ -1,0 +1,76 @@
+diff --git a/MAIAConfig/digi_args.py b/MAIAConfig/digi_args.py
+--- a/MAIAConfig/digi_args.py
++++ b/MAIAConfig/digi_args.py
+@@ -60,6 +60,13 @@ def get_digi_args():
+         default=False,
+     )
+ 
++    parser.add_argument(
++        "--disableCaloConing",
++        help="Apply calorimeter BIB selection without the signal-directed cone",
++        action="store_true",
++        default=False,
++    )
++
+     # Shared with reco_args (the merger reads the coned hits when enabled), so
+     # added once to allow combining the two parsers in a single job.
+     add_argument_once(
+diff --git a/MAIAConfig/CaloDigi/calo_coning.py b/MAIAConfig/CaloDigi/calo_coning.py
+--- a/MAIAConfig/CaloDigi/calo_coning.py
++++ b/MAIAConfig/CaloDigi/calo_coning.py
+@@ -36,11 +36,18 @@ def _coner_cfg(prefix):
+     )
+ 
+ 
+-def _selector_cfg(prefix, technology):
++def _selector_cfg(prefix, technology, use_coned_hits=True):
++    if use_coned_hits:
++        hit_collection = f"{prefix}CollectionConed"
++        relation_collection = f"{prefix}RelationsSimConed"
++    else:
++        hit_collection = f"{prefix}CollectionRec"
++        relation_collection = f"{prefix}RelationsSimRec"
++
+     selector = CaloHitSelector(
+         f"{prefix}Selector",
+-        CaloHitCollectionName = [f"{prefix}CollectionConed"],
+-        CaloRelationCollectionName = [f"{prefix}RelationsSimConed"],
++        CaloHitCollectionName = [hit_collection],
++        CaloRelationCollectionName = [relation_collection],
+         GoodHitCollection = [f"{prefix}CollectionSel"],
+         GoodRelationCollection = [f"{prefix}RelationsSimSel"],
+         Nsigma = 0,
+@@ -64,6 +71,9 @@ def calo_coner_cfgs():
+     return [_coner_cfg(prefix) for prefix, _ in _CALO_REGIONS]
+ 
+ 
+-def calo_selector_cfgs():
++def calo_selector_cfgs(use_coned_hits=True):
+     """Return the four CaloHitSelector instances (one per calorimeter region)."""
+-    return [_selector_cfg(prefix, tech) for prefix, tech in _CALO_REGIONS]
++    return [
++        _selector_cfg(prefix, tech, use_coned_hits)
++        for prefix, tech in _CALO_REGIONS
++    ]
+diff --git a/MAIAConfig/digiAlgList.py b/MAIAConfig/digiAlgList.py
+--- a/MAIAConfig/digiAlgList.py
++++ b/MAIAConfig/digiAlgList.py
+@@ -53,12 +53,13 @@ def makeDigiAlgList(the_args):
+     algList.append(HCalEndcapDigi_cfg(the_args))
+     algList.append(HCalEndcapReco_cfg())
+ 
+-    # Calorimeter Hit Coning + BIB Selection. Always run, mirroring steer_reco.py:
+-    # each region is coned around the signal MC particles and then thresholded,
+-    # producing the "...Sel" collections that Pandora consumes.
++    # Calorimeter BIB selection always runs. Coning can be disabled while the
++    # selector continues to produce the same "...Sel" collections for Pandora.
+     from CaloDigi.calo_coning import calo_coner_cfgs, calo_selector_cfgs
+-    algList += calo_coner_cfgs()
+-    algList += calo_selector_cfgs()
++    use_calo_coning = not the_args.disableCaloConing
++    if use_calo_coning:
++        algList += calo_coner_cfgs()
++    algList += calo_selector_cfgs(use_calo_coning)
+ 
+     # Muon Calorimeter Digitization
+     from CaloDigi.calorimetry_MU import MuonBarrelDigi_cfg, MuonEndcapDigi_cfg

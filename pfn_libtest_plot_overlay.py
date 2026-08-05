@@ -43,6 +43,7 @@ def parse_args():
         "--full-range-inset", action="store_true",
         help="add a small inset preserving the complete loss range",
     )
+    parser.add_argument("--xmin", type=float, help="first displayed epoch")
     return parser.parse_args()
 
 
@@ -94,7 +95,8 @@ def load_best_epoch(rundir, epochs, val_loss):
     return int(epochs[-1])
 
 
-def make_plot(rundir, title, output, ylim=None, full_range_inset=False):
+def make_plot(rundir, title, output, ylim=None, full_range_inset=False,
+              xmin=None):
     epochs, train_loss, val_loss = load_history(rundir)
     test_auc = load_test_auc(rundir)
     best_epoch = load_best_epoch(rundir, epochs, val_loss)
@@ -116,9 +118,10 @@ def make_plot(rundir, title, output, ylim=None, full_range_inset=False):
     # narrow band near ln 2 (log degenerates the tick locator -- see that
     # script's history for why). The ln2-label offset is scale-aware for
     # the same reason: a multiplicative offset only makes sense in log-space.
-    loss_arrays = [train_loss, [np.log(2)]]
+    visible = epochs >= xmin if xmin is not None else np.ones(len(epochs), dtype=bool)
+    loss_arrays = [train_loss[visible], [np.log(2)]]
     if val_loss is not None:
-        loss_arrays.insert(1, val_loss)
+        loss_arrays.insert(1, val_loss[visible])
     combined = np.concatenate(loss_arrays)
     spans_decade = combined.max() / max(combined.min(), 1e-12) >= 10
     if ylim is not None:
@@ -129,11 +132,16 @@ def make_plot(rundir, title, output, ylim=None, full_range_inset=False):
         ln2_label_y = np.log(2) * 1.15
     else:
         ln2_label_y = np.log(2) + 0.03 * (combined.max() - combined.min())
+        if xmin is not None:
+            padding = 0.08 * (combined.max() - combined.min())
+            ax.set_ylim(combined.min() - padding, combined.max() + padding)
     ax.text(0.02, ln2_label_y, "ln 2", transform=ax.get_yaxis_transform(),
             fontsize=9, color="#666666", va="bottom")
 
     ax.set_xlabel("epoch")
     ax.set_ylabel("loss")
+    if xmin is not None:
+        ax.set_xlim(left=xmin)
     ax.grid(alpha=0.25, lw=0.5)
     ax.spines[["top", "right"]].set_visible(False)
     ax.xaxis.set_major_locator(MaxNLocator(integer=True))
@@ -180,6 +188,7 @@ def main():
         args.rundir, args.title, args.out,
         ylim=tuple(args.ylim) if args.ylim else None,
         full_range_inset=args.full_range_inset,
+        xmin=args.xmin,
     )
 
 

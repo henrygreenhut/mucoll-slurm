@@ -36,8 +36,6 @@ def coordinates(points):
 
 
 variable_runs = {
-    5: "n420_k1_vs_k5_scaled_lr1e-4_mseed1_min80",
-    7: "n420_k1_vs_k7_scaled_lr1e-4_mseed1_min80",
     10: "n420_k1_vs_k10_scaled_lr1e-4_mseed1",
     21: "n420_k1_vs_k21_scaled_lr1e-4_mseed1_min80",
 }
@@ -46,16 +44,24 @@ variable_main = available([
     (k, test_auc(variable_summary(label)))
     for k, label in variable_runs.items()
 ])
+fixed_store_runs = {
+    5: "n420_fixed_k1_vs_k5_scaled_lr1e-4_decay80_mseed1_pointonly",
+    7: "n420_fixed_k1_vs_k7_scaled_lr1e-4_decay80_mseed1_pointonly",
+}
+fixed_store_main = available([
+    (k, test_auc(library_summary(label)))
+    for k, label in fixed_store_runs.items()
+])
 library_main = available([(
     42,
     test_auc(library_summary(
         "n420_recipe_bs4_expanded_scaled_lr1e-4_mseed1_pointonly"
     )),
 )])
-if not variable_main or not library_main:
+if not variable_main or not fixed_store_main or not library_main:
     raise SystemExit("missing required GEN result summaries")
 
-main_points = sorted(variable_main + library_main)
+main_points = sorted(variable_main + fixed_store_main + library_main)
 x, y = coordinates(main_points)
 
 plt.rcParams["font.family"] = "serif"
