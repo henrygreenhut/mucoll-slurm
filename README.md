@@ -186,10 +186,11 @@ All three comparisons use the same EnergyFlow scaled-sum PFN, expanded GEN
 features, batch size four, 500 events per class per epoch, 300 fixed
 validation and test events per class, peak learning rate `1e-4`, one warmup
 epoch, an 80-epoch cosine decay, validation-loss selection, and model seed 1.
-Main runs have a 120-epoch cap and cannot early-stop before epoch 80. Each null
-is k-versus-k. These fresh labels intentionally do not resume historical runs
-whose k=1 class was rotated, whose event construction was on the fly, or whose
-optimizer schedule differed.
+Main runs have a 120-epoch cap. K=5 cannot early-stop before epoch 80; the two
+k=42 comparisons use ordinary validation-loss early stopping with no epoch
+floor. Each null is k-versus-k. These fresh labels intentionally do not resume
+historical runs whose k=1 class was rotated, whose event construction was on
+the fly, or whose optimizer schedule differed.
 
 After pulling the current branch on Perlmutter, build the synthetic k=5 and
 k=42 stores. The existing production k=42 store is left unchanged:

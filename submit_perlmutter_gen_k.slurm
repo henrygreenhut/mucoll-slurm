@@ -105,14 +105,17 @@ COMMAND=(python -u pfn_libtest_train.py
     --progress-every 25
     --max-minutes 2820)
 
+MIN_EPOCHS=0
 if [ "$RUN" = main ]; then
-    COMMAND+=(--epochs 120 --patience 15 --min-epochs 80)
+    [ "$K" = 5 ] && MIN_EPOCHS=80
+    COMMAND+=(--epochs 120 --patience 15 --min-epochs "$MIN_EPOCHS")
 else
     COMMAND+=(--null-test --null-source reuse
         --epochs 40 --patience 8 --min-epochs 0)
 fi
 
 if [ "$MODE" = smoke ]; then
+    MIN_EPOCHS=0
     COMMAND+=(--epochs 2 --patience 2 --min-epochs 0
         --units-per-epoch 4 --val-units 4 --skip-evaluation)
 fi
@@ -121,6 +124,7 @@ echo "label=$LABEL"
 echo "class 0: 420 native, unrotated source cycles"
 echo "class 1: $((420 / K)) source cycles with $K fixed rotations/mother"
 echo "reused-class provenance: $PROVENANCE ($REUSE_STORE)"
+echo "minimum training epochs: $MIN_EPOCHS"
 [ "$RUN" = null ] && echo "null: both labels use the fixed k=$K store"
 
 if [ "${DIRECT_RUN:-0}" = 1 ]; then
