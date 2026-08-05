@@ -16,9 +16,11 @@ esac
 
 REPO=$(cd "$(dirname "$0")" && pwd)
 source "$REPO/config.sh"
+set +u
 source "$REPO/scripts/setup.sh"
 source "$MUCOLL_BENCHMARKS_PATH/setup_config.sh" \
     "$MUCOLL_BENCHMARKS_PATH" "$GEOM_NAME"
+set -u
 
 BASE=/oscar/scratch/$USER/mucoll/libtest
 SIM_INPUT="$BASE/reco_n420_pfn_trackfix_val25/reco_libtest_n420_U/train/job_0/sim_output_0.edm4hep.root"
