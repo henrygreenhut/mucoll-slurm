@@ -6,7 +6,7 @@
 #SBATCH -n 1
 #SBATCH -c 32
 #SBATCH --gpus-per-task=1
-#SBATCH -t 48:00:00
+#SBATCH -t 20:00:00
 #SBATCH -o perlmutter_gen_k_%j.out
 #SBATCH -e perlmutter_gen_k_%j.err
 
@@ -102,22 +102,23 @@ COMMAND=(python -u pfn_libtest_train.py
     --eval-point-units 300
     --eval-bootstrap-reps 0
     --skip-disjoint-check
-    --progress-every 25
-    --max-minutes 2820)
+    --progress-every 25)
 
 MIN_EPOCHS=0
 if [ "$RUN" = main ]; then
     [ "$K" = 5 ] && MIN_EPOCHS=80
-    COMMAND+=(--epochs 120 --patience 15 --min-epochs "$MIN_EPOCHS")
+    COMMAND+=(--epochs 120 --patience 15 --min-epochs "$MIN_EPOCHS"
+        --max-minutes 1140)
 else
     COMMAND+=(--null-test --null-source reuse
-        --epochs 40 --patience 8 --min-epochs 0)
+        --epochs 40 --patience 8 --min-epochs 0 --max-minutes 420)
 fi
 
 if [ "$MODE" = smoke ]; then
     MIN_EPOCHS=0
     COMMAND+=(--epochs 2 --patience 2 --min-epochs 0
-        --units-per-epoch 4 --val-units 4 --skip-evaluation)
+        --units-per-epoch 4 --val-units 4 --skip-evaluation
+        --max-minutes 25)
 fi
 
 echo "label=$LABEL"

@@ -192,6 +192,11 @@ floor. Each null is k-versus-k. These fresh labels intentionally do not resume
 historical runs whose k=1 class was rotated, whose event construction was on
 the fly, or whose optimizer schedule differed.
 
+Production GPU jobs have a 20-hour Slurm limit and checkpoint cleanly after
+19 hours. Nulls checkpoint after seven hours and should be submitted with an
+eight-hour Slurm override. With three one-GPU main jobs, one null, and the
+four-GPU debug smoke, the hard billing ceiling is 17.5 GPU node-hours.
+
 After pulling the current branch on Perlmutter, build the synthetic k=5 and
 k=42 stores. The existing production k=42 store is left unchanged:
 
@@ -210,11 +215,11 @@ shared jobs:
 
 ```bash
 sbatch submit_perlmutter_gen_k.slurm 5 main
-sbatch submit_perlmutter_gen_k.slurm 5 null
+sbatch --time=08:00:00 submit_perlmutter_gen_k.slurm 5 null
 sbatch submit_perlmutter_gen_k.slurm 42-synthetic main
-sbatch submit_perlmutter_gen_k.slurm 42-synthetic null
+sbatch --time=08:00:00 submit_perlmutter_gen_k.slurm 42-synthetic null
 sbatch submit_perlmutter_gen_k.slurm 42-production main
-sbatch submit_perlmutter_gen_k.slurm 42-production null
+sbatch --time=08:00:00 submit_perlmutter_gen_k.slurm 42-production null
 ```
 
 If a 48-hour job reaches its wall-clock guard before completing, submit the
