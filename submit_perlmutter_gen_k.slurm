@@ -14,7 +14,7 @@ set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
 if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
-    echo "usage: $0 {5|42-synthetic|42-production} {main|null} [train|smoke]" >&2
+    echo "usage: $0 {1-synthetic|2|5|42-synthetic|42-production} {main|null} [train|smoke]" >&2
     exit 2
 fi
 
@@ -22,6 +22,14 @@ COMPARISON=$1
 RUN=$2
 MODE=${3:-train}
 case "$COMPARISON" in
+    1-synthetic)
+        K=1
+        PROVENANCE=synthetic
+        ;;
+    2)
+        K=2
+        PROVENANCE=synthetic
+        ;;
     5)
         K=5
         PROVENANCE=synthetic
@@ -35,7 +43,7 @@ case "$COMPARISON" in
         PROVENANCE=production
         ;;
     *)
-        echo "comparison must be 5, 42-synthetic, or 42-production" >&2
+        echo "comparison must be 1-synthetic, 2, 5, 42-synthetic, or 42-production" >&2
         exit 2
         ;;
 esac
@@ -106,12 +114,40 @@ COMMAND=(python -u pfn_libtest_train.py
 
 MIN_EPOCHS=0
 if [ "$RUN" = main ]; then
-    [ "$K" = 5 ] && MIN_EPOCHS=80
-    COMMAND+=(--epochs 120 --patience 15 --min-epochs "$MIN_EPOCHS"
-        --max-minutes 1140)
+    case "$COMPARISON" in
+        1-synthetic)
+            EPOCHS=55
+            MIN_EPOCHS=55
+            MAX_MINUTES=570
+            ;;
+        2)
+            EPOCHS=80
+            MIN_EPOCHS=80
+            MAX_MINUTES=870
+            ;;
+        5)
+            EPOCHS=120
+            MIN_EPOCHS=80
+            MAX_MINUTES=1140
+            ;;
+        *)
+            EPOCHS=120
+            MIN_EPOCHS=0
+            MAX_MINUTES=1140
+            ;;
+    esac
+    COMMAND+=(--epochs "$EPOCHS" --patience 15 --min-epochs "$MIN_EPOCHS"
+        --max-minutes "$MAX_MINUTES")
 else
+    NULL_EPOCHS=40
+    NULL_MAX_MINUTES=420
+    if [ "$K" -le 2 ]; then
+        NULL_EPOCHS=20
+        NULL_MAX_MINUTES=225
+    fi
     COMMAND+=(--null-test --null-source reuse
-        --epochs 40 --patience 8 --min-epochs 0 --max-minutes 420)
+        --epochs "$NULL_EPOCHS" --patience 8 --min-epochs 0
+        --max-minutes "$NULL_MAX_MINUTES")
 fi
 
 if [ "$MODE" = smoke ]; then
@@ -123,9 +159,10 @@ fi
 
 echo "label=$LABEL"
 echo "class 0: 420 native, unrotated source cycles"
-echo "class 1: $((420 / K)) source cycles with $K fixed rotations/mother"
+echo "class 1: $((420 / K)) source cycles with $K fixed rotation(s)/mother"
 echo "reused-class provenance: $PROVENANCE ($REUSE_STORE)"
 echo "minimum training epochs: $MIN_EPOCHS"
+[ "$RUN" = main ] && echo "epoch cap: $EPOCHS | clean-exit guard: $MAX_MINUTES minutes"
 [ "$RUN" = null ] && echo "null: both labels use the fixed k=$K store"
 
 if [ "${DIRECT_RUN:-0}" = 1 ]; then

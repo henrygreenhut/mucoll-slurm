@@ -49,7 +49,17 @@ build_store() {
 }
 
 PIDS=()
-for K in 5 42; do
+if [ "$#" -eq 0 ]; then
+    KS=(5 42)
+else
+    KS=("$@")
+fi
+
+for K in "${KS[@]}"; do
+    if ! [[ "$K" =~ ^[0-9]+$ ]] || [ "$K" -lt 1 ] || [ "$K" -gt 42 ]; then
+        echo "reuse factors must be integers from 1 through 42" >&2
+        exit 2
+    fi
     build_store "$K" &
     PIDS+=("$!")
 done

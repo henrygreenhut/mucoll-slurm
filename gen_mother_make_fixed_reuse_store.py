@@ -53,8 +53,8 @@ def append_particles(datasets, particles, start):
 
 
 def build_fixed_reuse_store(input_path, output_path, reuse_k, seed=1701):
-    if reuse_k < 2 or reuse_k > ANGLE_SLOTS:
-        raise ValueError("reuse-k must be between 2 and {}".format(ANGLE_SLOTS))
+    if reuse_k < 1 or reuse_k > ANGLE_SLOTS:
+        raise ValueError("reuse-k must be between 1 and {}".format(ANGLE_SLOTS))
 
     source = MotherStore(input_path)
     output_path = Path(output_path).resolve()

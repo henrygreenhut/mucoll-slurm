@@ -222,6 +222,35 @@ sbatch submit_perlmutter_gen_k.slurm 42-production main
 sbatch --time=08:00:00 submit_perlmutter_gen_k.slurm 42-production null
 ```
 
+The low-reuse scan uses the same fixed-library construction and PFN recipe.
+`1-synthetic` is a rotation-only control: class A samples 420 native,
+unrotated cycles and class B samples 420 cycles whose mothers each received
+one fixed random azimuthal rotation. The `2` comparison uses 420 native cycles
+against 210 cycles with two fixed rotations per mother. Their matched nulls
+compare the synthetic class with itself.
+
+Build both small fixed libraries, then make the four GPU jobs depend on that
+build:
+
+```bash
+stores=$(sbatch --parsable --qos=debug --time=00:10:00 \
+  submit_perlmutter_gen_k_stores.slurm 1 2)
+
+sbatch --dependency=afterok:"$stores" --time=10:00:00 \
+  submit_perlmutter_gen_k.slurm 1-synthetic main
+sbatch --dependency=afterok:"$stores" --time=04:00:00 \
+  submit_perlmutter_gen_k.slurm 1-synthetic null
+sbatch --dependency=afterok:"$stores" --time=15:00:00 \
+  submit_perlmutter_gen_k.slurm 2 main
+sbatch --dependency=afterok:"$stores" --time=04:00:00 \
+  submit_perlmutter_gen_k.slurm 2 null
+```
+
+The main jobs have natural caps of 55 and 80 epochs respectively, chosen from
+the measured Perlmutter runtime so held-out evaluation completes inside the
+strict 10- and 15-hour limits. Low-reuse nulls have a 20-epoch cap and a
+four-hour Slurm limit.
+
 If a 48-hour job reaches its wall-clock guard before completing, submit the
 same command again. It resumes from the saved epoch and optimizer state.
 

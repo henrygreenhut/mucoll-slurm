@@ -73,13 +73,38 @@ class FixedReuseStoreTests(unittest.TestCase):
         np.testing.assert_array_equal(k5, k42[:, :5])
         np.testing.assert_array_equal(k7, k42[:, :7])
 
-    def test_refuses_to_build_a_k1_bank(self):
+    def test_k1_is_one_coherent_rotation_per_mother(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "mothers.h5"
             output = Path(directory) / "k1.h5"
             self.write_source(source)
-            with self.assertRaises(ValueError):
-                build_fixed_reuse_store(source, output, reuse_k=1)
+            build_fixed_reuse_store(source, output, reuse_k=1, seed=9)
+
+            store = lc.Store(output)
+            np.testing.assert_array_equal(store.offsets, [0, 2, 3])
+            np.testing.assert_array_equal(store.raw["pz"], [3.0, 4.0, 5.0])
+            np.testing.assert_allclose(
+                np.hypot(store.raw["px"], store.raw["py"]),
+                [1.0, 1.0, 2.0],
+                atol=1e-6,
+            )
+            np.testing.assert_allclose(
+                np.hypot(store.raw["vx"], store.raw["vy"]),
+                [10.0, 10.0, 20.0],
+                atol=1e-6,
+            )
+
+            angle = cycle_angles(2, cycle=100, reuse_k=1, seed=9)[0, 0]
+            np.testing.assert_allclose(
+                store.raw["px"][:2],
+                [np.cos(angle), -np.sin(angle)],
+                atol=1e-6,
+            )
+            np.testing.assert_allclose(
+                store.raw["py"][:2],
+                [np.sin(angle), np.cos(angle)],
+                atol=1e-6,
+            )
 
 
 if __name__ == "__main__":
