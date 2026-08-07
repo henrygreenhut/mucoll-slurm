@@ -85,7 +85,7 @@ esac
 
 module load ngc-tensorflow-container/25.02-tf2-py3-azkb
 
-TRAIN_SITE=/oscar/scratch/$USER/mucoll/envs/reco-train-site-v1
+TRAIN_SITE=/oscar/scratch/$USER/mucoll/envs/reco-train-site-py312-tf217-v1
 STORE_DIR=/oscar/scratch/$USER/mucoll/libtest/$STORE_NAME
 RESULT_DIR="$SLURM_SUBMIT_DIR/reco_pfn_results"
 if [ ! -d "$TRAIN_SITE/matplotlib" ]; then
