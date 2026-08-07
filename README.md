@@ -551,6 +551,17 @@ sequentially. Training uses the same seven-feature EnergyFlow PFN,
 stabilized-dropout recipe, 2,000 events per class in each split, matched null,
 and 150-epoch cap as the final N=420 unconed result.
 
+To test whether early stopping limited the N=840 physical result, replay its
+training from a fresh initialization and force all 150 epochs:
+
+```bash
+sbatch submit_reco_libtest_recipe.slurm \
+  stabilized_dropout calo_unconed_fixed150 840
+```
+
+This uses the completed N=840 unconed stores, does not rerun the null, and
+writes to a new `fixed150` result label without modifying the original run.
+
 The higher-N jobs retain RECO plus configuration, input, and timing
 provenance, but delete the job-local DIGI intermediate after RECO succeeds.
 The completed N=420 production used about 551 GiB for DIGI+RECO, of which 276

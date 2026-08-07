@@ -58,7 +58,20 @@ library_main = available([(
         "n420_recipe_bs4_expanded_scaled_lr1e-4_mseed1_pointonly"
     )),
 )])
-if not variable_main or not fixed_store_main or not library_main:
+perlmutter_runs = {
+    5: "pm_n420_k1_vs_k5_synthetic_scaled_lr1e-4_decay80_mseed1_v1",
+    42: "pm_n420_k1_vs_k42_synthetic_scaled_lr1e-4_decay80_mseed1_v1",
+}
+perlmutter_main = available([
+    (k, test_auc(library_summary(label)))
+    for k, label in perlmutter_runs.items()
+])
+if (
+    not variable_main
+    or not fixed_store_main
+    or not library_main
+    or len(perlmutter_main) != len(perlmutter_runs)
+):
     raise SystemExit("missing required GEN result summaries")
 
 main_points = sorted(variable_main + fixed_store_main + library_main)
@@ -74,6 +87,15 @@ axis.plot(
     linewidth=2,
     color="#0072B2",
     label="K=1 vs K",
+)
+perlmutter_x, perlmutter_y = coordinates(sorted(perlmutter_main))
+axis.scatter(
+    perlmutter_x,
+    perlmutter_y,
+    s=64,
+    color="#D55E00",
+    label="Perlmutter reruns",
+    zorder=3,
 )
 axis.axhline(0.5, color="0.45", linewidth=1, linestyle="--")
 axis.set_xticks(x)
@@ -95,5 +117,7 @@ plt.close(fig)
 
 for k, auc in main_points:
     print(f"K={k}: test AUC {auc:.6f}")
+for k, auc in sorted(perlmutter_main):
+    print(f"Perlmutter K={k}: test AUC {auc:.6f}")
 print(f"wrote {output.with_suffix('.pdf')}")
 print(f"wrote {output.with_suffix('.png')}")

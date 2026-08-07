@@ -15,7 +15,7 @@ set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
 if [ "$#" -lt 1 ] || [ "$#" -gt 3 ]; then
-    echo "usage: sbatch $0 {stabilized|stabilized_dropout} [charged7|val2000|val25|val25_tf217_bridge|val25_tf217_bridge_e300|calo_unconed|calo_unconed_e300] [N_FILES]" >&2
+    echo "usage: sbatch $0 {stabilized|stabilized_dropout} [charged7|val2000|val25|val25_tf217_bridge|val25_tf217_bridge_e300|calo_unconed|calo_unconed_fixed150|calo_unconed_e300] [N_FILES]" >&2
     exit 2
 fi
 RECIPE=$1
@@ -23,6 +23,7 @@ STUDY=${2:-charged7}
 N_FILES=${3:-420}
 TEST_EVENTS=800
 EPOCHS=150
+PATIENCE=20
 RUN_NULL=1
 if (( N_FILES <= 0 || N_FILES % 42 != 0 )); then
     echo "N_FILES must be a positive multiple of 42" >&2
@@ -101,6 +102,20 @@ case "$STUDY" in
         VAL_EVENTS=2000
         TEST_EVENTS=2000
         ;;
+    calo_unconed_fixed150)
+        if [ "$N_FILES" -ne 840 ]; then
+            echo "calo_unconed_fixed150 is defined only for N=840" >&2
+            exit 2
+        fi
+        STORE_NAME=reco_n840_pfn_stores_calo_unconed_val25
+        DATASET_TAG=n840_calo_unconed_val25_fixed150
+        LABEL_PREFIX=reco_n840_calo_unconed_val25_fixed150_directlog_charged7
+        VAL_EVENTS=2000
+        TEST_EVENTS=2000
+        EPOCHS=150
+        PATIENCE=150
+        RUN_NULL=0
+        ;;
     calo_unconed_e300)
         if [ "$N_FILES" -ne 420 ]; then
             echo "calo_unconed_e300 is currently defined only for N=420" >&2
@@ -151,11 +166,12 @@ run_training() {
         --val-events "$VAL_EVENTS" \
         --test-events "$TEST_EVENTS" \
         --epochs "$EPOCHS" \
+        --patience "$PATIENCE" \
         --recipe "$RECIPE" \
         --label "$label"
 }
 
-echo "RECO N=$N_FILES study=$STUDY dataset=$DATASET_TAG features=charged7 store=$STORE_DIR recipe=$RECIPE epochs=$EPOCHS"
+echo "RECO N=$N_FILES study=$STUDY dataset=$DATASET_TAG features=charged7 store=$STORE_DIR recipe=$RECIPE epochs=$EPOCHS patience=$PATIENCE"
 run_training R "${LABEL_PREFIX}_${RECIPE}_U_vs_R"
 if [ "$RUN_NULL" -eq 1 ]; then
     run_training null_b "${LABEL_PREFIX}_${RECIPE}_null"
