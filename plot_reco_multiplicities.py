@@ -17,6 +17,12 @@ LABELS = {
     "null_b": "Unique-mother null sample",
 }
 SPLITS = ("train", "val", "test")
+OBSERVABLES = (
+    ("pfos", "PFOs per event"),
+    ("clusters", "Clusters per event"),
+    ("charged_pfos", "Charged PFOs per event"),
+    ("tracks", "Tracks per event"),
+)
 
 
 def arguments():
@@ -63,39 +69,51 @@ def bins_for(arrays):
     return np.arange(-0.5, high + 1.5)
 
 
-def make_figure(data, samples, output):
-    names = (
-        "PFOs per event",
-        "Clusters per event",
-        "Charged PFOs per event",
-        "Tracks per event",
-    )
-    figure, axes = plt.subplots(1, 4, figsize=(15.8, 3.6))
+def draw_histogram(axis, data, samples, index):
+    arrays = [data[sample][index] for sample in samples]
+    bins = bins_for(arrays)
+    for sample, values in zip(samples, arrays):
+        axis.hist(
+            values,
+            bins=bins,
+            weights=np.full(len(values), 1.0 / len(values)),
+            histtype="step",
+            linewidth=1.8,
+            color=COLORS[sample],
+            label=LABELS[sample],
+        )
+    axis.set_yscale("log")
+    axis.grid(alpha=0.2, linewidth=0.5)
+    axis.spines[["top", "right"]].set_visible(False)
 
-    for index, (axis, name) in enumerate(zip(axes, names)):
-        arrays = [data[sample][index] for sample in samples]
-        bins = bins_for(arrays)
-        for sample, values in zip(samples, arrays):
-            axis.hist(
-                values,
-                bins=bins,
-                weights=np.full(len(values), 1.0 / len(values)),
-                histtype="step",
-                linewidth=1.8,
-                color=COLORS[sample],
-                label=LABELS[sample],
-            )
-        axis.set_xlabel(name)
-        axis.set_yscale("log")
-        axis.grid(alpha=0.2, linewidth=0.5)
-        axis.spines[["top", "right"]].set_visible(False)
 
-    axes[0].set_ylabel("Fraction of events")
-    axes[0].legend(frameon=False, fontsize=9)
+def save_figure(figure, output):
     figure.tight_layout()
     figure.savefig(output.with_suffix(".pdf"), bbox_inches="tight")
     figure.savefig(output.with_suffix(".png"), dpi=200, bbox_inches="tight")
     plt.close(figure)
+
+
+def make_figure(data, samples, output):
+    figure, axes = plt.subplots(1, 4, figsize=(15.8, 3.6))
+
+    for index, (axis, (_, name)) in enumerate(zip(axes, OBSERVABLES)):
+        draw_histogram(axis, data, samples, index)
+        axis.set_xlabel(name)
+
+    axes[0].set_ylabel("Fraction of events")
+    axes[0].legend(loc="upper right", frameon=False, fontsize=9)
+    save_figure(figure, output)
+
+
+def make_individual_figures(data, samples, output):
+    for index, (slug, name) in enumerate(OBSERVABLES):
+        figure, axis = plt.subplots(figsize=(6.4, 4.5))
+        draw_histogram(axis, data, samples, index)
+        axis.set_xlabel(name)
+        axis.set_ylabel("Fraction of events")
+        axis.legend(loc="upper right", frameon=False)
+        save_figure(figure, output.parent / (output.name + "_" + slug))
 
 
 def main():
@@ -110,6 +128,10 @@ def main():
     }
     make_figure(data, ("U", "R"), outdir / args.name)
     make_figure(data, ("U", "null_b"), outdir / (args.name + "_null"))
+    make_individual_figures(data, ("U", "R"), outdir / args.name)
+    make_individual_figures(
+        data, ("U", "null_b"), outdir / (args.name + "_null")
+    )
 
     for sample, values in data.items():
         print(
