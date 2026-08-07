@@ -121,9 +121,9 @@ if [ "$RUN" = main ]; then
             MAX_MINUTES=570
             ;;
         2)
-            EPOCHS=80
+            EPOCHS=100
             MIN_EPOCHS=80
-            MAX_MINUTES=870
+            MAX_MINUTES=1050
             ;;
         5)
             EPOCHS=120

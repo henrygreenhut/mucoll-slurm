@@ -240,15 +240,15 @@ sbatch --dependency=afterok:"$stores" --time=10:00:00 \
   submit_perlmutter_gen_k.slurm 1-synthetic main
 sbatch --dependency=afterok:"$stores" --time=04:00:00 \
   submit_perlmutter_gen_k.slurm 1-synthetic null
-sbatch --dependency=afterok:"$stores" --time=15:00:00 \
+sbatch --dependency=afterok:"$stores" --time=18:00:00 \
   submit_perlmutter_gen_k.slurm 2 main
 sbatch --dependency=afterok:"$stores" --time=04:00:00 \
   submit_perlmutter_gen_k.slurm 2 null
 ```
 
-The main jobs have natural caps of 55 and 80 epochs respectively, chosen from
+The main jobs have natural caps of 55 and 100 epochs respectively, chosen from
 the measured Perlmutter runtime so held-out evaluation completes inside the
-strict 10- and 15-hour limits. Low-reuse nulls have a 20-epoch cap and a
+strict 10- and 18-hour limits. Low-reuse nulls have a 20-epoch cap and a
 four-hour Slurm limit.
 
 If a 48-hour job reaches its wall-clock guard before completing, submit the
