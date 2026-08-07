@@ -5,6 +5,7 @@
 #SBATCH -c 1
 #SBATCH --mem=8G
 #SBATCH -t 08:00:00
+#SBATCH --exclude=node2336
 #SBATCH --array=0-63
 #SBATCH -o recok_gen_%A_%a.out
 #SBATCH -e recok_gen_%A_%a.err

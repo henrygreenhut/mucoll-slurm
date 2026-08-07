@@ -5,6 +5,7 @@
 #SBATCH -c 1
 #SBATCH --mem=12G
 #SBATCH -t 24:00:00
+#SBATCH --exclude=node2336
 #SBATCH --array=0-63
 #SBATCH -o /oscar/data/mleblan6/mucoll/hgreenhu/mucoll/reco_variable_k/logs/recok_ddsim_%A_%a.out
 #SBATCH -e /oscar/data/mleblan6/mucoll/hgreenhu/mucoll/reco_variable_k/logs/recok_ddsim_%A_%a.err

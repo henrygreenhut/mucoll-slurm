@@ -5,6 +5,7 @@
 #SBATCH -c 1
 #SBATCH --mem=12G
 #SBATCH -t 08:00:00
+#SBATCH --exclude=node2336
 #SBATCH -o recok_smoke_%j.out
 #SBATCH -e recok_smoke_%j.err
 
