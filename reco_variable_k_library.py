@@ -190,7 +190,7 @@ def prepare_manifest(args):
         "chunk_arrays": str(arrays_path),
         "chunk_arrays_sha256": hashlib.sha256(arrays_path.read_bytes()).hexdigest(),
         "rotation": {
-            "policy": "all-random, nested first-k angles",
+            "policy": "native unrotated k=1; nested first-k random angles for k>1",
             "seed_key": ["data_seed", "mother_cycle_id", "mother_local_id"],
             "changed": ["px", "py", "vx", "vy"],
             "unchanged": ["pz", "E", "t", "vz", "pdg", "mass", "charge"],
@@ -279,7 +279,10 @@ def read_chunk(handle, mothers):
 def rotate_chunk(raw, owners, angles, reuse_k):
     output = {field: [] for field in PARTICLE_FIELDS}
     for rotation in range(reuse_k):
-        phi = angles[:, rotation][owners]
+        if reuse_k == 1:
+            phi = np.zeros(len(owners), dtype=np.float64)
+        else:
+            phi = angles[:, rotation][owners]
         cosine = np.cos(phi)
         sine = np.sin(phi)
         output["px"].append((cosine * raw["px"] - sine * raw["py"]).astype(np.float32))

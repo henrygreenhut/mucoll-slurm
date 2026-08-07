@@ -87,6 +87,23 @@ class VariableKLibraryTest(unittest.TestCase):
                     self.assertEqual(chunks.shape[1], 140)
                     self.assertEqual(len(np.unique(chunks)), chunks.size)
 
+            repeated = root / "manifest_repeated"
+            library.prepare_manifest(
+                Namespace(
+                    muplus_bank=str(plus),
+                    muminus_bank=str(minus),
+                    outdir=str(repeated),
+                    force=False,
+                )
+            )
+            repeated_manifest = json.loads(
+                (repeated / "manifest.json").read_text()
+            )
+            self.assertEqual(
+                manifest["chunk_arrays_sha256"],
+                repeated_manifest["chunk_arrays_sha256"],
+            )
+
     def test_angles_are_nested_and_rotation_preserves_invariants(self):
         cycles = np.asarray([2, 8], dtype=np.int64)
         local = np.asarray([3, 4], dtype=np.int32)
@@ -123,6 +140,25 @@ class VariableKLibraryTest(unittest.TestCase):
                     base_pt,
                 )
             )
+
+    def test_k1_is_native_and_unrotated(self):
+        raw = {
+            "px": np.asarray([1.0, 2.0], dtype=np.float32),
+            "py": np.asarray([3.0, 4.0], dtype=np.float32),
+            "pz": np.asarray([5.0, 6.0], dtype=np.float32),
+            "E": np.asarray([7.0, 8.0], dtype=np.float32),
+            "t": np.asarray([9.0, 10.0], dtype=np.float32),
+            "vx": np.asarray([11.0, 12.0], dtype=np.float32),
+            "vy": np.asarray([13.0, 14.0], dtype=np.float32),
+            "vz": np.asarray([15.0, 16.0], dtype=np.float32),
+            "pdg": np.asarray([11, 22], dtype=np.int32),
+        }
+        angles = np.asarray([[0.4], [1.7]])
+        native = library.rotate_chunk(
+            raw, np.asarray([0, 1]), angles, reuse_k=1
+        )
+        for field in library.PARTICLE_FIELDS:
+            self.assertTrue(np.array_equal(native[field], raw[field]))
 
 
 if __name__ == "__main__":

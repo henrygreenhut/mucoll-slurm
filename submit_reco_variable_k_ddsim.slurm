@@ -13,13 +13,17 @@ set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
 if [ "$#" -ne 2 ]; then
-    echo "usage: sbatch $0 {1|5|7|10|21} {MUPLUS|MUMINUS}" >&2
+    echo "usage: sbatch $0 {1-native|5|7|10|21} {MUPLUS|MUMINUS}" >&2
     exit 2
 fi
 
-K=$1
+TARGET=$1
 POLARITY=$2
-case "$K" in 1|5|7|10|21) ;; *) echo "unsupported K=$K" >&2; exit 2 ;; esac
+case "$TARGET" in
+    1-native) K=1; SAMPLE=k1_native ;;
+    5|7|10|21) K=$TARGET; SAMPLE=k${K} ;;
+    *) echo "unsupported target=$TARGET" >&2; exit 2 ;;
+esac
 case "$POLARITY" in MUPLUS|MUMINUS) ;; *) echo "unsupported polarity" >&2; exit 2 ;; esac
 
 NUM_SHARDS=${NUM_SHARDS:-64}
@@ -37,8 +41,8 @@ LOOP="$WORKDIR/run.sh"
     echo "source '$BENCH/setup_config.sh' '$BENCH' MAIA_v0"
     echo "cd '$WORKDIR'"
     for split in train val test; do
-        gen_dir="$BASE/GEN/k${K}/${split}/${POLARITY}"
-        sim_dir="$BASE/SIM/k${K}/${split}/${POLARITY}"
+        gen_dir="$BASE/GEN/${SAMPLE}/${split}/${POLARITY}"
+        sim_dir="$BASE/SIM/${SAMPLE}/${split}/${POLARITY}"
         mkdir -p "$sim_dir"
         mapfile -t files < <(find "$gen_dir" -maxdepth 1 -type f -name '*.root' | sort -V)
         selected=()

@@ -15,9 +15,14 @@ module load ngc-tensorflow-container/25.02-tf2-py3-j4zj
 
 BASE=/oscar/data/mleblan6/mucoll/hgreenhu/mucoll/reco_variable_k
 STORE_BASE=/oscar/data/mleblan6/mucoll/hgreenhu/mucoll/libtest/stores
+MANIFEST_NAME=${1:-manifest}
+if ! [[ "$MANIFEST_NAME" =~ ^[A-Za-z0-9_-]+$ ]]; then
+    echo "invalid manifest name: $MANIFEST_NAME" >&2
+    exit 2
+fi
 
 apptainer exec --bind /oscar:/oscar "$NGC_TENSORFLOW_CONTAINER" \
     python -u reco_variable_k_library.py prepare \
         --muplus-bank "$STORE_BASE/gen_split_mothers_MUPLUS.h5" \
         --muminus-bank "$STORE_BASE/gen_split_mothers_MUMINUS.h5" \
-        --outdir "$BASE/manifest"
+        --outdir "$BASE/$MANIFEST_NAME"

@@ -299,7 +299,7 @@ the same chunk partition and the first K angles from one deterministic
 
 | K | distinct mothers/event | rotated mothers/chunk | SIM files/event/polarity |
 |---:|---:|---:|---:|
-| 1 | 29,400 | 140 | 210 |
+| native 1 | 29,400 | 140 | 210 |
 | 5 | 5,880 | 700 | 42 |
 | 7 | 4,200 | 980 | 30 |
 | 10 | 2,940 | 1,400 | 21 |
@@ -323,8 +323,8 @@ limit:
 
 ```bash
 for polarity in MUPLUS MUMINUS; do
-  for k in 1 5 7 10 21; do
-    sbatch submit_reco_variable_k_gen.slurm "$k" "$polarity"
+  for target in 1-native 5 7 10 21; do
+    sbatch submit_reco_variable_k_gen.slurm "$target" "$polarity"
   done
 done
 ```
@@ -334,8 +334,8 @@ both stages at once would exceed the account's submitted-job limit:
 
 ```bash
 for polarity in MUPLUS MUMINUS; do
-  for k in 1 5 7 10 21; do
-    sbatch submit_reco_variable_k_ddsim.slurm "$k" "$polarity"
+  for target in 1-native 5 7 10 21; do
+    sbatch submit_reco_variable_k_ddsim.slurm "$target" "$polarity"
   done
 done
 ```
@@ -368,6 +368,41 @@ done
 K=1 is reconstructed once and shared by all four comparisons. A null does not
 require new detector production: labels are deterministically permuted within
 each split over the same two physical K samples.
+
+For the corrected unconed native-1 versus K=7 and K=21 production, preserve
+the previous rotated `k1` files and build an explicitly named `k1_native`
+library. The existing K=7 and K=21 SIM files are reused because calorimeter
+coning is applied during DIGI, after SIM:
+
+```bash
+prepare=$(sbatch --parsable submit_reco_variable_k_prepare.slurm manifest_native1)
+smoke=$(sbatch --parsable --dependency=afterok:"$prepare" \
+  submit_reco_variable_k_smoke.slurm)
+
+gen_plus=$(sbatch --parsable --dependency=afterok:"$smoke" \
+  submit_reco_variable_k_gen.slurm 1-native MUPLUS)
+gen_minus=$(sbatch --parsable --dependency=afterok:"$smoke" \
+  submit_reco_variable_k_gen.slurm 1-native MUMINUS)
+
+sim_plus=$(sbatch --parsable --dependency=afterok:"$gen_plus" \
+  submit_reco_variable_k_ddsim.slurm 1-native MUPLUS)
+sim_minus=$(sbatch --parsable --dependency=afterok:"$gen_minus" \
+  submit_reco_variable_k_ddsim.slurm 1-native MUMINUS)
+
+launch=$(sbatch --parsable --dependency=afterok:"$sim_plus:$sim_minus" \
+  submit_reco_variable_k_unconed_after_sim.slurm)
+
+printf 'prepare=%s smoke=%s gen=%s,%s sim=%s,%s launch=%s\n' \
+  "$prepare" "$smoke" "$gen_plus" "$gen_minus" \
+  "$sim_plus" "$sim_minus" "$launch"
+```
+
+The launcher validates that the native manifest has exactly the same mother
+chunks and source-cycle splits as the existing K=7 and K=21 libraries. It
+then produces 2,000 neutrino events per class and source split with CaloConer
+disabled, identical signal SIM inputs and digitization seeds, and 210, 30,
+or 10 BIB SIM files per polarity for native K=1, K=7, or K=21 respectively.
+The old rotated `k1` GEN and SIM directories are never read or overwritten.
 
 The original 1-vs-5 run early-stopped after 20 epochs, before the successful
 1-vs-10 comparison first developed a clear validation signal at epoch 24.

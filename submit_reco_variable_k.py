@@ -98,11 +98,12 @@ def main():
     skipped = 0
     for k in args.k_values:
         overlay_files = files_per_event(k)
+        library_sample = "k1_native" if k == 1 else "k{}".format(k)
         if overlay_files != manifest["files_per_event"][str(k)]:
             raise SystemExit("manifest has the wrong overlay count for k={}".format(k))
         for split in args.splits:
-            plus = library / "SIM" / "k{}".format(k) / split / "MUPLUS"
-            minus = library / "SIM" / "k{}".format(k) / split / "MUMINUS"
+            plus = library / "SIM" / library_sample / split / "MUPLUS"
+            minus = library / "SIM" / library_sample / split / "MUMINUS"
             for directory in (plus, minus):
                 available = root_count(directory)
                 expected = manifest["splits"][split]["chunk_count"]

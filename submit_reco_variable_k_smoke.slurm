@@ -15,21 +15,23 @@ BASE=/oscar/data/mleblan6/mucoll/hgreenhu/mucoll/reco_variable_k
 STORE_BASE=/oscar/data/mleblan6/mucoll/hgreenhu/mucoll/libtest/stores
 BENCH=/oscar/data/mleblan6/mucoll/hgreenhu/mucoll/mucoll-benchmarks
 CONTAINER=/oscar/data/mleblan6/mucoll/mucoll-sim-ubuntu24:v3.0.sif
-OUT=/oscar/scratch/$USER/mucoll/libtest/reco_variable_k_smoke
+OUT=/oscar/scratch/$USER/mucoll/libtest/reco_variable_k_native1_smoke
 WORKDIR=$(mktemp -d "/oscar/scratch/$USER/recok_smoke.XXXXXX")
 trap 'rm -rf "$WORKDIR"' EXIT
 find "$OUT/GEN" -type f -name '*.partial.*' -delete 2>/dev/null || true
 
 for polarity in MUPLUS MUMINUS; do
-    for k in 1 5 7 10 21; do
-        gen_dir="$OUT/GEN/k${k}/$polarity"
-        sim_dir="$OUT/SIM/k${k}/$polarity"
+    for k in 1 7 21; do
+        sample=k${k}
+        [ "$k" -eq 1 ] && sample=k1_native
+        gen_dir="$OUT/GEN/${sample}/$polarity"
+        sim_dir="$OUT/SIM/${sample}/$polarity"
         mkdir -p "$gen_dir" "$sim_dir"
         apptainer exec --bind /oscar:/oscar "$CONTAINER" bash -c "
             source /opt/setup_mucoll.sh
             python3 '$SLURM_SUBMIT_DIR/reco_variable_k_library.py' write-gen \
                 --bank '$STORE_BASE/gen_split_mothers_${polarity}.h5' \
-                --manifest-dir '$BASE/manifest' \
+                --manifest-dir '$BASE/manifest_native1' \
                 --benchmarks-dir '$BENCH' \
                 --split train \
                 --reuse-k '$k' \
