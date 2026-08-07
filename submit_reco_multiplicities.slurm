@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH -J reco_mult
-#SBATCH -p batch
+#SBATCH -p debug
 #SBATCH -n 1
-#SBATCH -c 2
-#SBATCH --mem=16G
-#SBATCH -t 00:30:00
+#SBATCH -c 1
+#SBATCH --mem=4G
+#SBATCH -t 00:10:00
 #SBATCH --exclude=node2336
 #SBATCH --output=reco_mult_%j.out
 #SBATCH --error=reco_mult_%j.err
