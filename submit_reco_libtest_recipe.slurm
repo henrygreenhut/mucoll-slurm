@@ -15,13 +15,15 @@ set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
 if [ "$#" -lt 1 ] || [ "$#" -gt 3 ]; then
-    echo "usage: sbatch $0 {stabilized|stabilized_dropout} [charged7|val2000|val25|val25_tf217_bridge|calo_unconed] [N_FILES]" >&2
+    echo "usage: sbatch $0 {stabilized|stabilized_dropout} [charged7|val2000|val25|val25_tf217_bridge|val25_tf217_bridge_e300|calo_unconed] [N_FILES]" >&2
     exit 2
 fi
 RECIPE=$1
 STUDY=${2:-charged7}
 N_FILES=${3:-420}
 TEST_EVENTS=800
+EPOCHS=150
+RUN_NULL=1
 if (( N_FILES <= 0 || N_FILES % 42 != 0 )); then
     echo "N_FILES must be a positive multiple of 42" >&2
     exit 2
@@ -76,6 +78,18 @@ case "$STUDY" in
         LABEL_PREFIX=reco_n420_trackfix_val25_tf217_bridge_directlog_charged7
         VAL_EVENTS=2000
         ;;
+    val25_tf217_bridge_e300)
+        if [ "$N_FILES" -ne 420 ]; then
+            echo "val25_tf217_bridge_e300 is defined only for N=420" >&2
+            exit 2
+        fi
+        STORE_NAME=reco_n420_pfn_stores_trackfix_val25
+        DATASET_TAG=trackfix_val25_tf217_bridge_e300
+        LABEL_PREFIX=reco_n420_trackfix_val25_tf217_bridge_e300_directlog_charged7
+        VAL_EVENTS=2000
+        EPOCHS=300
+        RUN_NULL=0
+        ;;
     calo_unconed)
         if [ "$N_FILES" -ne 420 ]; then
             echo "calo_unconed is currently defined only for N=420" >&2
@@ -123,10 +137,13 @@ run_training() {
         --train-events 2000 \
         --val-events "$VAL_EVENTS" \
         --test-events "$TEST_EVENTS" \
+        --epochs "$EPOCHS" \
         --recipe "$RECIPE" \
         --label "$label"
 }
 
-echo "RECO N=$N_FILES study=$STUDY dataset=$DATASET_TAG features=charged7 store=$STORE_DIR recipe=$RECIPE"
+echo "RECO N=$N_FILES study=$STUDY dataset=$DATASET_TAG features=charged7 store=$STORE_DIR recipe=$RECIPE epochs=$EPOCHS"
 run_training R "${LABEL_PREFIX}_${RECIPE}_U_vs_R"
-run_training null_b "${LABEL_PREFIX}_${RECIPE}_null"
+if [ "$RUN_NULL" -eq 1 ]; then
+    run_training null_b "${LABEL_PREFIX}_${RECIPE}_null"
+fi

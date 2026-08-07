@@ -24,6 +24,7 @@ def arguments():
     parser.add_argument("--store-dir", required=True)
     parser.add_argument("--outdir", required=True)
     parser.add_argument("--n-files", type=int, default=420)
+    parser.add_argument("--name", default="reco_n420_multiplicities")
     return parser.parse_args()
 
 
@@ -101,8 +102,8 @@ def main():
         sample: load_sample(store_dir, args.n_files, sample)
         for sample in ("U", "R", "null_b")
     }
-    make_figure(data, ("U", "R"), outdir / "reco_n420_unconed_multiplicities")
-    make_figure(data, ("U", "null_b"), outdir / "reco_n420_unconed_multiplicities_null")
+    make_figure(data, ("U", "R"), outdir / args.name)
+    make_figure(data, ("U", "null_b"), outdir / (args.name + "_null"))
 
     for sample, values in data.items():
         print(

@@ -190,6 +190,18 @@ RUNS = (
      "reco_n1260_trackfix/"
      "reco_n1260_trackfix_charged7_val25_null.pdf"),
     ("reco_pfn_results/"
+     "reco_n420_trackfix_val25_tf217_bridge_directlog_charged7_"
+     "stabilized_dropout_U_vs_R",
+     "RECO-Level PFN at N=420: Coned, TensorFlow 2.17",
+     "reco_n420_calo_coned_tf217/"
+     "reco_n420_calo_coned_tf217_U_vs_R.pdf"),
+    ("reco_pfn_results/"
+     "reco_n420_trackfix_val25_tf217_bridge_directlog_charged7_"
+     "stabilized_dropout_null",
+     "RECO-Level PFN at N=420: Coned, TensorFlow 2.17 Null",
+     "reco_n420_calo_coned_tf217/"
+     "reco_n420_calo_coned_tf217_null.pdf"),
+    ("reco_pfn_results/"
      "reco_n420_calo_unconed_val25_directlog_charged7_"
      "stabilized_dropout_U_vs_R",
      "RECO-Level PFN at N=420: CaloConer Disabled",

@@ -18,4 +18,5 @@ PYTHON=/oscar/scratch/$USER/mucoll/envs/reco-store/bin/python
 "$PYTHON" plot_reco_multiplicities.py \
     --store-dir "$STORE_DIR" \
     --outdir "$OUTDIR" \
-    --n-files 420
+    --n-files 420 \
+    --name reco_n420_unconed_multiplicities

@@ -465,6 +465,19 @@ seed, 2,000 train events per class, 2,000 validation events per class, and 800
 test events per class as the previous coned `val25` result. Its new result
 labels include `tf217_bridge`, so it cannot overwrite the old training.
 
+If the bridge reaches its 150-epoch cap while still improving, rerun its
+physical comparison for 300 total epochs:
+
+```bash
+sbatch submit_reco_libtest_recipe.slurm \
+  stabilized_dropout val25_tf217_bridge_e300 420
+```
+
+This starts from the same fixed initialization and replays all 300 epochs in
+one optimizer trajectory. It does not rerun the completed null. Reloading the
+150-epoch weights would not be an exact continuation because the original
+job saved model weights but not Adam's optimizer state.
+
 Prepare immutable source pools:
 
 ```bash
