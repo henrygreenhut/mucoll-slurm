@@ -433,6 +433,38 @@ null comparison sequentially on one GPU. Both use the corrected unconed
 stores, the seven-feature EnergyFlow PFN, and 2,000 events per class in each
 of train, validation, and held-out test.
 
+The completed TensorFlow 2.17 run at commit `4a40fe6` selected epoch 150 for
+U versus R and obtained a held-out AUC of 0.9679. Its matched null selected
+epoch 146 and obtained 0.4926. Each test contains 2,000 events per class.
+Regenerate their loss plots with:
+
+```bash
+python3 plot_all_training_overlays.py --study reco_n420_calo_unconed
+```
+
+Plot the three requested multiplicities directly from all three unconed
+stores, without another intermediate dataset:
+
+```bash
+sbatch submit_reco_unconed_multiplicities.slurm
+```
+
+This descriptive plot combines train, validation, and test, giving 6,000
+events per class. The PFN training and evaluation remain split.
+
+To isolate the TensorFlow 2.17 environment change from the CaloConer change,
+run the same model on the previous coned `trackfix_val25` stores:
+
+```bash
+sbatch submit_reco_libtest_recipe.slurm \
+  stabilized_dropout val25_tf217_bridge 420
+```
+
+The bridge uses the same source split, seven inputs, architecture, optimizer,
+seed, 2,000 train events per class, 2,000 validation events per class, and 800
+test events per class as the previous coned `val25` result. Its new result
+labels include `tf217_bridge`, so it cannot overwrite the old training.
+
 Prepare immutable source pools:
 
 ```bash

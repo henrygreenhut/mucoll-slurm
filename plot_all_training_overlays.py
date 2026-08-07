@@ -189,6 +189,18 @@ RUNS = (
      "RECO N=1260 — charged-flag null, 25% validation cycles",
      "reco_n1260_trackfix/"
      "reco_n1260_trackfix_charged7_val25_null.pdf"),
+    ("reco_pfn_results/"
+     "reco_n420_calo_unconed_val25_directlog_charged7_"
+     "stabilized_dropout_U_vs_R",
+     "RECO-Level PFN at N=420: CaloConer Disabled",
+     "reco_n420_calo_unconed/"
+     "reco_n420_calo_unconed_U_vs_R.pdf"),
+    ("reco_pfn_results/"
+     "reco_n420_calo_unconed_val25_directlog_charged7_"
+     "stabilized_dropout_null",
+     "RECO-Level PFN at N=420: CaloConer Disabled Null",
+     "reco_n420_calo_unconed/"
+     "reco_n420_calo_unconed_null.pdf"),
 )
 
 

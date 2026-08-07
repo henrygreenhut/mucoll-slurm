@@ -15,7 +15,7 @@ set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
 if [ "$#" -lt 1 ] || [ "$#" -gt 3 ]; then
-    echo "usage: sbatch $0 {stabilized|stabilized_dropout} [charged7|val2000|val25|calo_unconed] [N_FILES]" >&2
+    echo "usage: sbatch $0 {stabilized|stabilized_dropout} [charged7|val2000|val25|val25_tf217_bridge|calo_unconed] [N_FILES]" >&2
     exit 2
 fi
 RECIPE=$1
@@ -64,6 +64,16 @@ case "$STUDY" in
             DATASET_TAG=n${N_FILES}_trackfix_val25
             LABEL_PREFIX=reco_n${N_FILES}_trackfix_val25_directlog_charged7
         fi
+        VAL_EVENTS=2000
+        ;;
+    val25_tf217_bridge)
+        if [ "$N_FILES" -ne 420 ]; then
+            echo "val25_tf217_bridge is defined only for N=420" >&2
+            exit 2
+        fi
+        STORE_NAME=reco_n420_pfn_stores_trackfix_val25
+        DATASET_TAG=trackfix_val25_tf217_bridge
+        LABEL_PREFIX=reco_n420_trackfix_val25_tf217_bridge_directlog_charged7
         VAL_EVENTS=2000
         ;;
     calo_unconed)
