@@ -486,7 +486,8 @@ Plot the three requested multiplicities directly from all three unconed
 stores, without another intermediate dataset:
 
 ```bash
-sbatch submit_reco_unconed_multiplicities.slurm
+sbatch submit_reco_multiplicities.slurm unconed 420
+sbatch submit_reco_multiplicities.slurm coned 420 840 1260
 ```
 
 This descriptive plot combines train, validation, and test, giving 6,000

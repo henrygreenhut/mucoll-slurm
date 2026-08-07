@@ -38,12 +38,13 @@ def read_store(path):
     with h5py.File(path, "r") as store:
         n_pfos = store["n_particles"][:].astype(int)
         n_clusters = store["n_clusters"][:].astype(int)
+        n_tracks = store["n_tracks"][:].astype(int)
         charge_index = feature_names(store.attrs["features"]).index("charge")
         charges = store["particles"][:, :, charge_index]
 
     valid = np.arange(charges.shape[1])[None, :] < n_pfos[:, None]
     n_charged = np.sum(valid & (np.abs(charges) > 0.1), axis=1)
-    return n_pfos, n_clusters, n_charged
+    return n_pfos, n_clusters, n_charged, n_tracks
 
 
 def load_sample(store_dir, n_files, sample):
@@ -53,7 +54,7 @@ def load_sample(store_dir, n_files, sample):
     ]
     return tuple(
         np.concatenate([piece[index] for piece in pieces])
-        for index in range(3)
+        for index in range(4)
     )
 
 
@@ -63,8 +64,13 @@ def bins_for(arrays):
 
 
 def make_figure(data, samples, output):
-    names = ("PFOs per event", "Clusters per event", "Charged PFOs per event")
-    figure, axes = plt.subplots(1, 3, figsize=(12.2, 3.6))
+    names = (
+        "PFOs per event",
+        "Clusters per event",
+        "Charged PFOs per event",
+        "Tracks per event",
+    )
+    figure, axes = plt.subplots(1, 4, figsize=(15.8, 3.6))
 
     for index, (axis, name) in enumerate(zip(axes, names)):
         arrays = [data[sample][index] for sample in samples]
@@ -112,6 +118,7 @@ def main():
             "mean PFOs=", round(float(np.mean(values[0])), 3),
             "mean clusters=", round(float(np.mean(values[1])), 3),
             "mean charged PFOs=", round(float(np.mean(values[2])), 3),
+            "mean tracks=", round(float(np.mean(values[3])), 3),
         )
     print("plots ->", outdir)
 
