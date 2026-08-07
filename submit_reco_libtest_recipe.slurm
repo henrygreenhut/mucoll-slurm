@@ -83,7 +83,7 @@ case "$STUDY" in
         ;;
 esac
 
-module load ngc-tensorflow-container/25.02-tf2-py3-j4zj
+module load ngc-tensorflow-container/25.02-tf2-py3-azkb
 
 TRAIN_SITE=/oscar/scratch/$USER/mucoll/envs/reco-train-site-v1
 STORE_DIR=/oscar/scratch/$USER/mucoll/libtest/$STORE_NAME
