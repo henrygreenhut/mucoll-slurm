@@ -15,7 +15,7 @@ set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
 if [ "$#" -lt 1 ] || [ "$#" -gt 3 ]; then
-    echo "usage: sbatch $0 {stabilized|stabilized_dropout} [charged7|val2000|val25|val25_tf217_bridge|val25_tf217_bridge_e300|calo_unconed] [N_FILES]" >&2
+    echo "usage: sbatch $0 {stabilized|stabilized_dropout} [charged7|val2000|val25|val25_tf217_bridge|val25_tf217_bridge_e300|calo_unconed|calo_unconed_e300] [N_FILES]" >&2
     exit 2
 fi
 RECIPE=$1
@@ -100,6 +100,19 @@ case "$STUDY" in
         LABEL_PREFIX=reco_n420_calo_unconed_val25_directlog_charged7
         VAL_EVENTS=2000
         TEST_EVENTS=2000
+        ;;
+    calo_unconed_e300)
+        if [ "$N_FILES" -ne 420 ]; then
+            echo "calo_unconed_e300 is currently defined only for N=420" >&2
+            exit 2
+        fi
+        STORE_NAME=reco_n420_pfn_stores_calo_unconed_val25
+        DATASET_TAG=calo_unconed_val25_e300
+        LABEL_PREFIX=reco_n420_calo_unconed_val25_e300_directlog_charged7
+        VAL_EVENTS=2000
+        TEST_EVENTS=2000
+        EPOCHS=300
+        RUN_NULL=0
         ;;
     *)
         echo "unknown study: $STUDY" >&2

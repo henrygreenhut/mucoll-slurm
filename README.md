@@ -442,6 +442,17 @@ Regenerate their loss plots with:
 python3 plot_all_training_overlays.py --study reco_n420_calo_unconed
 ```
 
+Run a separate physical-only repeat with a 300-epoch cap using the same
+unconed stores and training configuration:
+
+```bash
+sbatch submit_reco_libtest_recipe.slurm \
+  stabilized_dropout calo_unconed_e300 420
+```
+
+Early stopping remains active, and the new `e300` label prevents the repeat
+from overwriting the completed physical or null results.
+
 Plot the three requested multiplicities directly from all three unconed
 stores, without another intermediate dataset:
 

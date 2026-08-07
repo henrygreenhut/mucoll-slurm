@@ -202,6 +202,12 @@ RUNS = (
      "reco_n420_calo_coned_tf217/"
      "reco_n420_calo_coned_tf217_null.pdf"),
     ("reco_pfn_results/"
+     "reco_n420_trackfix_val25_tf217_bridge_e300_directlog_charged7_"
+     "stabilized_dropout_U_vs_R",
+     "RECO-Level PFN at N=420: Coned, 300-Epoch Repeat",
+     "reco_n420_calo_coned_tf217/"
+     "reco_n420_calo_coned_tf217_e300_repeat.pdf"),
+    ("reco_pfn_results/"
      "reco_n420_calo_unconed_val25_directlog_charged7_"
      "stabilized_dropout_U_vs_R",
      "RECO-Level PFN at N=420: CaloConer Disabled",
@@ -213,6 +219,12 @@ RUNS = (
      "RECO-Level PFN at N=420: CaloConer Disabled Null",
      "reco_n420_calo_unconed/"
      "reco_n420_calo_unconed_null.pdf"),
+    ("reco_pfn_results/"
+     "reco_n420_calo_unconed_val25_e300_directlog_charged7_"
+     "stabilized_dropout_U_vs_R",
+     "RECO-Level PFN at N=420: CaloConer Disabled, 300-Epoch Repeat",
+     "reco_n420_calo_unconed/"
+     "reco_n420_calo_unconed_e300_repeat.pdf"),
 )
 
 
