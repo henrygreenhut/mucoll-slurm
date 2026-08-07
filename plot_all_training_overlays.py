@@ -225,6 +225,30 @@ RUNS = (
      "RECO-Level PFN at N=420: CaloConer Disabled, 300-Epoch Repeat",
      "reco_n420_calo_unconed/"
      "reco_n420_calo_unconed_e300_repeat.pdf"),
+    ("reco_pfn_results/"
+     "reco_n840_calo_unconed_val25_directlog_charged7_"
+     "stabilized_dropout_U_vs_R",
+     "RECO-Level PFN at N=840: CaloConer Disabled",
+     "reco_n840_calo_unconed/"
+     "reco_n840_calo_unconed_U_vs_R.pdf"),
+    ("reco_pfn_results/"
+     "reco_n840_calo_unconed_val25_directlog_charged7_"
+     "stabilized_dropout_null",
+     "RECO-Level PFN at N=840: CaloConer Disabled Null",
+     "reco_n840_calo_unconed/"
+     "reco_n840_calo_unconed_null.pdf"),
+    ("reco_pfn_results/"
+     "reco_n1260_calo_unconed_val25_directlog_charged7_"
+     "stabilized_dropout_U_vs_R",
+     "RECO-Level PFN at N=1260: CaloConer Disabled",
+     "reco_n1260_calo_unconed/"
+     "reco_n1260_calo_unconed_U_vs_R.pdf"),
+    ("reco_pfn_results/"
+     "reco_n1260_calo_unconed_val25_directlog_charged7_"
+     "stabilized_dropout_null",
+     "RECO-Level PFN at N=1260: CaloConer Disabled Null",
+     "reco_n1260_calo_unconed/"
+     "reco_n1260_calo_unconed_null.pdf"),
 )
 
 

@@ -12,7 +12,6 @@ from pathlib import Path
 SAMPLES = ("U", "R", "null_b")
 SPLITS = ("train", "val", "test")
 LIBRARY = {"U": "norm1", "R": "norm42", "null_b": "norm1"}
-BIB_FILES = {"U": 420, "R": 10, "null_b": 420}
 DIGI_OFFSET = {"U": 0, "R": 0, "null_b": 1_000_000}
 JOB_START = {"train": 0, "val": 100_000, "test": 300_000}
 EVENTS_PER_JOB = 50
@@ -23,13 +22,16 @@ def arguments():
     user = os.environ.get("USER", "")
     base = Path("/oscar/scratch") / user / "mucoll/libtest"
     parser = argparse.ArgumentParser(
-        description="Rerun N=420 DIGI and RECO with calorimeter coning disabled."
+        description="Run DIGI and RECO with calorimeter coning disabled."
     )
+    parser.add_argument("--n-files", type=int, default=420)
     parser.add_argument("--benchmark", action="store_true")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--time", default="08:00:00")
-    parser.add_argument("--memory", default="8G")
+    parser.add_argument("--keep-digi", action="store_true")
+    parser.add_argument("--time")
+    parser.add_argument("--memory")
+    parser.add_argument("--dependency")
     parser.add_argument("--pools", type=Path, default=base / "bib_pools_val25")
     parser.add_argument(
         "--train-val-source",
@@ -44,9 +46,27 @@ def arguments():
     parser.add_argument(
         "--outdir",
         type=Path,
-        default=base / "reco_n420_calo_unconed",
+        default=None,
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.n_files <= 0 or args.n_files % 42:
+        parser.error("--n-files must be a positive multiple of 42")
+    if args.n_files <= 420:
+        default_time, default_memory = "08:00:00", "8G"
+    elif args.n_files <= 840:
+        default_time, default_memory = "16:00:00", "24G"
+    else:
+        default_time, default_memory = "24:00:00", "48G"
+    args.time = args.time or default_time
+    args.memory = args.memory or default_memory
+    args.outdir = args.outdir or base / "reco_n{}_calo_unconed".format(
+        args.n_files
+    )
+    return args
+
+
+def bib_files(n_files, sample):
+    return n_files // 42 if sample == "R" else n_files
 
 
 def signal_sim(args, split, job_id):
@@ -66,10 +86,10 @@ def signal_sim(args, split, job_id):
     )
 
 
-def output_directory(outdir, sample, split, job_id):
+def output_directory(outdir, n_files, sample, split, job_id):
     return (
         outdir
-        / "reco_libtest_n420_{}".format(sample)
+        / "reco_libtest_n{}_{}".format(n_files, sample)
         / split
         / "job_{}".format(job_id)
     )
@@ -103,14 +123,17 @@ def make_rows(args):
             library = LIBRARY[sample]
             plus = args.pools / library / split / "MUPLUS"
             minus = args.pools / library / split / "MUMINUS"
-            require_pool(plus, BIB_FILES[sample])
-            require_pool(minus, BIB_FILES[sample])
+            number = bib_files(args.n_files, sample)
+            require_pool(plus, number)
+            require_pool(minus, number)
             for index in range(jobs_per_split):
                 job_id = JOB_START[split] + index
                 source = signal_sim(args, split, job_id)
                 if not source.is_file():
                     raise SystemExit("missing signal SIM: {}".format(source))
-                output = output_directory(outdir, sample, split, job_id)
+                output = output_directory(
+                    outdir, args.n_files, sample, split, job_id
+                )
                 complete = output / "complete"
                 reco = output / "reco_output_{}.edm4hep.root".format(job_id)
                 if (
@@ -124,6 +147,7 @@ def make_rows(args):
                 digi_seed = 42 + job_id + DIGI_OFFSET[sample]
                 rows.append(
                     {
+                        "n_files": args.n_files,
                         "sample": sample,
                         "split": split,
                         "chunk": index,
@@ -133,7 +157,7 @@ def make_rows(args):
                         "output_dir": output,
                         "bib_muplus": str(plus) + "/",
                         "bib_muminus": str(minus) + "/",
-                        "bib_files_per_polarity": BIB_FILES[sample],
+                        "bib_files_per_polarity": number,
                         "digi_seed": digi_seed,
                     }
                 )
@@ -162,7 +186,9 @@ def main():
     logs.mkdir(exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     kind = "benchmark" if args.benchmark else "production"
-    manifest = logs / "reco_calo_unconed_{}_{}.tsv".format(kind, stamp)
+    manifest = logs / "reco_n{}_calo_unconed_{}_{}.tsv".format(
+        args.n_files, kind, stamp
+    )
     with manifest.open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=rows[0].keys(), delimiter="\t")
         writer.writeheader()
@@ -173,17 +199,30 @@ def main():
         "sbatch",
         "--parsable",
         "--array=0-{}".format(shards - 1),
-        "--export=ALL,NUM_SHARDS={}".format(shards),
+        "--export=ALL,NUM_SHARDS={},KEEP_DIGI_OUTPUT={}".format(
+            shards, int(args.keep_digi)
+        ),
         "--time={}".format(args.time),
         "--mem={}".format(args.memory),
+    ]
+    if args.dependency:
+        command.append("--dependency={}".format(args.dependency))
+    command.extend([
         str(repo / "submit_reco_calo_unconed.slurm"),
         str(manifest),
-    ]
+    ])
     print("mode: {}".format(kind))
+    print("N: {}".format(args.n_files))
     print("manifest: {}".format(manifest))
     print("output: {}".format(outdir))
     print("logical chunks: {} ({} complete chunks skipped)".format(len(rows), skipped))
     print("array shards: {}".format(shards))
+    print(
+        "construction: U/null={} norm1 files per polarity; "
+        "R={} norm42 files per polarity".format(
+            bib_files(args.n_files, "U"), bib_files(args.n_files, "R")
+        )
+    )
     print(" ".join(command))
     if args.dry_run:
         return

@@ -489,6 +489,45 @@ one optimizer trajectory. It does not rerun the completed null. Reloading the
 150-epoch weights would not be an exact continuation because the original
 job saved model weights but not Adam's optimizer state.
 
+### Higher-occupancy unconed scan
+
+The unconed submitter also accepts N=840 and N=1260. All three sizes reuse
+the exact same 2,000 neutrino SIM events in each train, validation, and test
+partition. The frozen `bib_pools_val25` split, particle-gun directions,
+digitization seeds, track-enabled Pandora configuration, and disabled
+CaloConer setting remain fixed. Only the BIB overlay size changes:
+
+- N=840: 840 norm1 files or 20 norm42 files per beam polarity;
+- N=1260: 1,260 norm1 files or 30 norm42 files per beam polarity.
+
+Queue reconstruction, store construction, and main-plus-null PFN training for
+both sizes with one command:
+
+```bash
+python3 submit_reco_calo_unconed_scan.py
+```
+
+The chain is strictly sequential across sizes:
+
+```text
+N=840 RECO -> stores -> PFN -> N=1260 RECO -> stores -> PFN
+```
+
+Every arrow is an `afterok` dependency, so incomplete reconstruction cannot
+produce a store or train a model. Each size contains 360 logical 50-event
+chunks: 40 chunks for each of three classes and three source splits. The CPU
+production uses a 64-way array; each shard processes its assigned chunks
+sequentially. Training uses the same seven-feature EnergyFlow PFN,
+stabilized-dropout recipe, 2,000 events per class in each split, matched null,
+and 150-epoch cap as the final N=420 unconed result.
+
+The higher-N jobs retain RECO plus configuration, input, and timing
+provenance, but delete the job-local DIGI intermediate after RECO succeeds.
+The completed N=420 production used about 551 GiB for DIGI+RECO, of which 276
+GiB was RECO. Dropping DIGI is not a physics change and roughly halves the
+new scratch requirement. Pass `--keep-digi` to an individual production
+submission only if those intermediate files are specifically needed.
+
 Prepare immutable source pools:
 
 ```bash

@@ -24,6 +24,16 @@ grep -Fq 'RelTrackCollections = ["MergedTrackerHitsRelations"]' \
     "$MAIA/ParticleFlow/pandora.py"
 grep -Fq 'MergeMCParticles = False' "$MAIA/Overlay/overlay_BIB.py"
 
+REFERENCE_CONFIG=/oscar/scratch/$USER/mucoll/libtest/reco_n420_calo_unconed/reco_libtest_n420_U/train/job_0/config_sha256.txt
+if [ ! -f "$REFERENCE_CONFIG" ]; then
+    echo "missing N=420 configuration reference: $REFERENCE_CONFIG" >&2
+    exit 1
+fi
+if ! sha256sum --check --status "$REFERENCE_CONFIG"; then
+    echo "current MAIA configuration differs from the N=420 unconed production" >&2
+    exit 1
+fi
+
 echo "shard $SLURM_ARRAY_TASK_ID/$NUM_SHARDS; $TASKS logical chunks"
 for ((row = SLURM_ARRAY_TASK_ID + 1; row <= TASKS; row += NUM_SHARDS)); do
     apptainer exec --bind /oscar:/oscar "$IMAGE" \

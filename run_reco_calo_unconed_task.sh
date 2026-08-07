@@ -9,7 +9,7 @@ if [ -z "$LINE" ]; then
     exit 2
 fi
 
-IFS=$'\t' read -r SAMPLE SPLIT CHUNK JOB_ID NEVENTS SIGNAL_SIM OUTPUT \
+IFS=$'\t' read -r N_FILES SAMPLE SPLIT CHUNK JOB_ID NEVENTS SIGNAL_SIM OUTPUT \
     BIB_MUPLUS BIB_MUMINUS BIB_NUMBER DIGI_SEED <<< "$LINE"
 
 RECO_OUTPUT="$OUTPUT/reco_output_${JOB_ID}.edm4hep.root"
@@ -36,6 +36,7 @@ set -u
 export OMP_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1
 export MKL_NUM_THREADS=1
+KEEP_DIGI_OUTPUT=${KEEP_DIGI_OUTPUT:-0}
 
 WORK_ROOT=${CHAIN_WORK_BASE:-/tmp}
 WORKDIR=$(mktemp -d "$WORK_ROOT/reco_unconed_${SAMPLE}_${JOB_ID}.XXXXXX")
@@ -46,7 +47,7 @@ trap cleanup EXIT INT TERM
 cd "$WORKDIR"
 cp -r "$MUCOLL_CONFIG/$MUCOLL_CONFIG_NAME/PandoraSettings" ./
 
-echo "sample=$SAMPLE split=$SPLIT chunk=$CHUNK job_id=$JOB_ID events=$NEVENTS"
+echo "N=$N_FILES sample=$SAMPLE split=$SPLIT chunk=$CHUNK job_id=$JOB_ID events=$NEVENTS"
 echo "signal_sim=$SIGNAL_SIM"
 echo "bib_files_per_polarity=$BIB_NUMBER digi_seed=$DIGI_SEED"
 
@@ -76,6 +77,7 @@ mkdir -p "$OUTPUT"
 
 {
     echo "sample=$SAMPLE"
+    echo "n_files=$N_FILES"
     echo "split=$SPLIT"
     echo "chunk=$CHUNK"
     echo "job_id=$JOB_ID"
@@ -88,6 +90,7 @@ mkdir -p "$OUTPUT"
     echo "calo_coning=disabled"
     echo "merge_mc_particles=false"
     echo "pandora_tracks=SiTracks"
+    echo "digi_output_retained=$KEEP_DIGI_OUTPUT"
     echo "maia_commit=$(git -C "$MUCOLL_BENCHMARKS_PATH/configs/MAIAConfig" rev-parse HEAD 2>/dev/null || true)"
     echo "mucoll_slurm_commit=$(git -C "$REPO" rev-parse HEAD 2>/dev/null || true)"
 } > metadata.txt
@@ -105,9 +108,13 @@ sha256sum \
 POOL_ROOT=$(dirname "$(dirname "$(dirname "${BIB_MUPLUS%/}")")")
 sha256sum "$SIGNAL_SIM" "$POOL_ROOT/manifest.json" > input_sha256.txt
 
-mv digi_output.edm4hep.root \
-    "$OUTPUT/digi_output_${JOB_ID}.edm4hep.root"
 mv reco_output.edm4hep.root "$RECO_OUTPUT"
+if [ "$KEEP_DIGI_OUTPUT" -eq 1 ]; then
+    mv digi_output.edm4hep.root \
+        "$OUTPUT/digi_output_${JOB_ID}.edm4hep.root"
+else
+    rm -f digi_output.edm4hep.root
+fi
 mv metadata.txt timing.txt config_sha256.txt input_sha256.txt "$OUTPUT/"
 touch "$OUTPUT/complete"
 echo "published $OUTPUT"

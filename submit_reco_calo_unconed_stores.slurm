@@ -12,10 +12,15 @@
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
+N_FILES=${1:-420}
+if (( N_FILES <= 0 || N_FILES % 42 != 0 )); then
+    echo "N_FILES must be a positive multiple of 42" >&2
+    exit 2
+fi
 BASE=/oscar/scratch/$USER/mucoll/libtest
 ENV_DIR=/oscar/scratch/$USER/mucoll/envs/reco-store
-RECO_DIR=$BASE/reco_n420_calo_unconed
-STORE_DIR=$BASE/reco_n420_pfn_stores_calo_unconed_val25
+RECO_DIR=$BASE/reco_n${N_FILES}_calo_unconed
+STORE_DIR=$BASE/reco_n${N_FILES}_pfn_stores_calo_unconed_val25
 POOL_MANIFEST=$BASE/bib_pools_val25/manifest.json
 
 if [ ! -x "$ENV_DIR/bin/python" ]; then
@@ -28,7 +33,7 @@ export OPENBLAS_NUM_THREADS=$SLURM_CPUS_PER_TASK
 export MKL_NUM_THREADS=$SLURM_CPUS_PER_TASK
 
 "$ENV_DIR/bin/python" make_reco_libtest_stores.py \
-    --n-files 420 \
+    --n-files "$N_FILES" \
     --reco-dir "$RECO_DIR" \
     --train-events 2000 \
     --val-events 2000 \

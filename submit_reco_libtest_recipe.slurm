@@ -91,13 +91,13 @@ case "$STUDY" in
         RUN_NULL=0
         ;;
     calo_unconed)
-        if [ "$N_FILES" -ne 420 ]; then
-            echo "calo_unconed is currently defined only for N=420" >&2
-            exit 2
+        STORE_NAME=reco_n${N_FILES}_pfn_stores_calo_unconed_val25
+        if [ "$N_FILES" -eq 420 ]; then
+            DATASET_TAG=calo_unconed_val25
+        else
+            DATASET_TAG=n${N_FILES}_calo_unconed_val25
         fi
-        STORE_NAME=reco_n420_pfn_stores_calo_unconed_val25
-        DATASET_TAG=calo_unconed_val25
-        LABEL_PREFIX=reco_n420_calo_unconed_val25_directlog_charged7
+        LABEL_PREFIX=reco_n${N_FILES}_calo_unconed_val25_directlog_charged7
         VAL_EVENTS=2000
         TEST_EVENTS=2000
         ;;
