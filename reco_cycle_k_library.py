@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import random
 import sys
 from pathlib import Path
 
@@ -16,11 +17,21 @@ SPLITS = ("train", "val", "test")
 REUSE_FACTORS = (7, 21)
 ROTATION_SEED = 1701
 ANGLE_SLOTS = 42
+SOURCE_CYCLE_COUNT = 6666
+SOURCE_SPLIT_SEED = 12345
+SOURCE_EXCLUDED_CYCLES = (
+    100, 101, 105, 106, 118, 143, 144, 146, 147, 148, 149, 6291
+)
+SOURCE_SPLIT_FRACTIONS = {"train": 0.5, "val": 0.25, "test": 0.25}
+SOURCE_SPLIT_SHA256 = "51a3cdc0b3453ee6079fb06f5c7b823c81e4e5f5b2f4c5c6a549c89159653311"
 
 
 def arguments():
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="command", required=True)
+
+    source = commands.add_parser("make-source-split")
+    source.add_argument("--output", required=True)
 
     prepare = commands.add_parser("prepare")
     prepare.add_argument("--source-pool-manifest", required=True)
@@ -61,6 +72,57 @@ def file_digest(path):
         for block in iter(lambda: handle.read(1 << 20), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def split_digest(splits):
+    payload = json.dumps(
+        splits, sort_keys=True, separators=(",", ":")
+    ).encode()
+    return hashlib.sha256(payload).hexdigest()
+
+
+def frozen_source_split():
+    excluded = set(SOURCE_EXCLUDED_CYCLES)
+    cycles = [cycle for cycle in range(SOURCE_CYCLE_COUNT) if cycle not in excluded]
+    shuffled = list(cycles)
+    random.Random(SOURCE_SPLIT_SEED).shuffle(shuffled)
+    n_val = round(SOURCE_SPLIT_FRACTIONS["val"] * len(shuffled))
+    n_test = round(SOURCE_SPLIT_FRACTIONS["test"] * len(shuffled))
+    n_train = len(shuffled) - n_val - n_test
+    splits = {
+        "train": shuffled[:n_train],
+        "val": shuffled[n_train:n_train + n_val],
+        "test": shuffled[n_train + n_val:],
+    }
+    digest = split_digest(splits)
+    if digest != SOURCE_SPLIT_SHA256:
+        raise RuntimeError("frozen source split digest changed: {}".format(digest))
+    return {
+        "schema": "reco-cycle-source-split-v1",
+        "construction": "exact source-cycle split used by the OSCAR val25 K=1 baseline",
+        "excluded_cycles": list(SOURCE_EXCLUDED_CYCLES),
+        "n_paired_cycles": len(cycles),
+        "cycles": cycles,
+        "split_seed": SOURCE_SPLIT_SEED,
+        "split_fractions": SOURCE_SPLIT_FRACTIONS,
+        "split_sha256": digest,
+        "splits": splits,
+    }
+
+
+def write_immutable_json(path, value):
+    path = Path(path).resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(value, indent=2) + "\n"
+    if path.exists():
+        if path.read_text() != text:
+            raise SystemExit("existing file differs: {}".format(path))
+        print("validated existing {}".format(path))
+        return
+    temporary = path.with_name("." + path.name + ".partial")
+    temporary.write_text(text)
+    os.replace(temporary, path)
+    print("wrote {}".format(path))
 
 
 def bank_index(path):
@@ -151,6 +213,9 @@ def make_manifest(source_path, plus_path, minus_path):
         "source_pool_manifest_sha256": file_digest(source_path),
         "source_split_seed": source.get("split_seed"),
         "source_split_fractions": source.get("split_fractions"),
+        "source_split_sha256": source.get("split_sha256", split_digest({
+            split: splits[split]["cycles"] for split in SPLITS
+        })),
         "excluded_cycles": source.get("excluded_cycles", []),
         "n_paired_cycles": source.get("n_paired_cycles", len(all_cycles)),
         "source_identity_sha256": banks["MUPLUS"]["identity_sha256"],
@@ -172,16 +237,7 @@ def prepare(args):
     manifest = make_manifest(
         args.source_pool_manifest, args.muplus_bank, args.muminus_bank
     )
-    text = json.dumps(manifest, indent=2) + "\n"
-    if output.exists():
-        if output.read_text() != text:
-            raise SystemExit("existing manifest differs: {}".format(output))
-        print("validated existing {}".format(output))
-    else:
-        temporary = output.with_name("." + output.name + ".partial")
-        temporary.write_text(text)
-        os.replace(temporary, output)
-        print("wrote {}".format(output))
+    write_immutable_json(output, manifest)
     print_manifest(manifest)
 
 
@@ -386,7 +442,12 @@ def write_gen(args):
 
 def main():
     args = arguments()
-    if args.command == "prepare":
+    if args.command == "make-source-split":
+        source = frozen_source_split()
+        write_immutable_json(args.output, source)
+        print("source cycles: {}".format(source["n_paired_cycles"]))
+        print("split sha256: {}".format(source["split_sha256"]))
+    elif args.command == "prepare":
         prepare(args)
     elif args.command == "write-gen":
         write_gen(args)

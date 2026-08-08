@@ -23,6 +23,7 @@ def parse_args():
     parser.add_argument("--output", required=True)
     parser.add_argument("--workers", type=int, default=32)
     parser.add_argument("--exclude-cycle", type=int, action="append", default=[])
+    parser.add_argument("--polarity", choices=("MUPLUS", "MUMINUS"))
     return parser.parse_args()
 
 
@@ -143,6 +144,8 @@ def main():
         output.attrs["input_dir"] = args.input_dir
         output.attrs["collection"] = collection_seen or ""
         output.attrs["schema"] = "split-mother-gen-v1"
+        if args.polarity:
+            output.attrs["polarity"] = args.polarity
 
     counts = np.diff(np.asarray(mother_offsets))
     print("done: {} cycles, {:,} mothers, {:,} particles; median {:.0f} particles/mother -> {}"

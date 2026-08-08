@@ -411,6 +411,48 @@ reconstruction. `submit_reco_cycle_k_stores.slurm` links the completed
 unrotated K=1 stores rather than rebuilding them, and
 `submit_reco_cycle_k_train.slurm` trains K=1 versus K=7 or K=21.
 
+#### Packed Perlmutter GEN and SIM production
+
+Perlmutter is the production site for the cycle-preserving K=7 and K=21 GEN
+and SIM libraries. The output root is `$PSCRATCH/mucoll/reco_cycle_k`. The
+existing split-mother GEN library is converted into compact MUPLUS and
+MUMINUS mother banks; FLUKA is not rerun.
+
+The prepare stage recreates the exact source split used by the OSCAR K=1
+`val25` baseline: seed 12345, 3,326/1,664/1,664 cycles, and split digest
+`51a3cdc0b3453ee6079fb06f5c7b823c81e4e5f5b2f4c5c6a549c89159653311`.
+This is intentionally not recalculated from Perlmutter's local norm42
+inventory because the two sites are missing different source files.
+
+One submitter queues preparation, a four-case debug smoke, one packed GEN
+node, and a two-node packed ddsim job:
+
+```bash
+cd /global/u2/h/hgreen/mucoll/mucoll-slurm
+python3 submit_perlmutter_reco_cycle_k.py --dry-run
+python3 submit_perlmutter_reco_cycle_k.py
+```
+
+The production jobs run 128 independent single-threaded workers per CPU node,
+one per physical core. Each worker receives two Slurm CPUs because Perlmutter
+counts the two hardware threads of a physical core separately. Every output is
+written to a temporary path, checked, and then published atomically. Completed
+GEN and SIM files are skipped, so rerunning the submitter after a timeout
+resumes rather than starts over.
+
+Monitor expected source cycles rather than Slurm task counts:
+
+```bash
+python3 reco_cycle_k_perlmutter.py status
+squeue --me -o "%.18i %.24j %.10T %.12M %.30R"
+```
+
+Per-rank output is under `logs/cycle_k_{gen,sim}_JOBID/`. The debug smoke
+records elapsed time and maximum resident memory separately for K=7/K=21 and
+MUPLUS/MUMINUS. This packed production produces only GEN and SIM; downstream
+unconed DIGI/RECO is launched after deciding whether to keep that stage on
+Perlmutter or transfer the validated SIM library to OSCAR.
+
 The following older commands belong only to the separate 140-mother control
 construction. They build an unrotated 140-mother K=1 library to match the
 already-produced 140-mother K=7 and K=21 files:

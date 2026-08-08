@@ -8,6 +8,7 @@ import h5py
 import numpy as np
 
 import reco_cycle_k_library as library
+import reco_cycle_k_perlmutter as perlmutter
 from gen_mother_make_fixed_reuse_store import cycle_angles as gen_cycle_angles
 from submit_reco_cycle_k_unconed import cycle_ids
 
@@ -74,6 +75,39 @@ class CycleKLibraryTest(unittest.TestCase):
             )
             self.assertEqual(manifest["construction"],
                              "one synthetic GEN and SIM file per original FLUKA source cycle")
+
+    def test_frozen_source_split_matches_oscar_baseline(self):
+        source = library.frozen_source_split()
+        self.assertEqual(source["n_paired_cycles"], 6654)
+        self.assertEqual(
+            [len(source["splits"][split]) for split in library.SPLITS],
+            [3326, 1664, 1664],
+        )
+        self.assertEqual(
+            source["splits"]["train"][:10],
+            [6498, 4712, 798, 1281, 6364, 446, 5265, 4984, 3638, 5329],
+        )
+        self.assertEqual(source["split_sha256"], library.SOURCE_SPLIT_SHA256)
+        self.assertNotIn(6291, source["cycles"])
+
+    def test_perlmutter_work_items_cover_every_cycle_and_k(self):
+        source = library.frozen_source_split()
+        manifest = {
+            "splits": {
+                split: {"cycles": source["splits"][split]}
+                for split in library.SPLITS
+            }
+        }
+        base = Path("/tmp/cycle-k")
+        items = list(perlmutter.work_items(base, manifest))
+        self.assertEqual(len(items), 6654 * 2 * 2)
+        first = items[0]
+        self.assertEqual(first[:4], (7, "train", "MUPLUS", 6498))
+        self.assertEqual(items[1][:4], (21, "train", "MUPLUS", 6498))
+        self.assertEqual(
+            first[4],
+            base / "GEN/k7/train/MUPLUS/bib_gen_cycle_006498.edm4hep.root",
+        )
 
     def test_nested_coherent_rotations(self):
         particles = {

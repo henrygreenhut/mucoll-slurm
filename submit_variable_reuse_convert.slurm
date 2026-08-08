@@ -28,4 +28,5 @@ python3 gen_mother_make_store.py \
     --input-dir "$INPUT_DIR" \
     --output "$STORE_DIR/gen_split_mothers_${POLARITY}.h5" \
     --workers "$WORKERS" \
+    --polarity "$POLARITY" \
     --exclude-cycle 6291
