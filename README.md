@@ -369,10 +369,51 @@ K=1 is reconstructed once and shared by all four comparisons. A null does not
 require new detector production: labels are deterministically permuted within
 each split over the same two physical K samples.
 
-For the corrected unconed native-1 versus K=7 and K=21 production, preserve
-the previous rotated `k1` files and build an explicitly named `k1_native`
-library. The existing K=7 and K=21 SIM files are reused because calorimeter
-coning is applied during DIGI, after SIM:
+The 140-mother construction above is an exact-mother-count control study. It
+does not preserve the source-cycle file unit used by the production norm1 and
+norm42 libraries.
+
+### Source-cycle-preserving variable-K RECO study
+
+The primary extension of the production N=420 RECO comparison keeps one
+synthetic GEN and SIM file per original FLUKA source cycle. The existing
+unrotated norm1 reconstruction remains the K=1 class. For K=7 and K=21, every
+visible mother in a selected source cycle is copied K times, all daughters of
+one copy share one azimuthal angle, and the complete cycle is passed through
+ddsim. Each reconstructed neutrino record overlays, per polarity:
+
+| K | source-cycle SIM files |
+|---:|---:|
+| 1 | 420 |
+| 7 | 60 |
+| 21 | 20 |
+
+The frozen `bib_pools_val25` cycle partition, neutrino SIM inputs, DIGI seeds,
+disabled CaloConer, and track-enabled Pandora configuration are shared with the
+completed unconed production study. Outputs live under `reco_cycle_k` and do
+not modify the earlier 140-mother libraries under `reco_variable_k`.
+
+Prepare and smoke-test the cycle-preserving construction before full
+production:
+
+```bash
+prepare=$(sbatch --parsable submit_reco_cycle_k_prepare.slurm)
+smoke=$(sbatch --parsable --dependency=afterok:"$prepare" \
+  submit_reco_cycle_k_smoke.slurm)
+printf 'prepare=%s smoke=%s\n' "$prepare" "$smoke"
+```
+
+After the smoke output is validated, run K=7 and K=21 for both polarities
+through GEN and SIM. `python3 reco_cycle_k_status.py` reports completion by
+source partition. Once SIM is complete, `python3
+submit_reco_cycle_k_unconed.py` creates only the new K=7 and K=21
+reconstruction. `submit_reco_cycle_k_stores.slurm` links the completed
+unrotated K=1 stores rather than rebuilding them, and
+`submit_reco_cycle_k_train.slurm` trains K=1 versus K=7 or K=21.
+
+The following older commands belong only to the separate 140-mother control
+construction. They build an unrotated 140-mother K=1 library to match the
+already-produced 140-mother K=7 and K=21 files:
 
 ```bash
 prepare=$(sbatch --parsable submit_reco_variable_k_prepare.slurm manifest_native1)
