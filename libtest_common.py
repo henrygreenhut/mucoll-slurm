@@ -99,6 +99,8 @@ FEATURE_SETS = {
     "paper": ["logpt", "theta", "cosphi", "sinphi"] + PDG_ONEHOT,
     "expanded_no_position": ["logpt", "theta", "cosphi", "sinphi",
                              "loge", "asinh_t"] + PDG_ONEHOT,
+    "expanded_no_phi": ["logpt", "theta", "loge", "asinh_t",
+                        "asinh_vz", "asinh_vr"] + PDG_ONEHOT,
     "expanded": ["logpt", "theta", "cosphi", "sinphi", "loge",
                  "asinh_t", "asinh_vz", "asinh_vr"] + PDG_ONEHOT,
 }

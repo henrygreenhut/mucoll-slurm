@@ -48,6 +48,39 @@ class LibtestClassLayoutTests(unittest.TestCase):
 
 
 class LibtestNormalizationTests(unittest.TestCase):
+    def test_expanded_no_phi_removes_only_azimuth(self):
+        expanded = lc.feature_names("expanded")
+        no_phi = lc.feature_names("expanded_no_phi")
+        self.assertEqual(
+            no_phi,
+            [name for name in expanded if name not in ("cosphi", "sinphi")],
+        )
+
+    def test_expanded_no_phi_is_invariant_under_z_rotation(self):
+        raw = {
+            "px": np.asarray([1.0, -2.0], np.float32),
+            "py": np.asarray([2.0, 1.0], np.float32),
+            "pz": np.asarray([3.0, -4.0], np.float32),
+            "E": np.asarray([5.0, 6.0], np.float32),
+            "t": np.asarray([7.0, 8.0], np.float32),
+            "vx": np.asarray([9.0, -10.0], np.float32),
+            "vy": np.asarray([11.0, 12.0], np.float32),
+            "vz": np.asarray([13.0, -14.0], np.float32),
+            "pdg": np.asarray([22, 11], np.int32),
+        }
+        angle = 0.73
+        cosine, sine = np.cos(angle), np.sin(angle)
+        rotated = {name: values.copy() for name, values in raw.items()}
+        rotated["px"] = cosine * raw["px"] - sine * raw["py"]
+        rotated["py"] = sine * raw["px"] + cosine * raw["py"]
+        rotated["vx"] = cosine * raw["vx"] - sine * raw["vy"]
+        rotated["vy"] = sine * raw["vx"] + cosine * raw["vy"]
+        np.testing.assert_allclose(
+            lc.build_features(raw, "expanded_no_phi"),
+            lc.build_features(rotated, "expanded_no_phi"),
+            rtol=1e-6, atol=1e-6,
+        )
+
     def test_training_normalization_streams_units_without_changing_statistics(self):
         class Store:
             def __init__(self, offset):
