@@ -184,23 +184,25 @@ def plot_lines(densities, bins, count, output):
 
 def plot_heatmaps(densities, bins, output):
     extent = (bins[0], bins[-1], len(densities[0]), 1)
-    maximum = max(np.quantile(values, 0.995) for values in densities)
+    uniform = 1.0 / (2.0 * np.pi)
+    residuals = [values - uniform for values in densities]
+    limit = max(np.quantile(np.abs(values), 0.995) for values in residuals)
     fig, axes = plt.subplots(1, 2, figsize=(11, 6), sharex=True, sharey=True)
 
     for axis, label, values in zip(
-        axes, ("Native K=1", "Synthetic K=1"), densities
+        axes, ("Native K=1", "Synthetic K=1"), residuals
     ):
         image = axis.imshow(
             values, aspect="auto", interpolation="nearest", origin="upper",
-            extent=extent, cmap="viridis", vmin=0.0, vmax=maximum
+            extent=extent, cmap="RdBu_r", vmin=-limit, vmax=limit
         )
         axis.set_title(label)
         axis.set_xlabel(r"Particle $\phi$ [rad]")
 
     axes[0].set_ylabel("Held-out test construction")
     colorbar = fig.colorbar(image, ax=axes, pad=0.02)
-    colorbar.set_label("Particle density")
-    fig.suptitle("GEN N=420 azimuthal distributions for all test constructions")
+    colorbar.set_label(r"Particle density $- 1/(2\pi)$ [rad$^{-1}$]")
+    fig.suptitle("GEN N=420 azimuthal deviation from uniform")
     fig.subplots_adjust(left=0.08, right=0.9, bottom=0.1, top=0.9, wspace=0.08)
     save(fig, output / "all_test_heatmap")
 
