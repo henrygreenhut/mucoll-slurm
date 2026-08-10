@@ -14,17 +14,18 @@
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
-if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
-    echo "usage: $0 {5|7} {main|null} [train|smoke]"
+if [ "$#" -lt 2 ] || [ "$#" -gt 4 ]; then
+    echo "usage: $0 {1|5|7} {main|null} [train|smoke] [exclude-muons-above-gev]"
     exit 2
 fi
 
 K=$1
 RUN=$2
 MODE=${3:-train}
+EXCLUDE_MUONS_ABOVE_GEV=${4:-0}
 case "$K" in
-    5|7) ;;
-    *) echo "reuse factor must be 5 or 7"; exit 2 ;;
+    1|5|7) ;;
+    *) echo "reuse factor must be 1, 5, or 7"; exit 2 ;;
 esac
 case "$RUN" in
     main) NULL_ARG= ;;
@@ -49,6 +50,8 @@ for store in "$NORM1_STORE" "$REUSE_STORE"; do
 done
 
 LABEL="n420_fixed_k1_vs_k${K}_scaled_lr1e-4_decay80_mseed1_pointonly"
+[ "$EXCLUDE_MUONS_ABOVE_GEV" != 0 ] && \
+    LABEL="${LABEL}_exclude_muons_gt${EXCLUDE_MUONS_ABOVE_GEV}gev"
 [ "$RUN" = null ] && LABEL="${LABEL}_null"
 [ "$MODE" = smoke ] && LABEL="${LABEL}_smoke"
 
@@ -64,6 +67,7 @@ COMMON_ARGS=(
     --f-sizes 200,200,200
     --arch energyflow
     --features expanded
+    --exclude-muons-above-gev "$EXCLUDE_MUONS_ABOVE_GEV"
     --lr 1e-4
     --warmup-epochs 1
     --decay-epochs 80
@@ -87,12 +91,30 @@ if [ "$MODE" = smoke ]; then
         --skip-evaluation
     )
 elif [ "$RUN" = null ]; then
+    NULL_EPOCHS=40
+    NULL_MAX_MINUTES=1400
+    if [ "$K" = 1 ]; then
+        NULL_EPOCHS=20
+        NULL_MAX_MINUTES=225
+    fi
     RUN_ARGS=(
         --units-per-epoch 500
         --val-units 300
-        --epochs 40
+        --epochs "$NULL_EPOCHS"
         --patience 8
         --min-epochs 0
+        --eval-point-units 300
+        --eval-bootstrap-reps 0
+        --skip-disjoint-check
+        --max-minutes "$NULL_MAX_MINUTES"
+    )
+elif [ "$K" = 1 ]; then
+    RUN_ARGS=(
+        --units-per-epoch 500
+        --val-units 300
+        --epochs 55
+        --patience 15
+        --min-epochs 55
         --eval-point-units 300
         --eval-bootstrap-reps 0
         --skip-disjoint-check
@@ -113,5 +135,6 @@ else
 fi
 
 echo "label=$LABEL native_unrotated_class=true class_a=420_cycles class_b=$((420 / K))_fixed_rotated_cycles"
+echo "exclude |PDG|=13 above: $EXCLUDE_MUONS_ABOVE_GEV GeV (0 = disabled)"
 apptainer exec --nv "$NGC_TENSORFLOW_CONTAINER" \
     python -u pfn_libtest_train.py "${COMMON_ARGS[@]}" "${RUN_ARGS[@]}"

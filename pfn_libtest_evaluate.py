@@ -148,9 +148,11 @@ def main():
     dummy_splits_b = {"test": pool_b}
     samplers = [
         UnitSampler(store_a, dummy_splits_a, files_a,
-                    cfg(config, "features", "paper")),
+                    cfg(config, "features", "paper"),
+                    cfg(config, "exclude_muons_above_gev", 0.0)),
         UnitSampler(store_b, dummy_splits_b, files_b,
-                    cfg(config, "features", "paper")),
+                    cfg(config, "features", "paper"),
+                    cfg(config, "exclude_muons_above_gev", 0.0)),
     ]
     mean, std, latent_scale = lc.load_norm_stats(stats_path)
     # Read the actual architecture used for this checkpoint, not the
@@ -179,6 +181,8 @@ def main():
         "clone_factor": clone_factor,
         "null_test": null_test,
         "null_source": null_source,
+        "exclude_muons_above_gev": cfg(
+            config, "exclude_muons_above_gev", 0.0),
         "split_fracs": split_fracs,
         "n_paired_test_cycles": int(len(test_indices)),
         "point_units_per_class": args.point_units,

@@ -174,6 +174,11 @@ def parse_args():
                              "meant to be realistic (reco-level features "
                              "would be smeared); see FEATURE_SETS in "
                              "libtest_common.py")
+    parser.add_argument(
+        "--exclude-muons-above-gev", type=float, default=0.0,
+        help="remove particles with |PDG|=13 and E above this threshold "
+             "before normalization and feature construction; 0 disables "
+             "the cut (default: 0)")
     # --- architecture ----------------------------------------------------
     # latent_scale=none (raw, unnormalized sum) is the one most prone to
     # the training collapse this project has spent a lot of time
@@ -316,17 +321,31 @@ def parse_args():
     return args
 
 
+def exclude_high_energy_muons(raw, threshold_gev):
+    if threshold_gev <= 0:
+        return raw
+    keep = ~((np.abs(raw["pdg"]) == 13) & (raw["E"] > threshold_gev))
+    return {name: values[keep] for name, values in raw.items()}
+
+
 class UnitSampler:
     """Builds (features, label) units for one class from one store."""
 
-    def __init__(self, store, positions_by_split, files_per_unit, feature_set="paper"):
+    def __init__(self, store, positions_by_split, files_per_unit,
+                 feature_set="paper", exclude_muons_above_gev=0.0):
         self.store = store
         self.positions = positions_by_split
         self.files_per_unit = files_per_unit
         self.feature_set = feature_set
+        self.exclude_muons_above_gev = exclude_muons_above_gev
+
+    def raw(self, file_positions):
+        arrays = self.store.file_arrays(file_positions)
+        return exclude_high_energy_muons(
+            arrays, self.exclude_muons_above_gev)
 
     def build(self, file_positions, mean, std):
-        raw = self.store.file_arrays(file_positions)
+        raw = self.raw(file_positions)
         feats = lc.build_features(raw, feature_set=self.feature_set)
         return (feats - mean) / std
 
@@ -353,7 +372,7 @@ def sample_normalization_stats(samplers, units_per_class, rng):
         for sampler in samplers:
             for _ in range(units_per_class):
                 positions = sampler.random_unit(rng, "train")
-                raw = sampler.store.file_arrays(positions)
+                raw = sampler.raw(positions)
                 features = lc.build_features(
                     raw, feature_set=sampler.feature_set)
                 del raw
@@ -498,6 +517,8 @@ def main():
         raise SystemExit("--min-lr must be between zero and --lr")
     if args.progress_every < 0:
         raise SystemExit("--progress-every must be non-negative")
+    if args.exclude_muons_above_gev < 0:
+        raise SystemExit("--exclude-muons-above-gev must be non-negative")
     steps_per_epoch = 2 * args.units_per_epoch // effective_batch_size
     args.warmup_steps = round(args.warmup_epochs * steps_per_epoch)
     args.decay_steps = round(args.decay_epochs * steps_per_epoch)
@@ -529,8 +550,10 @@ def main():
     split_b = {k: pos_b[v] for k, v in splits.items()}
 
     samplers = [
-        UnitSampler(store_a, split_a, files_a, args.features),
-        UnitSampler(store_b, split_b, files_b, args.features),
+        UnitSampler(store_a, split_a, files_a, args.features,
+                    args.exclude_muons_above_gev),
+        UnitSampler(store_b, split_b, files_b, args.features,
+                    args.exclude_muons_above_gev),
     ]
     for cls, sampler in enumerate(samplers):
         for split_name, positions in sampler.positions.items():

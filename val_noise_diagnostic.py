@@ -99,9 +99,11 @@ def main():
 
     samplers = [
         UnitSampler(store_a, {"val": pos_a[val_idx]}, files_a,
-                    config.get("features", "paper")),
+                    config.get("features", "paper"),
+                    config.get("exclude_muons_above_gev", 0.0)),
         UnitSampler(store_b, {"val": pos_b[val_idx]},
-                   files_b, config.get("features", "paper")),
+                   files_b, config.get("features", "paper"),
+                   config.get("exclude_muons_above_gev", 0.0)),
     ]
 
     if arch == "energyflow":

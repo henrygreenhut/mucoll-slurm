@@ -48,6 +48,25 @@ class LibtestClassLayoutTests(unittest.TestCase):
 
 
 class LibtestNormalizationTests(unittest.TestCase):
+    def test_high_energy_muon_cut_is_applied_before_features(self):
+        raw = {
+            "px": np.arange(4, dtype=np.float32),
+            "py": np.arange(4, dtype=np.float32),
+            "pz": np.arange(4, dtype=np.float32),
+            "E": np.asarray([4.0, 6.0, 8.0, 9.0], dtype=np.float32),
+            "t": np.arange(4, dtype=np.float32),
+            "vx": np.arange(4, dtype=np.float32),
+            "vy": np.arange(4, dtype=np.float32),
+            "vz": np.arange(4, dtype=np.float32),
+            "pdg": np.asarray([13, -13, 11, 13], dtype=np.int32),
+        }
+
+        filtered = file_trainer.exclude_high_energy_muons(raw, 5.0)
+
+        np.testing.assert_array_equal(filtered["E"], [4.0, 8.0])
+        np.testing.assert_array_equal(filtered["pdg"], [13, 11])
+        self.assertIs(file_trainer.exclude_high_energy_muons(raw, 0.0), raw)
+
     def test_expanded_no_phi_removes_only_azimuth(self):
         expanded = lc.feature_names("expanded")
         no_phi = lc.feature_names("expanded_no_phi")

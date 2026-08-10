@@ -12,14 +12,14 @@ set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
 if [ "$#" -ne 1 ]; then
-    echo "usage: $0 {5|7}"
+    echo "usage: $0 {1|5|7}"
     exit 2
 fi
 
 K=$1
 case "$K" in
-    5|7) ;;
-    *) echo "reuse factor must be 5 or 7"; exit 2 ;;
+    1|5|7) ;;
+    *) echo "reuse factor must be 1, 5, or 7"; exit 2 ;;
 esac
 
 module load ngc-tensorflow-container/25.02-tf2-py3-azkb
