@@ -25,6 +25,7 @@ SPLIT_FRACS = (0.50, 0.25, 0.25)
 DATA_SEED = 1701
 N_EXAMPLES = 25
 OUT_PNG = "plots/bib_example_unit_feature_plots.png"
+THETA_OUT = "plots/bib_example_unit_theta_degrees"
 
 LABEL0 = "unique mothers"
 LABEL1 = "42x within-event reuse"
@@ -125,6 +126,18 @@ def plot_multiplicity(ax, multiplicities0, multiplicities1):
     ax.set_xlabel("particles per pseudo-event")
 
 
+def plot_theta_degrees(first, second):
+    fig, ax = plt.subplots(figsize=(7, 5))
+    bins = np.linspace(0, 180, 81)
+    draw_histogram(ax, np.degrees(first), np.degrees(second), bins)
+    ax.set_xlabel(r"Polar angle $\theta$ [deg]")
+    ax.legend(frameon=False)
+    fig.tight_layout()
+    fig.savefig(f"{THETA_OUT}.pdf")
+    fig.savefig(f"{THETA_OUT}.png", dpi=180)
+    plt.close(fig)
+
+
 def main():
     norm1, norm42, unique, reused = build_samplers()
     rng = np.random.default_rng(DATA_SEED)
@@ -157,6 +170,10 @@ def main():
     plot_particle_categories(axes[2, 1], features0, features1, columns)
     plot_multiplicity(axes[2, 2], multiplicities0, multiplicities1)
 
+    plot_theta_degrees(
+        features0[:, columns["theta"]],
+        features1[:, columns["theta"]])
+
     handles, labels = axes[0, 0].get_legend_handles_labels()
     fig.legend(
         handles, labels, loc="upper center", ncol=2, frameon=False,
@@ -178,6 +195,7 @@ def main():
     print(f"{LABEL0}: {len(features0):,} particles")
     print(f"{LABEL1}: {len(features1):,} particles")
     print(f"chart -> {OUT_PNG}")
+    print(f"charts -> {THETA_OUT}.pdf, {THETA_OUT}.png")
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 
 ROOT = Path(__file__).resolve().parent
 INPUT = ROOT / "phi_anisotropy_out" / "energetic_bib_MUPLUS.npz"
-OUTPUT = ROOT / "plots" / "high_energy_muon_theta_eta_vs_phi"
+OUTPUT = ROOT / "plots"
 ENERGY_MIN = 5.0
 
 
@@ -34,6 +34,30 @@ def format_phi_axis(axis):
     axis.spines[["top", "right"]].set_visible(False)
 
 
+def save_plot(phi, vertical, pdg, ylabel, name):
+    samples = [
+        (pdg == -13, r"$\mu^+$", "#D55E00"),
+        (pdg == 13, r"$\mu^-$", "#0072B2"),
+    ]
+    figure, axis = plt.subplots(figsize=(6.5, 4.6))
+    for mask, label, color in samples:
+        axis.scatter(
+            phi[mask], vertical[mask], s=24, alpha=0.65,
+            color=color, edgecolors="none", label=f"{label} ({mask.sum()})"
+        )
+    axis.set_ylabel(ylabel)
+    axis.set_title(rf"MUPLUS GEN BIB muons with $E>{ENERGY_MIN:g}$ GeV")
+    axis.legend(frameon=False)
+    format_phi_axis(axis)
+    figure.tight_layout()
+    path = OUTPUT / name
+    figure.savefig(path.with_suffix(".pdf"), bbox_inches="tight")
+    figure.savefig(path.with_suffix(".png"), dpi=220, bbox_inches="tight")
+    plt.close(figure)
+    print(f"wrote {path.with_suffix('.pdf')}")
+    print(f"wrote {path.with_suffix('.png')}")
+
+
 def main():
     data = np.load(INPUT)
     selected = (data["E"] > ENERGY_MIN) & (np.abs(data["pdg"]) == 13)
@@ -43,42 +67,16 @@ def main():
     pdg = data["pdg"][selected]
 
     plt.rcParams["font.family"] = "serif"
-    figure, axes = plt.subplots(1, 2, figsize=(11.5, 4.5), sharex=True)
-
-    samples = [
-        (pdg == -13, r"$\mu^+$", "#D55E00"),
-        (pdg == 13, r"$\mu^-$", "#0072B2"),
-    ]
-    for mask, label, color in samples:
-        axes[0].scatter(
-            phi[mask], theta[mask], s=24, alpha=0.65,
-            color=color, edgecolors="none", label=f"{label} ({mask.sum()})"
-        )
-        axes[1].scatter(
-            phi[mask], eta[mask], s=24, alpha=0.65,
-            color=color, edgecolors="none"
-        )
-
-    axes[0].set_ylabel(r"Polar angle $\theta$ [deg]")
-    axes[1].set_ylabel(r"Pseudorapidity $\eta$")
-    axes[0].set_title(r"$\theta$ versus $\phi$")
-    axes[1].set_title(r"$\eta$ versus $\phi$")
-    axes[0].legend(frameon=False, loc="upper center")
-    for axis in axes:
-        format_phi_axis(axis)
-
-    figure.suptitle(
-        rf"Native MUPLUS BIB muons with $E>{ENERGY_MIN:g}$ GeV"
+    OUTPUT.mkdir(parents=True, exist_ok=True)
+    save_plot(
+        phi, theta, pdg, r"Polar angle $\theta$ [deg]",
+        "high_energy_muon_theta_vs_phi"
     )
-    figure.tight_layout()
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    figure.savefig(OUTPUT.with_suffix(".pdf"), bbox_inches="tight")
-    figure.savefig(OUTPUT.with_suffix(".png"), dpi=220, bbox_inches="tight")
-    plt.close(figure)
-
+    save_plot(
+        phi, eta, pdg, r"Pseudorapidity $\eta$",
+        "high_energy_muon_eta_vs_phi"
+    )
     print(f"selected {len(phi)} muons")
-    print(f"wrote {OUTPUT.with_suffix('.pdf')}")
-    print(f"wrote {OUTPUT.with_suffix('.png')}")
 
 
 if __name__ == "__main__":
