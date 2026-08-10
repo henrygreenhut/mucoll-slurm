@@ -17,8 +17,10 @@ export MKL_NUM_THREADS=1
 mkdir -p "$WORKDIR"
 trap 'rm -rf "$WORKDIR"' EXIT
 
+set +u
 source /opt/setup_mucoll.sh
 source "$BENCH/setup_config.sh" "$BENCH" MAIA_v0
+set -u
 cd "$WORKDIR"
 
 completed=0
@@ -42,12 +44,12 @@ while IFS=$'\t' read -r k split polarity cycle input output; do
         --inputFiles "$input" \
         --outputFile "$temporary"
 
-    python -c "import uproot; f=uproot.open('$temporary'); assert f['events'].num_entries == 1; assert 'podio_metadata' in f"
+    python3 -c "import uproot; f=uproot.open('$temporary'); assert f['events'].num_entries == 1; assert 'podio_metadata' in f"
     mv "$temporary" "$output"
     completed=$((completed + 1))
     echo "rank $RANK/$TASKS completed $completed: k=$k $split $polarity cycle=$cycle"
 done < <(
-    python "$REPO/reco_cycle_k_perlmutter.py" items \
+    python3 "$REPO/reco_cycle_k_perlmutter.py" items \
         --base "$BASE" \
         --manifest "$MANIFEST" \
         --rank "$RANK" \
@@ -55,4 +57,3 @@ done < <(
 )
 
 echo "rank $RANK/$TASKS finished $completed assigned files"
-

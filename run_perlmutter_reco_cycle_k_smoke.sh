@@ -16,9 +16,11 @@ case "$RANK" in
     *) echo "smoke expects ranks 0 through 3" >&2; exit 2 ;;
 esac
 
+set +u
 source /opt/setup_mucoll.sh
+set -u
 
-cycle=$(python -c "import json; print(json.load(open('$MANIFEST'))['splits']['train']['cycles'][0])")
+cycle=$(python3 -c "import json; print(json.load(open('$MANIFEST'))['splits']['train']['cycles'][0])")
 output_root=$BASE/smoke
 gen_dir=$output_root/GEN/k${k}/train/${polarity}
 sim_dir=$output_root/SIM/k${k}/train/${polarity}
@@ -33,7 +35,7 @@ export MKL_NUM_THREADS=1
 mkdir -p "$gen_dir" "$sim_dir" "$workdir"
 trap 'rm -rf "$workdir"' EXIT
 
-python -u "$REPO/reco_cycle_k_library.py" write-gen \
+python3 -u "$REPO/reco_cycle_k_library.py" write-gen \
     --bank "$BASE/banks/gen_split_mothers_${polarity}.h5" \
     --manifest "$MANIFEST" \
     --benchmarks-dir "$BENCH" \
@@ -45,14 +47,16 @@ python -u "$REPO/reco_cycle_k_library.py" write-gen \
 
 if [ ! -s "$output" ]; then
     temporary=$workdir/output.partial.root
+    set +u
     source "$BENCH/setup_config.sh" "$BENCH" MAIA_v0
+    set -u
     cd "$workdir"
     /usr/bin/time -v ddsim \
         --steeringFile "$BENCH/simulation/steer_baseline.py" \
         --numberOfEvents 1 \
         --inputFiles "$input" \
         --outputFile "$temporary"
-    python -c "import uproot; f=uproot.open('$temporary'); assert f['events'].num_entries == 1; assert 'podio_metadata' in f"
+    python3 -c "import uproot; f=uproot.open('$temporary'); assert f['events'].num_entries == 1; assert 'podio_metadata' in f"
     mv "$temporary" "$output"
 fi
 
