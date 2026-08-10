@@ -16,6 +16,8 @@ case "$RANK" in
     *) echo "smoke expects ranks 0 through 3" >&2; exit 2 ;;
 esac
 
+source /opt/setup_mucoll.sh
+
 cycle=$(python -c "import json; print(json.load(open('$MANIFEST'))['splits']['train']['cycles'][0])")
 output_root=$BASE/smoke
 gen_dir=$output_root/GEN/k${k}/train/${polarity}
@@ -30,8 +32,6 @@ export MKL_NUM_THREADS=1
 
 mkdir -p "$gen_dir" "$sim_dir" "$workdir"
 trap 'rm -rf "$workdir"' EXIT
-
-source /opt/setup_mucoll.sh
 
 python -u "$REPO/reco_cycle_k_library.py" write-gen \
     --bank "$BASE/banks/gen_split_mothers_${polarity}.h5" \
@@ -59,4 +59,3 @@ fi
 printf 'rank=%s k=%s polarity=%s cycle=%s GEN=%s SIM=%s\n' \
     "$RANK" "$k" "$polarity" "$cycle" \
     "$(du -h "$input" | cut -f1)" "$(du -h "$output" | cut -f1)"
-
