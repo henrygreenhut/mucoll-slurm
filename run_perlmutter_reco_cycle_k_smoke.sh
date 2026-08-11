@@ -67,7 +67,7 @@ if [ ! -s "$output" ]; then
     set -o pipefail
     set -u
     cd "$workdir"
-    /usr/bin/time -v ddsim \
+    ddsim \
         --steeringFile "$BENCH/simulation/steer_baseline.py" \
         --numberOfEvents 1 \
         --inputFiles "$input" \
