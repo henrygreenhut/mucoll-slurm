@@ -19,7 +19,9 @@ trap 'rm -rf "$WORKDIR"' EXIT
 
 set +u
 source /opt/setup_mucoll.sh
+set +o pipefail
 source "$BENCH/setup_config.sh" "$BENCH" MAIA_v0
+set -o pipefail
 set -u
 cd "$WORKDIR"
 

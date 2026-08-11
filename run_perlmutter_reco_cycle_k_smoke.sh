@@ -62,7 +62,9 @@ fi
 if [ ! -s "$output" ]; then
     temporary=$workdir/output.partial.root
     set +u
+    set +o pipefail
     source "$BENCH/setup_config.sh" "$BENCH" MAIA_v0
+    set -o pipefail
     set -u
     cd "$workdir"
     /usr/bin/time -v ddsim \
