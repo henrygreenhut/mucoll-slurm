@@ -50,10 +50,10 @@ def paths(base, k, split, polarity, cycle):
 
 
 def work_items(base, manifest):
-    for split in SPLITS:
-        for polarity in POLARITIES:
-            for cycle in cycles(manifest, split):
-                for k in REUSE_FACTORS:
+    for k in REUSE_FACTORS:
+        for split in SPLITS:
+            for polarity in POLARITIES:
+                for cycle in cycles(manifest, split):
                     gen, sim = paths(base, k, split, polarity, cycle)
                     yield k, split, polarity, int(cycle), gen, sim
 

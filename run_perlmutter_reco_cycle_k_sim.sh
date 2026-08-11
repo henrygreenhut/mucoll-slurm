@@ -38,15 +38,28 @@ while IFS=$'\t' read -r k split polarity cycle input output; do
 
     mkdir -p "$(dirname "$output")"
     temporary="$WORKDIR/k${k}_${split}_${polarity}_${cycle}.partial.root"
+    ddsim_log="$WORKDIR/k${k}_${split}_${polarity}_${cycle}.ddsim.log"
     rm -f "$temporary"
+    rm -f "$ddsim_log"
 
+    set +e
     ddsim \
         --steeringFile "$BENCH/simulation/steer_baseline.py" \
         --numberOfEvents 1 \
         --inputFiles "$input" \
-        --outputFile "$temporary"
+        --outputFile "$temporary" >"$ddsim_log" 2>&1
+    ddsim_status=$?
+    set -e
+    if [ "$ddsim_status" -ne 0 ]; then
+        cat "$ddsim_log" >&2
+        exit "$ddsim_status"
+    fi
 
-    python3 -c "import uproot; f=uproot.open('$temporary'); assert f['events'].num_entries == 1; assert 'podio_metadata' in f"
+    if ! python3 -c "import uproot; f=uproot.open('$temporary'); assert f['events'].num_entries == 1; assert 'podio_metadata' in f"; then
+        cat "$ddsim_log" >&2
+        exit 1
+    fi
+    rm -f "$ddsim_log"
     mv "$temporary" "$output"
     completed=$((completed + 1))
     echo "rank $RANK/$TASKS completed $completed: k=$k $split $polarity cycle=$cycle"

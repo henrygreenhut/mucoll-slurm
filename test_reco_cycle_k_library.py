@@ -104,11 +104,20 @@ class CycleKLibraryTest(unittest.TestCase):
         self.assertEqual(len(items), 6654 * 2 * 2)
         first = items[0]
         self.assertEqual(first[:4], (7, "train", "MUPLUS", 6498))
-        self.assertEqual(items[1][:4], (21, "train", "MUPLUS", 6498))
+        self.assertEqual(items[1][:4], (7, "train", "MUPLUS", 4712))
         self.assertEqual(
             first[4],
             base / "GEN/k7/train/MUPLUS/bib_gen_cycle_006498.edm4hep.root",
         )
+        shards = [items[rank::512] for rank in range(512)]
+        for shard in shards:
+            counts = {
+                k: sum(item[0] == k for item in shard)
+                for k in perlmutter.REUSE_FACTORS
+            }
+            self.assertGreater(counts[7], 0)
+            self.assertGreater(counts[21], 0)
+            self.assertLessEqual(abs(counts[7] - counts[21]), 1)
 
     def test_nested_coherent_rotations(self):
         particles = {

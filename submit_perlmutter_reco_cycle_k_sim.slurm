@@ -28,3 +28,7 @@ srun \
     --output="$LOGS/rank_%t.out" \
     --error="$LOGS/rank_%t.err" \
     shifter --image="$IMAGE" bash "$SLURM_SUBMIT_DIR/run_perlmutter_reco_cycle_k_sim.sh"
+
+python3 "$SLURM_SUBMIT_DIR/reco_cycle_k_perlmutter.py" status \
+    --base "${RECO_CYCLE_K_BASE:-$PSCRATCH/mucoll/reco_cycle_k}" \
+    --require-complete
