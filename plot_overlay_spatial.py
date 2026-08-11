@@ -45,6 +45,24 @@ SIGNAL_COLLECTIONS = {
     **SIGNAL_CALO_COLLECTIONS,
 }
 
+SIM_TRACKER_COLLECTIONS = [
+    "VertexBarrelCollection",
+    "VertexEndcapCollection",
+    "InnerTrackerBarrelCollection",
+    "InnerTrackerEndcapCollection",
+    "OuterTrackerBarrelCollection",
+    "OuterTrackerEndcapCollection",
+]
+
+SIM_CALO_COLLECTIONS = [
+    "ECalBarrelCollection",
+    "ECalEndcapCollection",
+    "HCalBarrelCollection",
+    "HCalEndcapCollection",
+    "YokeBarrelCollection",
+    "YokeEndcapCollection",
+]
+
 GROUPS = {
     "all": list(TRACKER_COLLECTIONS) + list(CALO_COLLECTIONS) + list(SIGNAL_COLLECTIONS),
     "tracker": list(TRACKER_COLLECTIONS) + list(SIGNAL_TRACKER_COLLECTIONS),
@@ -139,6 +157,8 @@ def parse_args():
     parser.add_argument("--max-points-per-collection", type=int, default=5000)
     parser.add_argument("--plot-percent", type=float, default=None)
     parser.add_argument("--geometry", choices=["envelope", "off"], default="envelope")
+    parser.add_argument("--sim-muon-display", action="store_true")
+    parser.add_argument("--muon-energy-cut", type=float, default=5.0)
     args = parser.parse_args()
     if args.plot_percent is not None and not (0 < args.plot_percent <= 100):
         parser.error("--plot-percent must be greater than 0 and at most 100")
@@ -170,6 +190,20 @@ def find_digi_files(inputs):
                 files.extend(path.glob("digi_output_*.edm4hep.root"))
                 files.extend(path.glob("job_*/digi_output_*.edm4hep.root"))
             elif path.is_file() and path.name.startswith("digi_output_"):
+                files.append(path)
+    return sorted({path.resolve() for path in files})
+
+
+def find_sim_files(inputs):
+    files = []
+    for item in inputs:
+        matches = glob.glob(item) or [item]
+        for match in matches:
+            path = Path(match)
+            if path.is_dir():
+                files.extend(path.glob("bib_sim_*.edm4hep.root"))
+                files.extend(path.glob("*/bib_sim_*.edm4hep.root"))
+            elif path.is_file() and path.name.startswith("bib_sim_"):
                 files.append(path)
     return sorted({path.resolve() for path in files})
 
@@ -477,6 +511,185 @@ def collection_payload(events, path, event, collection, value_field, max_points,
         },
     }
     return row, points
+
+
+def mc_particle_arrays(events, event):
+    prefix = "MCParticles"
+    fields = {
+        "pdg": "PDG",
+        "mass": "mass",
+        "px": "momentum.x",
+        "py": "momentum.y",
+        "pz": "momentum.z",
+        "parents_begin": "parents_begin",
+        "parents_end": "parents_end",
+    }
+    result = {
+        name: values(events, branch_name(events, prefix, field), event)
+        for name, field in fields.items()
+    }
+    result["parent_indices"] = int_values(
+        events,
+        first_branch(events, [
+            "_MCParticles_parents/_MCParticles_parents.index",
+            "_MCParticles_parents.index",
+        ]),
+        event,
+    )
+    return result
+
+
+def muon_ancestor_energies(particles):
+    pdg = np.asarray(particles["pdg"], dtype=np.int64)
+    px = np.asarray(particles["px"], dtype=np.float64)
+    py = np.asarray(particles["py"], dtype=np.float64)
+    pz = np.asarray(particles["pz"], dtype=np.float64)
+    mass = np.asarray(particles["mass"], dtype=np.float64)
+    energy = np.sqrt(px * px + py * py + pz * pz + mass * mass)
+    begins = np.asarray(particles["parents_begin"], dtype=np.int64)
+    ends = np.asarray(particles["parents_end"], dtype=np.int64)
+    parent_indices = particles["parent_indices"]
+    result = np.full(len(pdg), np.nan, dtype=np.float64)
+    visiting = set()
+
+    def visit(index):
+        if index < 0 or index >= len(pdg):
+            return np.nan
+        if not np.isnan(result[index]):
+            return result[index]
+        if index in visiting:
+            return -1.0
+        visiting.add(index)
+        best = energy[index] if abs(pdg[index]) == 13 else -1.0
+        begin = begins[index] if index < len(begins) else 0
+        end = ends[index] if index < len(ends) else 0
+        if 0 <= begin <= end <= len(parent_indices):
+            for parent in parent_indices[begin:end]:
+                best = max(best, visit(int(parent)))
+        visiting.remove(index)
+        result[index] = best
+        return best
+
+    for index in range(len(pdg)):
+        visit(index)
+    return result
+
+
+def particle_link_indices(events, collection, event):
+    link = f"_{collection}_particle"
+    return int_values(events, first_branch(events, [
+        f"{link}/{link}.index",
+        f"{link}.index",
+    ]), event)
+
+
+def hit_particle_indices(events, collection, event, n_hits):
+    if collection in SIM_TRACKER_COLLECTIONS:
+        indices = particle_link_indices(events, collection, event)
+        if len(indices) < n_hits:
+            indices = np.pad(indices, (0, n_hits - len(indices)), constant_values=-1)
+        return [indices[i:i + 1] for i in range(n_hits)]
+
+    contribution_collection = None
+    for candidate in contribution_collection_names(collection):
+        if branch_name(events, candidate, "PDG") is not None:
+            contribution_collection = candidate
+            break
+    if contribution_collection is None:
+        return [np.asarray([], dtype=np.int64) for _ in range(n_hits)]
+
+    contribution_particles = particle_link_indices(events, contribution_collection, event)
+    begins = int_values(events, first_branch(events, [
+        f"{collection}/{collection}.contributions_begin",
+        f"{collection}.contributions_begin",
+    ]), event)
+    ends = int_values(events, first_branch(events, [
+        f"{collection}/{collection}.contributions_end",
+        f"{collection}.contributions_end",
+    ]), event)
+    contribution_links = contribution_link_indices(events, collection, event)
+    result = []
+    for hit in range(n_hits):
+        if hit >= len(begins) or hit >= len(ends):
+            result.append(np.asarray([], dtype=np.int64))
+            continue
+        begin, end = int(begins[hit]), int(ends[hit])
+        if not (0 <= begin <= end):
+            result.append(np.asarray([], dtype=np.int64))
+            continue
+        if len(contribution_links) and end <= len(contribution_links):
+            contribution_indices = contribution_links[begin:end]
+        else:
+            contribution_indices = np.arange(begin, end, dtype=np.int64)
+        valid = contribution_indices[
+            (contribution_indices >= 0) & (contribution_indices < len(contribution_particles))
+        ]
+        result.append(contribution_particles[valid])
+    return result
+
+
+def classify_hits(events, collection, event, muon_energy):
+    x = values(events, branch_name(events, collection, "position.x"), event) / 10.0
+    y = values(events, branch_name(events, collection, "position.y"), event) / 10.0
+    z = values(events, branch_name(events, collection, "position.z"), event) / 10.0
+    n_hits = min(len(x), len(y), len(z))
+    x, y, z = x[:n_hits], y[:n_hits], z[:n_hits]
+    time, _ = time_values(events, collection, event, n_hits)
+    categories = np.zeros(n_hits, dtype=np.int8)
+    for hit, indices in enumerate(hit_particle_indices(events, collection, event, n_hits)):
+        valid = indices[(indices >= 0) & (indices < len(muon_energy))]
+        if len(valid):
+            highest = np.max(muon_energy[valid])
+            if highest >= 0:
+                categories[hit] = 1
+            if highest > classify_hits.energy_cut:
+                categories[hit] = 2
+    return x, y, z, time, categories
+
+
+def category_points(name, role, color, arrays, max_points, plot_percent):
+    if arrays:
+        x = np.concatenate([item[0] for item in arrays])
+        y = np.concatenate([item[1] for item in arrays])
+        z = np.concatenate([item[2] for item in arrays])
+        time = np.concatenate([item[3] for item in arrays])
+    else:
+        x = y = z = time = np.asarray([], dtype=np.float64)
+    n = len(x)
+    cap = downsample(x, y, z, time, n_points=plotted_count(n, max_points, None))
+    percent = downsample(x, y, z, time, n_points=plotted_count(n, max_points, HTML_SAMPLE_PERCENT))
+    plotted = downsample(x, y, z, time, n_points=plotted_count(n, max_points, plot_percent))
+    return {
+        "collection": name,
+        "name": name,
+        "role": role,
+        "color": color,
+        "x": plotted[0],
+        "y": plotted[1],
+        "z": plotted[2],
+        "r": np.sqrt(plotted[0] ** 2 + plotted[1] ** 2),
+        "time": plotted[3],
+        "n_hits": n,
+        "plotted_hits": len(plotted[0]),
+        "time_source": "hit.time",
+        "envelope": None,
+        "html_samples": {
+            "cap": {"x": cap[0], "y": cap[1], "z": cap[2], "time": cap[3]},
+            "percent": {"x": percent[0], "y": percent[1], "z": percent[2], "time": percent[3]},
+        },
+    }
+
+
+def detector_geometry_entries():
+    entries = []
+    seen = set()
+    for envelope in ENVELOPE_OVERRIDES.values():
+        key = tuple(sorted(envelope.items()))
+        if key in seen:
+            continue
+        seen.add(key)
+        entries.append({"trace": -1, "color": GEOMETRY_COLOR, **envelope})
+    return entries
 
 
 def write_rows(path, rows):
@@ -838,6 +1051,8 @@ canvas.dragging {{ cursor: grabbing; }}
 <div id="legend"></div>
 <script>
 const data = {data};
+const axisLabels = data.axis_labels || ["x [cm]", "y [cm]", "z [cm]"];
+const legendNoun = data.legend_noun || "hits";
 const canvas = document.getElementById("view");
 const ctx = canvas.getContext("2d");
 const title = document.getElementById("title");
@@ -894,7 +1109,7 @@ buildLegend();
 function buildLegend() {{
   legend.innerHTML = `<div id="legend-help">Click collection to hide/show</div>` + data.traces.map((t, i) => {{
     const sample = activeSample(t);
-    return `<div class="legend-row ${{t.hidden ? "off" : ""}}" data-index="${{i}}" title="time: ${{t.time_source || "missing"}}"><span class="swatch" style="background:${{t.color}}"></span><span>${{t.name}} (${{t.total.toLocaleString()}} hits, ${{sample.x.length.toLocaleString()}} plotted)</span></div>`;
+    return `<div class="legend-row ${{t.hidden ? "off" : ""}}" data-index="${{i}}" title="time: ${{t.time_source || "missing"}}"><span class="swatch" style="background:${{t.color}}"></span><span>${{t.name}} (${{t.total.toLocaleString()}} ${{legendNoun}}, ${{sample.x.length.toLocaleString()}} plotted)</span></div>`;
   }}).join("");
   for (const row of legend.querySelectorAll(".legend-row")) {{
     row.addEventListener("click", () => {{
@@ -1276,9 +1491,9 @@ function drawFrameAxes() {{
     drawText3(formatTick(z), p, 14, 0, "#666", "left");
   }}
 
-  drawText3("x [cm]", point3((x0 + x1) / 2, y0, z0), 0, 34, "#333");
-  drawText3("y [cm]", point3(x1, (y0 + y1) / 2, z0), 34, 0, "#333", "left");
-  drawText3("z [cm]", point3(x1, y1, (z0 + z1) / 2), 34, 0, "#333", "left");
+  drawText3(axisLabels[0], point3((x0 + x1) / 2, y0, z0), 0, 34, "#333");
+  drawText3(axisLabels[1], point3(x1, (y0 + y1) / 2, z0), 34, 0, "#333", "left");
+  drawText3(axisLabels[2], point3(x1, y1, (z0 + z1) / 2), 34, 0, "#333", "left");
 }}
 
 function ringPoints(radius, z, segments) {{
@@ -1479,7 +1694,7 @@ resize();
 """
 
 
-def write_interactive_xyz(points, title, outpath, geometry=True):
+def write_interactive_xyz(points, title, outpath, geometry=True, full_geometry=False):
     selected = [item for item in points if item["plotted_hits"]]
     if not selected:
         return False
@@ -1514,6 +1729,8 @@ def write_interactive_xyz(points, title, outpath, geometry=True):
             })
 
     if geometry:
+        if full_geometry:
+            geometry_entries.extend(detector_geometry_entries())
         geometry_entries.append({
             "trace": -1,
             "type": "nozzle",
@@ -1530,6 +1747,67 @@ def write_interactive_xyz(points, title, outpath, geometry=True):
     with open(outpath, "w", encoding="utf-8") as handle:
         handle.write(interactive_html(payload))
     return True
+
+
+def inspect_sim_muons(path, outdir, max_points, plot_percent, energy_cut, geometry=True):
+    classify_hits.energy_cut = energy_cut
+    with uproot.open(path) as root_file:
+        events = root_file["events"]
+        for event in range(events.num_entries):
+            particles = mc_particle_arrays(events, event)
+            muon_energy = muon_ancestor_energies(particles)
+            categories = {0: [], 1: [], 2: []}
+            for collection in SIM_TRACKER_COLLECTIONS + SIM_CALO_COLLECTIONS:
+                if branch_name(events, collection, "position.x") is None:
+                    continue
+                x, y, z, time, labels = classify_hits(events, collection, event, muon_energy)
+                for category in categories:
+                    mask = labels == category
+                    if np.any(mask):
+                        categories[category].append((x[mask], y[mask], z[mask], time[mask]))
+
+            points = [
+                category_points("Other BIB", "bib", "#808080", categories[0], max_points, plot_percent),
+                category_points(
+                    f"Muon-induced BIB (E muon <= {energy_cut:g} GeV)",
+                    "signal",
+                    "#2b8cbe",
+                    categories[1],
+                    max_points,
+                    plot_percent,
+                ),
+                category_points(
+                    f"Muon-induced BIB (E muon > {energy_cut:g} GeV)",
+                    "signal",
+                    "#d7301f",
+                    categories[2],
+                    max_points,
+                    plot_percent,
+                ),
+            ]
+            prefix = plot_prefix(path)
+            if events.num_entries > 1:
+                prefix = f"{prefix}__event_{event}"
+            title = f"BIB detector hits, event {event}"
+            pdf = os.path.join(outdir, f"{prefix}__bib_muons_xyz.pdf")
+            html = os.path.join(outdir, f"{prefix}__bib_muons_xyz.html")
+            draw_xyz(points, title, pdf)
+            write_interactive_xyz(points, title, html, geometry=geometry, full_geometry=True)
+            direct_muons = np.asarray(particles["pdg"], dtype=np.int64)
+            energies = np.sqrt(
+                np.asarray(particles["px"]) ** 2
+                + np.asarray(particles["py"]) ** 2
+                + np.asarray(particles["pz"]) ** 2
+                + np.asarray(particles["mass"]) ** 2
+            )
+            print(f"{path}, event {event}")
+            print(f"MC particles: {len(direct_muons):,}")
+            print(f"muons: {np.sum(np.abs(direct_muons) == 13):,}")
+            print(f"muons above {energy_cut:g} GeV: {np.sum((np.abs(direct_muons) == 13) & (energies > energy_cut)):,}")
+            for point in points:
+                print(f"{point['name']}: {point['n_hits']:,} hits")
+            print(f"PDF -> {pdf}")
+            print(f"HTML -> {html}")
 
 
 def draw_group(points_by_collection, group, prefix, outdir, title_prefix=None, geometry=True):
@@ -1604,6 +1882,22 @@ def inspect_file(path, outdir, max_points, plot_percent, study_label=None, geome
 def main():
     args = parse_args()
     load_libraries()
+    if args.sim_muon_display:
+        files = find_sim_files(args.inputs)
+        if not files:
+            raise SystemExit("No BIB SIM ROOT files found")
+        outdir = os.path.join(args.outdir, args.label)
+        os.makedirs(outdir, exist_ok=True)
+        for path in files:
+            inspect_sim_muons(
+                path,
+                outdir,
+                args.max_points_per_collection,
+                args.plot_percent,
+                args.muon_energy_cut,
+                geometry=args.geometry == "envelope",
+            )
+        return
     files = find_digi_files(args.inputs)
     if not files:
         raise SystemExit("No digi ROOT files found")
