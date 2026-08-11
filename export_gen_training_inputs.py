@@ -63,8 +63,10 @@ def event_particles(sampler, positions, mean, std):
         for position in positions
     ])
     threshold = sampler.exclude_muons_above_gev
-    if threshold > 0:
-        keep = ~((np.abs(raw["pdg"]) == 13) & (raw["E"] > threshold))
+    if sampler.exclude_all_muons or threshold > 0:
+        muon = np.abs(raw["pdg"]) == 13
+        keep = ~muon if sampler.exclude_all_muons else ~(
+            muon & (raw["E"] > threshold))
         raw = {name: values[keep] for name, values in raw.items()}
         cycle_ids = cycle_ids[keep]
     features = lc.build_features(raw, sampler.feature_set)
@@ -107,6 +109,7 @@ def main():
             files_a,
             config["features"],
             config["exclude_muons_above_gev"],
+            config.get("exclude_muons", False),
         ),
         UnitSampler(
             store_b,
@@ -114,6 +117,7 @@ def main():
             files_b,
             config["features"],
             config["exclude_muons_above_gev"],
+            config.get("exclude_muons", False),
         ),
     ]
     mean, std, _ = lc.load_norm_stats(result_dir / "norm_stats.json")
@@ -138,6 +142,7 @@ def main():
         "n_files": config["n_files"],
         "clone_factor": config["clone_factor"],
         "exclude_muons_above_gev": config["exclude_muons_above_gev"],
+        "exclude_muons": config.get("exclude_muons", False),
         "data_seed": config["data_seed"],
         "batch_size": config["batch_size"],
         "units_per_epoch": config["units_per_epoch"],

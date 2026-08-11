@@ -294,8 +294,12 @@ def main():
     definitions = test_definitions(source_dir, config, stores)
     files = (config["n_files"], config["n_files"] // config["clone_factor"])
     samplers = [
-        UnitSampler(store, {"test": np.arange(store.n_files)}, count,
-                    config["features"])
+        UnitSampler(
+            store, {"test": np.arange(store.n_files)}, count,
+            config["features"],
+            config.get("exclude_muons_above_gev", 0.0),
+            config.get("exclude_muons", False),
+        )
         for store, count in zip(stores, files)
     ]
     mean, std, latent_scale = lc.load_norm_stats(

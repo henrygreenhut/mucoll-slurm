@@ -14,14 +14,21 @@ set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
 if [ "$#" -lt 2 ] || [ "$#" -gt 4 ]; then
-    echo "usage: $0 {1-synthetic|2|5|42-synthetic|42-production} {main|null} [train|smoke] [exclude-muons-above-gev]" >&2
+    echo "usage: $0 {1-synthetic|2|5|42-synthetic|42-production} {main|null} [train|smoke] [none|all|exclude-muons-above-gev]" >&2
     exit 2
 fi
 
 COMPARISON=$1
 RUN=$2
 MODE=${3:-train}
-EXCLUDE_MUONS_ABOVE_GEV=${4:-0}
+MUON_FILTER=${4:-none}
+EXCLUDE_MUONS_ABOVE_GEV=0
+EXCLUDE_ALL_MUONS=0
+case "$MUON_FILTER" in
+    none|0) ;;
+    all) EXCLUDE_ALL_MUONS=1 ;;
+    *) EXCLUDE_MUONS_ABOVE_GEV=$MUON_FILTER ;;
+esac
 case "$COMPARISON" in
     1-synthetic)
         K=1
@@ -75,7 +82,8 @@ for STORE in "$UNIQUE_STORE" "$REUSE_STORE"; do
 done
 
 LABEL="pm_n420_k1_vs_k${K}_${PROVENANCE}_scaled_lr1e-4_decay80_mseed1_v1"
-[ "$EXCLUDE_MUONS_ABOVE_GEV" != 0 ] && \
+[ "$EXCLUDE_ALL_MUONS" = 1 ] && LABEL="${LABEL}_exclude_all_muons"
+[ "$EXCLUDE_ALL_MUONS" = 0 ] && [ "$EXCLUDE_MUONS_ABOVE_GEV" != 0 ] && \
     LABEL="${LABEL}_exclude_muons_gt${EXCLUDE_MUONS_ABOVE_GEV}gev"
 [ "$RUN" = null ] && LABEL="${LABEL}_null"
 [ "$MODE" = smoke ] && LABEL="${LABEL}_smoke"
@@ -115,6 +123,8 @@ COMMAND=(python -u pfn_libtest_train.py
     --eval-bootstrap-reps 0
     --skip-disjoint-check
     --progress-every 25)
+
+[ "$EXCLUDE_ALL_MUONS" = 1 ] && COMMAND+=(--exclude-muons)
 
 MIN_EPOCHS=0
 if [ "$RUN" = main ]; then
@@ -165,7 +175,11 @@ echo "label=$LABEL"
 echo "class 0: 420 native, unrotated source cycles"
 echo "class 1: $((420 / K)) source cycles with $K fixed rotation(s)/mother"
 echo "reused-class provenance: $PROVENANCE ($REUSE_STORE)"
-echo "exclude |PDG|=13 above: $EXCLUDE_MUONS_ABOVE_GEV GeV (0 = disabled)"
+if [ "$EXCLUDE_ALL_MUONS" = 1 ]; then
+    echo "muon filter: remove every particle with |PDG|=13"
+else
+    echo "exclude |PDG|=13 above: $EXCLUDE_MUONS_ABOVE_GEV GeV (0 = disabled)"
+fi
 echo "minimum training epochs: $MIN_EPOCHS"
 [ "$RUN" = main ] && echo "epoch cap: $EPOCHS | clean-exit guard: $MAX_MINUTES minutes"
 [ "$RUN" = null ] && echo "null: both labels use the fixed k=$K store"

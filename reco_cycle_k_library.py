@@ -50,6 +50,7 @@ def arguments():
     write.add_argument("--num-shards", type=int, default=1)
     write.add_argument("--max-cycles", type=int, default=0)
     write.add_argument("--validate", action="store_true")
+    write.add_argument("--completion-marker")
 
     inspect = commands.add_parser("inspect")
     inspect.add_argument("--manifest", required=True)
@@ -438,6 +439,19 @@ def write_gen(args):
                     ),
                     flush=True,
                 )
+
+    if args.completion_marker:
+        marker = Path(args.completion_marker).resolve()
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        temporary = marker.with_name("." + marker.name + ".partial")
+        temporary.write_text(json.dumps({
+            "split": args.split,
+            "reuse_k": args.reuse_k,
+            "shard_index": args.shard_index,
+            "num_shards": args.num_shards,
+            "assigned_cycles": int(len(cycles)),
+        }, sort_keys=True) + "\n")
+        os.replace(temporary, marker)
 
 
 def main():

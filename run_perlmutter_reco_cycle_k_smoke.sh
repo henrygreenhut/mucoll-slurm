@@ -35,6 +35,9 @@ export MKL_NUM_THREADS=1
 mkdir -p "$gen_dir" "$sim_dir" "$workdir"
 trap 'rm -rf "$workdir"' EXIT
 
+marker=$workdir/gen.complete
+rm -f "$marker"
+set +e
 python3 -u "$REPO/reco_cycle_k_library.py" write-gen \
     --bank "$BASE/banks/gen_split_mothers_${polarity}.h5" \
     --manifest "$MANIFEST" \
@@ -43,7 +46,18 @@ python3 -u "$REPO/reco_cycle_k_library.py" write-gen \
     --reuse-k "$k" \
     --output-dir "$gen_dir" \
     --max-cycles 1 \
-    --validate
+    --validate \
+    --completion-marker "$marker"
+gen_status=$?
+set -e
+if [ "$gen_status" -ne 0 ]; then
+    if [ "$gen_status" -eq 141 ] && [ -s "$marker" ]; then
+        echo "rank $RANK: accepting SIGPIPE after validated GEN completion" >&2
+    else
+        echo "rank $RANK: GEN writer failed with status $gen_status" >&2
+        exit "$gen_status"
+    fi
+fi
 
 if [ ! -s "$output" ]; then
     temporary=$workdir/output.partial.root

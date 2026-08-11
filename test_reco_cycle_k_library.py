@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
+from unittest import mock
 
 import h5py
 import numpy as np
@@ -144,6 +145,40 @@ class CycleKLibraryTest(unittest.TestCase):
             for cycle in (4, 18):
                 (root / "bib_sim_cycle_{:06d}.edm4hep.root".format(cycle)).touch()
             self.assertEqual(cycle_ids(root), {4, 18})
+
+    def test_completion_marker_is_written_after_empty_shard(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bank = root / "plus.h5"
+            manifest = root / "manifest.json"
+            output = root / "output"
+            marker = root / "complete.json"
+            self.make_bank(bank, "MUPLUS")
+            index = library.bank_index(bank)
+            manifest.write_text(json.dumps({
+                "schema": "reco-cycle-k-v1",
+                "source_identity_sha256": index["identity_sha256"],
+                "splits": {"train": {"cycles": [10]}},
+            }))
+            with mock.patch.object(
+                library, "particle_properties", return_value={}
+            ):
+                library.write_gen(Namespace(
+                    bank=str(bank),
+                    manifest=str(manifest),
+                    benchmarks_dir=str(root),
+                    split="train",
+                    reuse_k=7,
+                    output_dir=str(output),
+                    shard_index=1,
+                    num_shards=2,
+                    max_cycles=0,
+                    validate=True,
+                    completion_marker=str(marker),
+                ))
+            payload = json.loads(marker.read_text())
+            self.assertEqual(payload["assigned_cycles"], 0)
+            self.assertEqual(payload["reuse_k"], 7)
 
 
 if __name__ == "__main__":

@@ -67,6 +67,17 @@ class LibtestNormalizationTests(unittest.TestCase):
         np.testing.assert_array_equal(filtered["pdg"], [13, 11])
         self.assertIs(file_trainer.exclude_high_energy_muons(raw, 0.0), raw)
 
+    def test_all_muon_cut_removes_both_charges_at_every_energy(self):
+        raw = {
+            "E": np.asarray([0.2, 8.0, 4.0], dtype=np.float32),
+            "pdg": np.asarray([13, -13, 11], dtype=np.int32),
+        }
+
+        filtered = file_trainer.filter_muons(raw, exclude_all=True)
+
+        np.testing.assert_array_equal(filtered["E"], [4.0])
+        np.testing.assert_array_equal(filtered["pdg"], [11])
+
     def test_expanded_no_phi_removes_only_azimuth(self):
         expanded = lc.feature_names("expanded")
         no_phi = lc.feature_names("expanded_no_phi")

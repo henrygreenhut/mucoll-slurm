@@ -179,6 +179,10 @@ def parse_args():
         help="remove particles with |PDG|=13 and E above this threshold "
              "before normalization and feature construction; 0 disables "
              "the cut (default: 0)")
+    parser.add_argument(
+        "--exclude-muons", action="store_true",
+        help="remove every particle with |PDG|=13 before normalization "
+             "and feature construction")
     # --- architecture ----------------------------------------------------
     # latent_scale=none (raw, unnormalized sum) is the one most prone to
     # the training collapse this project has spent a lot of time
@@ -321,28 +325,36 @@ def parse_args():
     return args
 
 
-def exclude_high_energy_muons(raw, threshold_gev):
-    if threshold_gev <= 0:
+def filter_muons(raw, exclude_all=False, threshold_gev=0.0):
+    if not exclude_all and threshold_gev <= 0:
         return raw
-    keep = ~((np.abs(raw["pdg"]) == 13) & (raw["E"] > threshold_gev))
+    muon = np.abs(raw["pdg"]) == 13
+    keep = ~muon if exclude_all else ~(muon & (raw["E"] > threshold_gev))
     return {name: values[keep] for name, values in raw.items()}
+
+
+def exclude_high_energy_muons(raw, threshold_gev):
+    return filter_muons(raw, threshold_gev=threshold_gev)
 
 
 class UnitSampler:
     """Builds (features, label) units for one class from one store."""
 
     def __init__(self, store, positions_by_split, files_per_unit,
-                 feature_set="paper", exclude_muons_above_gev=0.0):
+                 feature_set="paper", exclude_muons_above_gev=0.0,
+                 exclude_all_muons=False):
         self.store = store
         self.positions = positions_by_split
         self.files_per_unit = files_per_unit
         self.feature_set = feature_set
         self.exclude_muons_above_gev = exclude_muons_above_gev
+        self.exclude_all_muons = exclude_all_muons
 
     def raw(self, file_positions):
         arrays = self.store.file_arrays(file_positions)
-        return exclude_high_energy_muons(
-            arrays, self.exclude_muons_above_gev)
+        return filter_muons(
+            arrays, self.exclude_all_muons,
+            self.exclude_muons_above_gev)
 
     def build(self, file_positions, mean, std):
         raw = self.raw(file_positions)
@@ -551,9 +563,9 @@ def main():
 
     samplers = [
         UnitSampler(store_a, split_a, files_a, args.features,
-                    args.exclude_muons_above_gev),
+                    args.exclude_muons_above_gev, args.exclude_muons),
         UnitSampler(store_b, split_b, files_b, args.features,
-                    args.exclude_muons_above_gev),
+                    args.exclude_muons_above_gev, args.exclude_muons),
     ]
     for cls, sampler in enumerate(samplers):
         for split_name, positions in sampler.positions.items():

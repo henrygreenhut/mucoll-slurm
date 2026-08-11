@@ -15,14 +15,21 @@ set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
 if [ "$#" -lt 2 ] || [ "$#" -gt 4 ]; then
-    echo "usage: $0 {1|5|7} {main|null} [train|smoke] [exclude-muons-above-gev]"
+    echo "usage: $0 {1|5|7} {main|null} [train|smoke] [none|all|exclude-muons-above-gev]"
     exit 2
 fi
 
 K=$1
 RUN=$2
 MODE=${3:-train}
-EXCLUDE_MUONS_ABOVE_GEV=${4:-0}
+MUON_FILTER=${4:-none}
+EXCLUDE_MUONS_ABOVE_GEV=0
+EXCLUDE_ALL_MUONS=0
+case "$MUON_FILTER" in
+    none|0) ;;
+    all) EXCLUDE_ALL_MUONS=1 ;;
+    *) EXCLUDE_MUONS_ABOVE_GEV=$MUON_FILTER ;;
+esac
 case "$K" in
     1|5|7) ;;
     *) echo "reuse factor must be 1, 5, or 7"; exit 2 ;;
@@ -50,7 +57,8 @@ for store in "$NORM1_STORE" "$REUSE_STORE"; do
 done
 
 LABEL="n420_fixed_k1_vs_k${K}_scaled_lr1e-4_decay80_mseed1_pointonly"
-[ "$EXCLUDE_MUONS_ABOVE_GEV" != 0 ] && \
+[ "$EXCLUDE_ALL_MUONS" = 1 ] && LABEL="${LABEL}_exclude_all_muons"
+[ "$EXCLUDE_ALL_MUONS" = 0 ] && [ "$EXCLUDE_MUONS_ABOVE_GEV" != 0 ] && \
     LABEL="${LABEL}_exclude_muons_gt${EXCLUDE_MUONS_ABOVE_GEV}gev"
 [ "$RUN" = null ] && LABEL="${LABEL}_null"
 [ "$MODE" = smoke ] && LABEL="${LABEL}_smoke"
@@ -79,6 +87,7 @@ COMMON_ARGS=(
     --min-delta 1e-4
     --progress-every 25
 )
+[ "$EXCLUDE_ALL_MUONS" = 1 ] && COMMON_ARGS+=(--exclude-muons)
 [ "$RUN" = null ] && COMMON_ARGS+=(--null-test --null-source reuse)
 
 if [ "$MODE" = smoke ]; then
@@ -135,6 +144,10 @@ else
 fi
 
 echo "label=$LABEL native_unrotated_class=true class_a=420_cycles class_b=$((420 / K))_fixed_rotated_cycles"
-echo "exclude |PDG|=13 above: $EXCLUDE_MUONS_ABOVE_GEV GeV (0 = disabled)"
+if [ "$EXCLUDE_ALL_MUONS" = 1 ]; then
+    echo "muon filter: remove every particle with |PDG|=13"
+else
+    echo "exclude |PDG|=13 above: $EXCLUDE_MUONS_ABOVE_GEV GeV (0 = disabled)"
+fi
 apptainer exec --nv "$NGC_TENSORFLOW_CONTAINER" \
     python -u pfn_libtest_train.py "${COMMON_ARGS[@]}" "${RUN_ARGS[@]}"
