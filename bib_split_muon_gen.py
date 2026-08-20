@@ -286,7 +286,7 @@ def append_particles(collection, values, angle=0.0):
         particle.setCharge(float(values["charge"][index]))
         particle.setTime(float(values["time"][index]))
         particle.setMass(float(values["mass"][index]))
-        particle.setHelicity(float(values["helicity"][index]))
+        particle.setHelicity(int(values["helicity"][index]))
         put_vector(particle, "getVertex", vertex_x[index], vertex_y[index], values["vertex_z"][index])
         put_vector(particle, "getEndpoint", endpoint_x[index], endpoint_y[index], values["endpoint_z"][index])
         put_vector(particle, "getMomentum", momentum_x[index], momentum_y[index], values["momentum_z"][index])
