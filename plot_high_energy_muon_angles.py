@@ -58,6 +58,28 @@ def save_plot(phi, vertical, pdg, ylabel, name):
     print(f"wrote {path.with_suffix('.png')}")
 
 
+def save_theta_distribution(theta):
+    theta = np.radians(theta)
+    bins = np.linspace(0.0, np.pi, 80)
+    figure, axis = plt.subplots(figsize=(7, 5))
+    axis.hist(
+        theta, bins=bins, histtype="step", density=True, linewidth=1.8,
+        color="#0072B2"
+    )
+    axis.set_xlabel(r"$\theta$ [rad]")
+    axis.set_ylabel("density")
+    axis.set_xlim(0, np.pi)
+    axis.set_title(rf"GEN-level BIB muons with $E>{ENERGY_MIN:g}$ GeV")
+    axis.grid(alpha=0.2, linewidth=0.5)
+    figure.tight_layout()
+    path = OUTPUT / "high_energy_muon_theta_distribution"
+    figure.savefig(path.with_suffix(".pdf"), bbox_inches="tight")
+    figure.savefig(path.with_suffix(".png"), dpi=220, bbox_inches="tight")
+    plt.close(figure)
+    print(f"wrote {path.with_suffix('.pdf')}")
+    print(f"wrote {path.with_suffix('.png')}")
+
+
 def main():
     data = np.load(INPUT)
     selected = (data["E"] > ENERGY_MIN) & (np.abs(data["pdg"]) == 13)
@@ -68,6 +90,7 @@ def main():
 
     plt.rcParams["font.family"] = "serif"
     OUTPUT.mkdir(parents=True, exist_ok=True)
+    save_theta_distribution(theta)
     save_plot(
         phi, theta, pdg, r"Polar angle $\theta$ [deg]",
         "high_energy_muon_theta_vs_phi"
