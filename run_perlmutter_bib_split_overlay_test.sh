@@ -27,6 +27,14 @@ source "$BENCH/setup_config.sh" "$BENCH" MAIA_v0
 set -o pipefail
 set -u
 
+threshold_file=$(find /opt -path '*/share/MyBIBUtils/data/ECAL_Thresholds_10TeV.root' -print -quit)
+if [ -z "$threshold_file" ]; then
+    echo "could not locate ECAL_Thresholds_10TeV.root" >&2
+    exit 1
+fi
+export MUCOLL_CALO_THRESHOLDS_DIR
+MUCOLL_CALO_THRESHOLDS_DIR=$(dirname "$threshold_file")
+
 for path in \
     "$SIGNAL_SIM" \
     "$LEGACY/MUPLUS" \
@@ -126,4 +134,3 @@ PY
 mv ./*.edm4hep.root test_context.txt "$OUTPUT/"
 echo "BIB split-overlay integration test passed"
 echo "outputs: $OUTPUT"
-

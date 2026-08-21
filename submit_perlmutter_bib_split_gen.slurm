@@ -1,0 +1,29 @@
+#!/bin/bash
+#SBATCH -J bib_split_gen
+#SBATCH -A m5197
+#SBATCH -q regular
+#SBATCH -C cpu
+#SBATCH -N 1
+#SBATCH --ntasks-per-node=96
+#SBATCH --cpus-per-task=2
+#SBATCH -t 08:00:00
+#SBATCH --licenses=cfs,scratch
+#SBATCH -o logs/bib_split_gen_%j.out
+#SBATCH -e logs/bib_split_gen_%j.err
+
+set -euo pipefail
+cd "$SLURM_SUBMIT_DIR"
+
+IMAGE=docker:ghcr.io/muoncollidersoft/mucoll-sim-ubuntu24:v3.0
+LOGS=$SLURM_SUBMIT_DIR/logs/bib_split_gen_$SLURM_JOB_ID
+mkdir -p "$LOGS"
+
+srun \
+    --ntasks="$SLURM_NTASKS" \
+    --ntasks-per-node=96 \
+    --cpus-per-task=2 \
+    --cpu-bind=cores \
+    --kill-on-bad-exit=0 \
+    --output="$LOGS/rank_%t.out" \
+    --error="$LOGS/rank_%t.err" \
+    shifter --image="$IMAGE" bash "$SLURM_SUBMIT_DIR/run_perlmutter_bib_split_gen.sh"
