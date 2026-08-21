@@ -14,6 +14,13 @@ import numpy as np
 POLARITIES = ("MUPLUS", "MUMINUS")
 REUSE_FACTOR = 42
 ROTATION_SEED = 42042
+MUON_GROUP_SEED = 42043
+MUON_GROUP_COMPONENT = "decays-containing-muon-poisson-norot"
+MUON_PRODUCING_DECAYS = 743
+FULL_BX_DECAYS = 14_218_800
+LIBRARY_DECAYS = 6666 * 200
+FULL_BX_FILES = 1667
+MUON_GROUP_MEAN = FULL_BX_DECAYS * MUON_PRODUCING_DECAYS / LIBRARY_DECAYS / FULL_BX_FILES
 
 BRANCHES = {
     "pdg": "MCParticles.PDG",
@@ -54,6 +61,14 @@ def arguments():
     write.add_argument("--shard-index", type=int, default=0)
     write.add_argument("--num-shards", type=int, default=1)
     write.add_argument("--cycle", type=int, action="append")
+
+    groups = commands.add_parser("write-muon-groups")
+    groups.add_argument("--manifest", required=True)
+    groups.add_argument("--output-root", required=True)
+    groups.add_argument("--polarity", choices=POLARITIES, required=True)
+    groups.add_argument("--groups", type=int, default=6666)
+    groups.add_argument("--shard-index", type=int, default=0)
+    groups.add_argument("--num-shards", type=int, default=1)
 
     return parser.parse_args()
 
@@ -345,6 +360,60 @@ def write_muon_component(path, arrays, muon_entries, cycle):
     finish_writer(writer)
 
 
+def muon_histories(manifest, polarity):
+    histories = []
+    for record in manifest["polarities"][polarity]:
+        for item in record["muon_entries"]:
+            histories.append({
+                "cycle": int(record["cycle"]),
+                "filename": record["filename"],
+                "entry": int(item["entry"]),
+                "particles": int(item["particles"]),
+            })
+    if len(histories) != MUON_PRODUCING_DECAYS:
+        raise ValueError(
+            "{} has {} muon-producing decays, expected {}".format(
+                polarity, len(histories), MUON_PRODUCING_DECAYS
+            )
+        )
+    return histories
+
+
+def muon_group_sources(histories, polarity, group):
+    code = 0 if polarity == "MUPLUS" else 1
+    rng = np.random.default_rng(np.random.SeedSequence([MUON_GROUP_SEED, code, group]))
+    count = int(rng.poisson(MUON_GROUP_MEAN))
+    indices = rng.integers(0, len(histories), size=count)
+    return [histories[int(index)] for index in indices]
+
+
+def write_muon_group(path, source, polarity, group, sources):
+    import cppyy
+    import edm4hep
+    import podio
+    from podio.root_io import Writer
+
+    arrays = {}
+    writer = Writer(str(path))
+    collection = edm4hep.MCParticleCollection()
+    for item in sources:
+        cycle = item["cycle"]
+        if cycle not in arrays:
+            arrays[cycle] = read_file(source / polarity / item["filename"])
+        append_particles(collection, entry_values(arrays[cycle], item["entry"]), 0.0)
+
+    frame = podio.Frame()
+    frame.put_parameter("eventNumber", "0")
+    frame.put_parameter("component", MUON_GROUP_COMPONENT)
+    frame.put_parameter("groupIndex", str(group))
+    frame.put_parameter("sourceDecays", ",".join(
+        "{}:{}".format(item["cycle"], item["entry"]) for item in sources
+    ))
+    frame.put(cppyy.gbl.std.move(collection), "MCParticles")
+    writer.write_frame(frame, "events")
+    finish_writer(writer)
+
+
 def validate_output(path, entries, particles):
     import awkward as ak
     import uproot
@@ -436,12 +505,48 @@ def write_gen(args):
         write_cycle(source, output_root, args.polarity, record)
 
 
+def write_muon_groups(args):
+    if args.groups < 1:
+        raise SystemExit("groups must be positive")
+    if args.num_shards < 1 or not 0 <= args.shard_index < args.num_shards:
+        raise SystemExit("shard index must satisfy 0 <= index < num shards")
+
+    manifest = load_manifest(args.manifest)
+    source = Path(manifest["source"])
+    output = Path(args.output_root).resolve() / MUON_GROUP_COMPONENT / "GEN" / args.polarity
+    histories = muon_histories(manifest, args.polarity)
+
+    for group in range(args.shard_index, args.groups, args.num_shards):
+        sources = muon_group_sources(histories, args.polarity, group)
+        particles = sum(item["particles"] for item in sources)
+        path = output / "bib_gen_{}.edm4hep.root".format(group)
+        if path.is_file() and path.stat().st_size:
+            validate_output(path, 1, particles)
+        else:
+            atomic_write(
+                path,
+                lambda temporary: write_muon_group(
+                    temporary, source, args.polarity, group, sources
+                ),
+                1,
+                particles,
+            )
+        print(
+            "{} group {}: decays={} particles={}".format(
+                args.polarity, group, len(sources), particles
+            ),
+            flush=True,
+        )
+
+
 def main():
     args = arguments()
     if args.command == "scan":
         scan(args)
-    else:
+    elif args.command == "write-gen":
         write_gen(args)
+    else:
+        write_muon_groups(args)
 
 
 if __name__ == "__main__":

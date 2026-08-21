@@ -11,7 +11,6 @@ LEGACY=$DATA/bib-v3p0-fmt2-norm42-RandomRot/SIM
 SIGNAL_SIM=${SIGNAL_SIM:-/pscratch/sd/h/hgreen/mucoll/libtest/work/reco420_v2/56293200/mucoll_job_15.fx6hbR/sim_output.edm4hep.root}
 EVENTS=${EVENTS:-3}
 BIB_NUMBER=2
-MUON_MEAN=9.5071385723
 OUTPUT=${OUTPUT:-$PSCRATCH/mucoll/bib_split_muon_overlay_test/$SLURM_JOB_ID}
 WORK=$(mktemp -d "$PSCRATCH/mucoll/bib_split_overlay_test.XXXXXX")
 
@@ -41,8 +40,8 @@ for path in \
     "$LEGACY/MUMINUS" \
     "$SPLIT/bulk-norm42/SIM/MUPLUS" \
     "$SPLIT/bulk-norm42/SIM/MUMINUS" \
-    "$SPLIT/decays-containing-muon-norm1-norot/SIM/MUPLUS" \
-    "$SPLIT/decays-containing-muon-norm1-norot/SIM/MUMINUS"
+    "$SPLIT/decays-containing-muon-poisson-norot/SIM/MUPLUS" \
+    "$SPLIT/decays-containing-muon-poisson-norot/SIM/MUMINUS"
 do
     if [ ! -e "$path" ]; then
         echo "missing input: $path" >&2
@@ -54,6 +53,11 @@ for polarity in MUPLUS MUMINUS; do
     count=$(find "$SPLIT/bulk-norm42/SIM/$polarity" -name 'bib_sim_*.edm4hep.root' -type f | wc -l)
     if [ "$count" -lt "$BIB_NUMBER" ]; then
         echo "need at least $BIB_NUMBER bulk files for $polarity; found $count" >&2
+        exit 1
+    fi
+    count=$(find "$SPLIT/decays-containing-muon-poisson-norot/SIM/$polarity" -name 'bib_sim_*.edm4hep.root' -type f | wc -l)
+    if [ "$count" -lt "$BIB_NUMBER" ]; then
+        echo "need at least $BIB_NUMBER grouped muon files for $polarity; found $count" >&2
         exit 1
     fi
 done
@@ -90,9 +94,8 @@ run_digi split_muon \
     --OverlayFullPathToMuMinus "$SPLIT/bulk-norm42/SIM/MUMINUS" \
     --OverlayFullNumberBackground "$BIB_NUMBER" \
     --OverlayFullUseMuonComponent \
-    --OverlayFullMuonPathToMuPlus "$SPLIT/decays-containing-muon-norm1-norot/SIM/MUPLUS" \
-    --OverlayFullMuonPathToMuMinus "$SPLIT/decays-containing-muon-norm1-norot/SIM/MUMINUS" \
-    --OverlayFullMuonNumberBackground "$MUON_MEAN"
+    --OverlayFullMuonPathToMuPlus "$SPLIT/decays-containing-muon-poisson-norot/SIM/MUPLUS" \
+    --OverlayFullMuonPathToMuMinus "$SPLIT/decays-containing-muon-poisson-norot/SIM/MUMINUS"
 
 echo "running RECO: split_muon"
 k4run "$MUCOLL_CONFIG/$MUCOLL_CONFIG_NAME/reco_steer.py" \
@@ -124,7 +127,7 @@ PY
 {
     echo "events=$EVENTS"
     echo "bulk_files_per_polarity=$BIB_NUMBER"
-    echo "muon_poisson_mean_per_polarity=$MUON_MEAN"
+    echo "muon_group_files_per_polarity=$BIB_NUMBER"
     echo "signal_sim=$SIGNAL_SIM"
     echo "maia_commit=$(git -C "$MAIA" rev-parse HEAD)"
     echo "maia_branch=$(git -C "$MAIA" branch --show-current)"

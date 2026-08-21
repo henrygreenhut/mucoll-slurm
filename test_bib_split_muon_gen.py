@@ -47,6 +47,20 @@ class BibSplitMuonGenTest(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             split.summarize(records)
 
+    def test_muon_groups_are_reproducible_and_independent_by_polarity(self):
+        histories = [
+            {"cycle": index, "filename": "file", "entry": 0, "particles": 1}
+            for index in range(split.MUON_PRODUCING_DECAYS)
+        ]
+        first = split.muon_group_sources(histories, "MUPLUS", 12)
+        second = split.muon_group_sources(histories, "MUPLUS", 12)
+        opposite = split.muon_group_sources(histories, "MUMINUS", 12)
+        self.assertEqual(first, second)
+        self.assertNotEqual(first, opposite)
+
+    def test_muon_group_mean(self):
+        self.assertAlmostEqual(split.MUON_GROUP_MEAN, 4.753580517019908)
+
 
 if __name__ == "__main__":
     unittest.main()
