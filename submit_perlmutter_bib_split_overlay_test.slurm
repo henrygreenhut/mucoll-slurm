@@ -15,7 +15,7 @@ set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 mkdir -p logs
 
-IMAGE=docker:ghcr.io/muoncollidersoft/mucoll-sim-ubuntu24:v3.0
+IMAGE=docker:ghcr.io/muoncollidersoft/mucoll-sim-ubuntu24:main
 
 srun \
     --ntasks=1 \
