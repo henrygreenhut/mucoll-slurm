@@ -16,6 +16,7 @@ cd "$SLURM_SUBMIT_DIR"
 mkdir -p logs
 
 IMAGE=docker:ghcr.io/muoncollidersoft/mucoll-sim-ubuntu24:main
+export MUCOLL_CALO_THRESHOLDS_DIR=${MUCOLL_CALO_THRESHOLDS_DIR:-$PSCRATCH/mucoll/maia_thresholds}
 
 srun \
     --ntasks=1 \

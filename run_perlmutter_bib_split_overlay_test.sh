@@ -26,13 +26,16 @@ source "$BENCH/setup_config.sh" "$BENCH" MAIA_v0
 set -o pipefail
 set -u
 
-threshold_file=$(find /opt -path '*/share/MyBIBUtils/data/ECAL_Thresholds_10TeV.root' -print -quit)
-if [ -z "$threshold_file" ]; then
+threshold_name=ECAL_Thresholds_10TeV.root
+threshold_file=${MUCOLL_CALO_THRESHOLDS_DIR:-}/$threshold_name
+if [ ! -f "$threshold_file" ]; then
+    threshold_file=$(find /opt -path "*/share/MyBIBUtils/data/$threshold_name" -print -quit)
+fi
+if [ ! -f "$threshold_file" ]; then
     echo "could not locate ECAL_Thresholds_10TeV.root" >&2
     exit 1
 fi
-export MUCOLL_CALO_THRESHOLDS_DIR
-MUCOLL_CALO_THRESHOLDS_DIR=$(dirname "$threshold_file")
+export MUCOLL_CALO_THRESHOLDS_DIR=$(dirname "$threshold_file")
 
 for path in \
     "$SIGNAL_SIM" \
