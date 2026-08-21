@@ -4,9 +4,9 @@
 #SBATCH -q regular
 #SBATCH -C cpu
 #SBATCH -N 1
-#SBATCH --ntasks-per-node=96
+#SBATCH --ntasks-per-node=128
 #SBATCH --cpus-per-task=2
-#SBATCH -t 08:00:00
+#SBATCH -t 04:00:00
 #SBATCH --licenses=cfs,scratch
 #SBATCH -o logs/bib_split_gen_%j.out
 #SBATCH -e logs/bib_split_gen_%j.err
@@ -20,7 +20,7 @@ mkdir -p "$LOGS"
 
 srun \
     --ntasks="$SLURM_NTASKS" \
-    --ntasks-per-node=96 \
+    --ntasks-per-node=128 \
     --cpus-per-task=2 \
     --cpu-bind=cores \
     --kill-on-bad-exit=0 \
