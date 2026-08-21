@@ -3,10 +3,10 @@
 #SBATCH -A m5197
 #SBATCH -q regular
 #SBATCH -C cpu
-#SBATCH -N 4
-#SBATCH --ntasks-per-node=96
+#SBATCH -N 3
+#SBATCH --ntasks-per-node=128
 #SBATCH --cpus-per-task=2
-#SBATCH -t 24:00:00
+#SBATCH -t 15:00:00
 #SBATCH --licenses=cfs,scratch
 #SBATCH --requeue
 #SBATCH -o logs/bib_muon_groups_%j.out
@@ -21,7 +21,7 @@ export BIB_MUON_GROUPS=6666
 
 srun \
     --ntasks="$SLURM_NTASKS" \
-    --ntasks-per-node=96 \
+    --ntasks-per-node=128 \
     --cpus-per-task=2 \
     --cpu-bind=cores \
     --kill-on-bad-exit=1 \
