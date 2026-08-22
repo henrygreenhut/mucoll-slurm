@@ -150,11 +150,13 @@ def main():
         UnitSampler(store_a, dummy_splits_a, files_a,
                     cfg(config, "features", "paper"),
                     cfg(config, "exclude_muons_above_gev", 0.0),
-                    cfg(config, "exclude_muons", False)),
+                    cfg(config, "exclude_muons", False),
+                    cfg(config, "exclude_photons", False)),
         UnitSampler(store_b, dummy_splits_b, files_b,
                     cfg(config, "features", "paper"),
                     cfg(config, "exclude_muons_above_gev", 0.0),
-                    cfg(config, "exclude_muons", False)),
+                    cfg(config, "exclude_muons", False),
+                    cfg(config, "exclude_photons", False)),
     ]
     mean, std, latent_scale = lc.load_norm_stats(stats_path)
     # Read the actual architecture used for this checkpoint, not the
@@ -186,6 +188,7 @@ def main():
         "exclude_muons_above_gev": cfg(
             config, "exclude_muons_above_gev", 0.0),
         "exclude_muons": cfg(config, "exclude_muons", False),
+        "exclude_photons": cfg(config, "exclude_photons", False),
         "split_fracs": split_fracs,
         "n_paired_test_cycles": int(len(test_indices)),
         "point_units_per_class": args.point_units,

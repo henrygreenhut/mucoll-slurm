@@ -203,6 +203,7 @@ def main():
             config["features"],
             config.get("exclude_muons_above_gev", 0.0),
             config.get("exclude_muons", False),
+            config.get("exclude_photons", False),
         )
         for store, count in zip(stores, files)
     ]

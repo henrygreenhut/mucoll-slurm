@@ -93,6 +93,8 @@ def write_or_validate_config(path, config):
     config.setdefault("exclude_muons_above_gev", 0.0)
     saved.setdefault("exclude_muons", False)
     config.setdefault("exclude_muons", False)
+    saved.setdefault("exclude_photons", False)
+    config.setdefault("exclude_photons", False)
     if saved.get("config_schema_version") != CONFIG_SCHEMA_VERSION:
         raise SystemExit(
             "{} is a legacy/incompatible run. Use a new --label.".format(path))

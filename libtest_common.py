@@ -101,6 +101,11 @@ FEATURE_SETS = {
                              "loge", "asinh_t"] + PDG_ONEHOT,
     "expanded_no_phi": ["logpt", "theta", "loge", "asinh_t",
                         "asinh_vz", "asinh_vr"] + PDG_ONEHOT,
+    "expanded_no_energy_scales": ["theta", "cosphi", "sinphi",
+                                  "asinh_t", "asinh_vz", "asinh_vr"]
+                                 + PDG_ONEHOT,
+    "expanded_no_particle_id": ["logpt", "theta", "cosphi", "sinphi",
+                                "loge", "asinh_t", "asinh_vz", "asinh_vr"],
     "expanded": ["logpt", "theta", "cosphi", "sinphi", "loge",
                  "asinh_t", "asinh_vz", "asinh_vr"] + PDG_ONEHOT,
 }

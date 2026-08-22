@@ -168,7 +168,10 @@ def parse_args():
                              "for BIB). 'expanded_no_position' also adds "
                              "log energy and asinh time. 'expanded_no_phi' "
                              "uses every expanded feature except cos(phi) "
-                             "and sin(phi). 'expanded' further "
+                             "and sin(phi). 'expanded_no_energy_scales' "
+                             "removes log(pT) and log(E). "
+                             "'expanded_no_particle_id' removes the PDG "
+                             "indicators. 'expanded' further "
                              "adds asinh vertex-z/vertex-radius "
                              "-- maximum GEN-level truth sensitivity, not "
                              "meant to be realistic (reco-level features "
@@ -182,6 +185,10 @@ def parse_args():
     parser.add_argument(
         "--exclude-muons", action="store_true",
         help="remove every particle with |PDG|=13 before normalization "
+             "and feature construction")
+    parser.add_argument(
+        "--exclude-photons", action="store_true",
+        help="remove every particle with PDG=22 before normalization "
              "and feature construction")
     # --- architecture ----------------------------------------------------
     # latent_scale=none (raw, unnormalized sum) is the one most prone to
@@ -325,12 +332,23 @@ def parse_args():
     return args
 
 
-def filter_muons(raw, exclude_all=False, threshold_gev=0.0):
-    if not exclude_all and threshold_gev <= 0:
+def filter_particles(raw, exclude_all_muons=False, threshold_gev=0.0,
+                     exclude_photons=False):
+    if not exclude_all_muons and threshold_gev <= 0 and not exclude_photons:
         return raw
-    muon = np.abs(raw["pdg"]) == 13
-    keep = ~muon if exclude_all else ~(muon & (raw["E"] > threshold_gev))
+    absolute_pdg = np.abs(raw["pdg"])
+    keep = np.ones(len(absolute_pdg), dtype=bool)
+    if exclude_all_muons:
+        keep &= absolute_pdg != 13
+    elif threshold_gev > 0:
+        keep &= ~((absolute_pdg == 13) & (raw["E"] > threshold_gev))
+    if exclude_photons:
+        keep &= raw["pdg"] != 22
     return {name: values[keep] for name, values in raw.items()}
+
+
+def filter_muons(raw, exclude_all=False, threshold_gev=0.0):
+    return filter_particles(raw, exclude_all, threshold_gev)
 
 
 def exclude_high_energy_muons(raw, threshold_gev):
@@ -342,19 +360,20 @@ class UnitSampler:
 
     def __init__(self, store, positions_by_split, files_per_unit,
                  feature_set="paper", exclude_muons_above_gev=0.0,
-                 exclude_all_muons=False):
+                 exclude_all_muons=False, exclude_photons=False):
         self.store = store
         self.positions = positions_by_split
         self.files_per_unit = files_per_unit
         self.feature_set = feature_set
         self.exclude_muons_above_gev = exclude_muons_above_gev
         self.exclude_all_muons = exclude_all_muons
+        self.exclude_photons = exclude_photons
 
     def raw(self, file_positions):
         arrays = self.store.file_arrays(file_positions)
-        return filter_muons(
+        return filter_particles(
             arrays, self.exclude_all_muons,
-            self.exclude_muons_above_gev)
+            self.exclude_muons_above_gev, self.exclude_photons)
 
     def build(self, file_positions, mean, std):
         raw = self.raw(file_positions)
@@ -563,9 +582,11 @@ def main():
 
     samplers = [
         UnitSampler(store_a, split_a, files_a, args.features,
-                    args.exclude_muons_above_gev, args.exclude_muons),
+                    args.exclude_muons_above_gev, args.exclude_muons,
+                    args.exclude_photons),
         UnitSampler(store_b, split_b, files_b, args.features,
-                    args.exclude_muons_above_gev, args.exclude_muons),
+                    args.exclude_muons_above_gev, args.exclude_muons,
+                    args.exclude_photons),
     ]
     for cls, sampler in enumerate(samplers):
         for split_name, positions in sampler.positions.items():

@@ -78,6 +78,34 @@ class LibtestNormalizationTests(unittest.TestCase):
         np.testing.assert_array_equal(filtered["E"], [4.0])
         np.testing.assert_array_equal(filtered["pdg"], [11])
 
+    def test_muon_and_photon_cut_removes_both_particle_types(self):
+        raw = {
+            "E": np.asarray([0.2, 8.0, 4.0, 2.0], dtype=np.float32),
+            "pdg": np.asarray([13, -13, 22, 11], dtype=np.int32),
+        }
+
+        filtered = file_trainer.filter_particles(
+            raw, exclude_all_muons=True, exclude_photons=True)
+
+        np.testing.assert_array_equal(filtered["E"], [2.0])
+        np.testing.assert_array_equal(filtered["pdg"], [11])
+
+    def test_expanded_no_energy_scales_removes_logpt_and_loge(self):
+        expanded = lc.feature_names("expanded")
+        reduced = lc.feature_names("expanded_no_energy_scales")
+        self.assertEqual(
+            reduced,
+            [name for name in expanded if name not in ("logpt", "loge")],
+        )
+
+    def test_expanded_no_particle_id_removes_only_indicators(self):
+        expanded = lc.feature_names("expanded")
+        reduced = lc.feature_names("expanded_no_particle_id")
+        self.assertEqual(
+            reduced,
+            [name for name in expanded if name not in lc.PDG_ONEHOT],
+        )
+
     def test_expanded_no_phi_removes_only_azimuth(self):
         expanded = lc.feature_names("expanded")
         no_phi = lc.feature_names("expanded_no_phi")

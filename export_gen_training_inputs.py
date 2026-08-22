@@ -110,6 +110,7 @@ def main():
             config["features"],
             config["exclude_muons_above_gev"],
             config.get("exclude_muons", False),
+            config.get("exclude_photons", False),
         ),
         UnitSampler(
             store_b,
@@ -118,6 +119,7 @@ def main():
             config["features"],
             config["exclude_muons_above_gev"],
             config.get("exclude_muons", False),
+            config.get("exclude_photons", False),
         ),
     ]
     mean, std, _ = lc.load_norm_stats(result_dir / "norm_stats.json")
@@ -143,6 +145,7 @@ def main():
         "clone_factor": config["clone_factor"],
         "exclude_muons_above_gev": config["exclude_muons_above_gev"],
         "exclude_muons": config.get("exclude_muons", False),
+        "exclude_photons": config.get("exclude_photons", False),
         "data_seed": config["data_seed"],
         "batch_size": config["batch_size"],
         "units_per_epoch": config["units_per_epoch"],
