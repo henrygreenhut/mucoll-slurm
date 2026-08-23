@@ -4,8 +4,8 @@
 #SBATCH -q regular
 #SBATCH -C cpu
 #SBATCH -N 4
-#SBATCH --ntasks-per-node=128
-#SBATCH --cpus-per-task=2
+#SBATCH --ntasks-per-node=64
+#SBATCH --cpus-per-task=4
 #SBATCH -t 20:00:00
 #SBATCH --licenses=cfs,scratch
 #SBATCH --requeue
@@ -23,8 +23,8 @@ mkdir -p "$LOGS"
 
 srun \
     --ntasks="$SLURM_NTASKS" \
-    --ntasks-per-node=128 \
-    --cpus-per-task=2 \
+    --ntasks-per-node=64 \
+    --cpus-per-task=4 \
     --cpu-bind=cores \
     --kill-on-bad-exit=0 \
     --output="$LOGS/rank_%t.out" \
