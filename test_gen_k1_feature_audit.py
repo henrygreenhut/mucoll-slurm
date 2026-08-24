@@ -17,8 +17,8 @@ class FeatureAuditTests(unittest.TestCase):
             np.arange(4),
             np.cos(phi),
             np.sin(phi),
-            [1, 0, 0, 0],
-            [0, 1, 1, 1],
+            [1, 0, 0, 1],
+            [0, 1, 1, 0],
         ]).astype(np.float32)
         self.events = [self.features[:2], self.features[2:]]
 
@@ -54,6 +54,42 @@ class FeatureAuditTests(unittest.TestCase):
         np.testing.assert_array_equal(
             np.concatenate(changed)[:, 3:].sum(axis=1), np.ones(4)
         )
+
+    def test_photon_phi_shuffle_changes_only_photon_angle_pairs(self):
+        changed = np.concatenate(transform(
+            self.events,
+            self.names,
+            "shuffle:photon_phi",
+            np.random.default_rng(12),
+        ))
+        photon = self.features[:, 3] == 1
+        self.assertCountEqual(
+            map(tuple, changed[photon, 1:3].tolist()),
+            map(tuple, self.features[photon, 1:3].tolist()),
+        )
+        np.testing.assert_array_equal(
+            changed[~photon, 1:3], self.features[~photon, 1:3]
+        )
+        np.testing.assert_array_equal(changed[:, [0, 3, 4]],
+                                      self.features[:, [0, 3, 4]])
+
+    def test_nonphoton_phi_shuffle_changes_only_nonphoton_angle_pairs(self):
+        changed = np.concatenate(transform(
+            self.events,
+            self.names,
+            "shuffle:nonphoton_phi",
+            np.random.default_rng(13),
+        ))
+        photon = self.features[:, 3] == 1
+        self.assertCountEqual(
+            map(tuple, changed[~photon, 1:3].tolist()),
+            map(tuple, self.features[~photon, 1:3].tolist()),
+        )
+        np.testing.assert_array_equal(
+            changed[photon, 1:3], self.features[photon, 1:3]
+        )
+        np.testing.assert_array_equal(changed[:, [0, 3, 4]],
+                                      self.features[:, [0, 3, 4]])
 
     def test_pi_over_two_rotation(self):
         changed = transform(

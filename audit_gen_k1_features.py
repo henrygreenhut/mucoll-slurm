@@ -31,6 +31,7 @@ def arguments():
     parser.add_argument("--test-units", type=int, default=300)
     parser.add_argument("--seed", type=int, default=1701)
     parser.add_argument("--batch-size", type=int)
+    parser.add_argument("--interventions", nargs="+")
     return parser.parse_args()
 
 
@@ -41,6 +42,36 @@ def interventions(names):
     return modes
 
 
+def available_interventions(names):
+    return interventions(names) + [
+        "shuffle:photon_phi",
+        "shuffle:nonphoton_phi",
+    ]
+
+
+def shuffle_selected_phi(features, changed, names, rng, photons):
+    photon_index = names.index("pdg_gamma")
+    columns = [names.index("cosphi"), names.index("sinphi")]
+    masks = [
+        (values[:, photon_index] > 0.5) == photons
+        for values in features
+    ]
+    count = sum(int(np.count_nonzero(mask)) for mask in masks)
+    if count < 2:
+        return changed
+    pooled = np.concatenate([
+        values[mask][:, columns]
+        for values, mask in zip(features, masks)
+    ])
+    shuffled = pooled[rng.permutation(len(pooled))]
+    start = 0
+    for values, mask in zip(changed, masks):
+        length = int(np.count_nonzero(mask))
+        values[np.ix_(mask, columns)] = shuffled[start:start + length]
+        start += length
+    return changed
+
+
 def transform(features, names, mode, rng):
     if mode == "baseline":
         return features
@@ -48,6 +79,14 @@ def transform(features, names, mode, rng):
     changed = [values.copy() for values in features]
     if mode.startswith("shuffle:"):
         group = mode.split(":", 1)[1]
+        if group == "photon_phi":
+            return shuffle_selected_phi(
+                features, changed, names, rng, photons=True
+            )
+        if group == "nonphoton_phi":
+            return shuffle_selected_phi(
+                features, changed, names, rng, photons=False
+            )
         if group == "phi_pair":
             columns = [names.index("cosphi"), names.index("sinphi")]
         elif group == "pdg_group":
@@ -154,6 +193,8 @@ def evaluate(model, definitions, samplers, mean, std, names, mode_names,
 
 def save_plot(path, rows):
     feature_rows = [row for row in rows if row["kind"] == "individual"]
+    if not feature_rows:
+        feature_rows = rows[1:]
     labels = [row["feature"] for row in feature_rows]
     values = [row["auc"] for row in feature_rows]
     figure, axis = plt.subplots(figsize=(8.0, 6.2))
@@ -212,7 +253,13 @@ def main():
     model = build_model(config, len(names), latent_scale)
     model.load_weights(str(source_dir / "best.weights.h5"))
     batch_size = args.batch_size or int(config["batch_size"])
-    mode_names = interventions(names)
+    mode_names = args.interventions or interventions(names)
+    allowed = set(available_interventions(names))
+    unknown = [mode for mode in mode_names if mode not in allowed]
+    if unknown:
+        raise SystemExit("unknown interventions: {}".format(", ".join(unknown)))
+    if not mode_names or mode_names[0] != "baseline":
+        raise SystemExit("--interventions must begin with baseline")
 
     labels, scores = evaluate(
         model,
@@ -277,8 +324,10 @@ def main():
                 "reported_auc": reported_auc,
                 "rows": rows,
                 "shuffle_definition": (
-                    "particle permutation across balanced native/rotated "
-                    "test batches, preserving each construction's multiplicity"
+                    "paired feature values are permuted across balanced "
+                    "native/rotated test batches while preserving each "
+                    "construction's multiplicity; selective phi modes pool "
+                    "only the named particle category"
                 ),
                 "phi_rotation": "coherent +pi/2 for every particle",
             },
