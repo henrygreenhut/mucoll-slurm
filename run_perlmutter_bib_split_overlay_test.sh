@@ -100,11 +100,17 @@ run_digi split_bh \
     --OverlayFullBHPathToMuPlus "$SPLIT/decays-containing-muon-poisson-norot/SIM/MUPLUS" \
     --OverlayFullBHPathToMuMinus "$SPLIT/decays-containing-muon-poisson-norot/SIM/MUMINUS"
 
-echo "running RECO: split_bh"
-k4run "$MUCOLL_CONFIG/$MUCOLL_CONFIG_NAME/reco_steer.py" \
-    -n "$EVENTS" \
-    --inputFiles split_bh.edm4hep.root \
-    --outputFile split_bh_reco.edm4hep.root
+run_reco() {
+    label=$1
+    echo "running RECO: $label"
+    k4run "$MUCOLL_CONFIG/$MUCOLL_CONFIG_NAME/reco_steer.py" \
+        -n "$EVENTS" \
+        --inputFiles "$label.edm4hep.root" \
+        --outputFile "${label}_reco.edm4hep.root"
+}
+
+run_reco legacy
+run_reco split_bh
 
 python3 - "$EVENTS" <<'PY'
 import sys
@@ -113,6 +119,7 @@ import uproot
 expected = int(sys.argv[1])
 paths = (
     "legacy.edm4hep.root",
+    "legacy_reco.edm4hep.root",
     "split_bulk.edm4hep.root",
     "split_bh.edm4hep.root",
     "split_bh_reco.edm4hep.root",
@@ -125,6 +132,25 @@ for path in paths:
     entries = root["events"].num_entries
     assert entries == expected, (path, entries, expected)
     print(path, "events=", entries, "branches=", len(root["events"].keys()))
+
+for label in ("legacy", "split_bh"):
+    tree = uproot.open(label + "_reco.edm4hep.root")["events"]
+    pfos = tree["PandoraPFOs/PandoraPFOs.PDG"].array()
+    tracks = tree["SiTracks_objIdx/SiTracks_objIdx.index"].array()
+    begin = tree["PandoraPFOs/PandoraPFOs.tracks_begin"].array()
+    end = tree["PandoraPFOs/PandoraPFOs.tracks_end"].array()
+    pfo_count = sum(len(event) for event in pfos)
+    track_count = sum(len(event) for event in tracks)
+    link_count = sum(
+        int(sum(int(stop) - int(start) for start, stop in zip(starts, stops)))
+        for starts, stops in zip(begin, end)
+    )
+    print(
+        label,
+        "pfos=", pfo_count,
+        "tracks=", track_count,
+        "pfo_track_links=", link_count,
+    )
 PY
 
 {
