@@ -10,7 +10,7 @@ SPLIT=$DATA/bib-v3p0-fmt2-split-muon-v1
 LEGACY=$DATA/bib-v3p0-fmt2-norm42-RandomRot/SIM
 SIGNAL_SIM=${SIGNAL_SIM:-/pscratch/sd/h/hgreen/mucoll/libtest/work/reco420_v2/56293200/mucoll_job_15.fx6hbR/sim_output.edm4hep.root}
 EVENTS=${EVENTS:-3}
-BIB_NUMBER=2
+BIB_NUMBER=${BIB_NUMBER:-2}
 OUTPUT=${OUTPUT:-$PSCRATCH/mucoll/bib_split_muon_overlay_test/$SLURM_JOB_ID}
 WORK=$(mktemp -d "$PSCRATCH/mucoll/bib_split_overlay_test.XXXXXX")
 
@@ -92,19 +92,19 @@ run_digi split_bulk \
     --OverlayFullPathToMuMinus "$SPLIT/bulk-norm42/SIM/MUMINUS" \
     --OverlayFullNumberBackground "$BIB_NUMBER"
 
-run_digi split_muon \
+run_digi split_bh \
     --OverlayFullPathToMuPlus "$SPLIT/bulk-norm42/SIM/MUPLUS" \
     --OverlayFullPathToMuMinus "$SPLIT/bulk-norm42/SIM/MUMINUS" \
     --OverlayFullNumberBackground "$BIB_NUMBER" \
-    --OverlayFullUseMuonComponent \
-    --OverlayFullMuonPathToMuPlus "$SPLIT/decays-containing-muon-poisson-norot/SIM/MUPLUS" \
-    --OverlayFullMuonPathToMuMinus "$SPLIT/decays-containing-muon-poisson-norot/SIM/MUMINUS"
+    --OverlayBHMuonsSeparately \
+    --OverlayFullBHPathToMuPlus "$SPLIT/decays-containing-muon-poisson-norot/SIM/MUPLUS" \
+    --OverlayFullBHPathToMuMinus "$SPLIT/decays-containing-muon-poisson-norot/SIM/MUMINUS"
 
-echo "running RECO: split_muon"
+echo "running RECO: split_bh"
 k4run "$MUCOLL_CONFIG/$MUCOLL_CONFIG_NAME/reco_steer.py" \
     -n "$EVENTS" \
-    --inputFiles split_muon.edm4hep.root \
-    --outputFile split_muon_reco.edm4hep.root
+    --inputFiles split_bh.edm4hep.root \
+    --outputFile split_bh_reco.edm4hep.root
 
 python3 - "$EVENTS" <<'PY'
 import sys
@@ -114,8 +114,8 @@ expected = int(sys.argv[1])
 paths = (
     "legacy.edm4hep.root",
     "split_bulk.edm4hep.root",
-    "split_muon.edm4hep.root",
-    "split_muon_reco.edm4hep.root",
+    "split_bh.edm4hep.root",
+    "split_bh_reco.edm4hep.root",
 )
 
 for path in paths:
