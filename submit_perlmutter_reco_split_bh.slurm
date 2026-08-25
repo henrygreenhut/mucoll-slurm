@@ -28,6 +28,28 @@ export CHAIN_WORK_BASE=${CHAIN_WORK_BASE:-$PSCRATCH/mucoll/reco_n420_${RECO_BIB_
 export TRACKING_THREADS=3
 mkdir -p logs "logs/reco420_${RECO_BIB_MODE}_$SLURM_JOB_ID" "$CHAIN_WORK_BASE"
 
+if [ "$RECO_BIB_MODE" = legacy ]; then
+    SOURCE=/global/cfs/cdirs/m5197/mleblanc/MuonCollider/data/bib-v3p0-fmt2-norm42-RandomRot/SIM
+    export LEGACY_BIB_ROOT=$PSCRATCH/mucoll/bib-v3p0-fmt2-norm42-RandomRot-no6291/SIM
+    for polarity in MUPLUS MUMINUS; do
+        destination="$LEGACY_BIB_ROOT/$polarity"
+        mkdir -p "$destination"
+        while IFS= read -r -d '' source; do
+            ln -sfn "$source" "$destination/${source##*/}"
+        done < <(
+            find "$SOURCE/$polarity" -maxdepth 1 -type f \
+                -name 'bib_sim_*.edm4hep.root' \
+                ! -name 'bib_sim_6291.edm4hep.root' -print0
+        )
+        count=$(find "$destination" -maxdepth 1 -type l \
+            -name 'bib_sim_*.edm4hep.root' | wc -l)
+        if [ "$count" -ne 6665 ]; then
+            echo "$destination contains $count files; expected 6665" >&2
+            exit 1
+        fi
+    done
+fi
+
 echo "tasks=$TASKS image=$MUCOLL_IMAGE maia=$EXPECTED_MAIA_COMMIT"
 srun \
     --ntasks="$TASKS" \

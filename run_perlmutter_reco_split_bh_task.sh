@@ -22,7 +22,7 @@ BENCH=${MUCOLL_BENCHMARKS_PATH:-$REPO/../mucoll-benchmarks}
 MAIA=$BENCH/configs/MAIAConfig
 DATA=/global/cfs/cdirs/m5197/mleblanc/MuonCollider/data
 MODE=${RECO_BIB_MODE:?RECO_BIB_MODE must be legacy or split_bh}
-LEGACY=$DATA/bib-v3p0-fmt2-norm42-RandomRot/SIM
+LEGACY=${LEGACY_BIB_ROOT:-$DATA/bib-v3p0-fmt2-norm42-RandomRot/SIM}
 SPLIT=$DATA/bib-v3p0-fmt2-split-muon-v1
 BULK=$SPLIT/bulk-norm42/SIM
 BH=$SPLIT/decays-containing-muon-poisson-norot/SIM
@@ -195,6 +195,7 @@ PY
     echo "n_norm1_file_equivalents=420"
     if [ "$MODE" = legacy ]; then
         echo "legacy_norm42_files_per_polarity=$BIB_NUMBER"
+        echo "legacy_excluded_cycle=6291"
         echo "legacy_muplus=$LEGACY/MUPLUS"
         echo "legacy_muminus=$LEGACY/MUMINUS"
     else
