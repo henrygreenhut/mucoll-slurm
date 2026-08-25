@@ -21,7 +21,7 @@ REPO=$(cd "$(dirname "$0")" && pwd)
 BENCH=${MUCOLL_BENCHMARKS_PATH:-$REPO/../mucoll-benchmarks}
 MAIA=$BENCH/configs/MAIAConfig
 DATA=/global/cfs/cdirs/m5197/mleblanc/MuonCollider/data
-MODE=${RECO_BIB_MODE:?RECO_BIB_MODE must be legacy or split_bh}
+MODE=${RECO_BIB_MODE:?RECO_BIB_MODE must be legacy, bulk_only, or split_bh}
 LEGACY=${LEGACY_BIB_ROOT:-$DATA/bib-v3p0-fmt2-norm42-RandomRot/SIM}
 SPLIT=$DATA/bib-v3p0-fmt2-split-muon-v1
 BULK=$SPLIT/bulk-norm42/SIM
@@ -44,6 +44,9 @@ case "$MODE" in
     legacy)
         BIB_PATHS=("$LEGACY/MUPLUS" "$LEGACY/MUMINUS")
         ;;
+    bulk_only)
+        BIB_PATHS=("$BULK/MUPLUS" "$BULK/MUMINUS")
+        ;;
     split_bh)
         BIB_PATHS=(
             "$BULK/MUPLUS" "$BULK/MUMINUS"
@@ -51,7 +54,7 @@ case "$MODE" in
         )
         ;;
     *)
-        echo "RECO_BIB_MODE must be legacy or split_bh" >&2
+        echo "RECO_BIB_MODE must be legacy, bulk_only, or split_bh" >&2
         exit 2
         ;;
 esac
@@ -115,20 +118,29 @@ ddsim \
 OVERLAY_ARGS=(
     --OverlayFullNumberBackground "$BIB_NUMBER"
 )
-if [ "$MODE" = legacy ]; then
-    OVERLAY_ARGS+=(
-        --OverlayFullPathToMuPlus "$LEGACY/MUPLUS"
-        --OverlayFullPathToMuMinus "$LEGACY/MUMINUS"
-    )
-else
-    OVERLAY_ARGS+=(
-        --OverlayFullPathToMuPlus "$BULK/MUPLUS"
-        --OverlayFullPathToMuMinus "$BULK/MUMINUS"
-        --OverlayBHMuonsSeparately
-        --OverlayFullBHPathToMuPlus "$BH/MUPLUS"
-        --OverlayFullBHPathToMuMinus "$BH/MUMINUS"
-    )
-fi
+case "$MODE" in
+    legacy)
+        OVERLAY_ARGS+=(
+            --OverlayFullPathToMuPlus "$LEGACY/MUPLUS"
+            --OverlayFullPathToMuMinus "$LEGACY/MUMINUS"
+        )
+        ;;
+    bulk_only)
+        OVERLAY_ARGS+=(
+            --OverlayFullPathToMuPlus "$BULK/MUPLUS"
+            --OverlayFullPathToMuMinus "$BULK/MUMINUS"
+        )
+        ;;
+    split_bh)
+        OVERLAY_ARGS+=(
+            --OverlayFullPathToMuPlus "$BULK/MUPLUS"
+            --OverlayFullPathToMuMinus "$BULK/MUMINUS"
+            --OverlayBHMuonsSeparately
+            --OverlayFullBHPathToMuPlus "$BH/MUPLUS"
+            --OverlayFullBHPathToMuMinus "$BH/MUMINUS"
+        )
+        ;;
+esac
 
 k4run "$MUCOLL_CONFIG/$MUCOLL_CONFIG_NAME/digi_steer.py" \
     -n "$EVENTS" \
@@ -200,6 +212,11 @@ PY
         echo "legacy_source_pool_cycles_per_polarity=6654"
         echo "legacy_muplus=$LEGACY/MUPLUS"
         echo "legacy_muminus=$LEGACY/MUMINUS"
+    elif [ "$MODE" = bulk_only ]; then
+        echo "bulk_norm42_files_per_polarity=$BIB_NUMBER"
+        echo "bulk_muplus=$BULK/MUPLUS"
+        echo "bulk_muminus=$BULK/MUMINUS"
+        echo "component_selection=beam_muon_decays_without_detector_bound_secondary_muons"
     else
         echo "bulk_norm42_files_per_polarity=$BIB_NUMBER"
         echo "bh_group_files_per_polarity=$BIB_NUMBER"

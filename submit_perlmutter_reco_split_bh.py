@@ -9,7 +9,9 @@ from pathlib import Path
 
 def arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", choices=("legacy", "split_bh"), required=True)
+    parser.add_argument(
+        "--mode", choices=("legacy", "bulk_only", "split_bh"), required=True
+    )
     parser.add_argument("--jobs", type=int, default=40)
     parser.add_argument("--events-per-job", type=int, default=50)
     parser.add_argument("--time", default="04:00:00")
@@ -114,6 +116,8 @@ def main():
     ))
     if args.mode == "legacy":
         print("N=420 legacy: 10 inclusive norm42 files per polarity from 6654 common valid cycles")
+    elif args.mode == "bulk_only":
+        print("N=420 bulk only: 10 muon-removed norm42 files per polarity")
     else:
         print("N=420 split BH: 10 bulk norm42 + 10 grouped BH files per polarity")
     print("MAIAConfig: {}".format(maia_commit))
