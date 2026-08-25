@@ -196,6 +196,8 @@ PY
     if [ "$MODE" = legacy ]; then
         echo "legacy_norm42_files_per_polarity=$BIB_NUMBER"
         echo "legacy_excluded_cycle=6291"
+        echo "legacy_source_pool=common_muplus_muminus_cycles"
+        echo "legacy_source_pool_cycles_per_polarity=6654"
         echo "legacy_muplus=$LEGACY/MUPLUS"
         echo "legacy_muminus=$LEGACY/MUMINUS"
     else

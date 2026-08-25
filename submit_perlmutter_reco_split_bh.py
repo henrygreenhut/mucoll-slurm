@@ -113,7 +113,7 @@ def main():
         args.jobs * args.events_per_job, args.events_per_job
     ))
     if args.mode == "legacy":
-        print("N=420 legacy: 10 inclusive norm42 files per polarity; cycle 6291 excluded")
+        print("N=420 legacy: 10 inclusive norm42 files per polarity from 6654 common valid cycles")
     else:
         print("N=420 split BH: 10 bulk norm42 + 10 grouped BH files per polarity")
     print("MAIAConfig: {}".format(maia_commit))
