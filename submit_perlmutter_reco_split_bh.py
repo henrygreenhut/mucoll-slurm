@@ -9,6 +9,7 @@ from pathlib import Path
 
 def arguments():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", choices=("legacy", "split_bh"), required=True)
     parser.add_argument("--jobs", type=int, default=40)
     parser.add_argument("--events-per-job", type=int, default=50)
     parser.add_argument("--time", default="04:00:00")
@@ -17,9 +18,14 @@ def arguments():
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument(
         "--outdir",
-        default=os.environ.get("PSCRATCH", "") + "/mucoll/reco_n420_split_bh",
+        default=None,
     )
     args = parser.parse_args()
+    if args.outdir is None:
+        args.outdir = os.path.join(
+            os.environ.get("PSCRATCH", ""),
+            "mucoll/reco_n420_{}_v31".format(args.mode),
+        )
     if not 1 <= args.jobs <= 40:
         parser.error("--jobs must be between 1 and 40")
     if args.events_per_job < 1:
@@ -80,7 +86,7 @@ def main():
     logs = repo / "logs"
     logs.mkdir(exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    manifest = logs / "reco_n420_split_bh_{}.tsv".format(stamp)
+    manifest = logs / "reco_n420_{}_{}.tsv".format(args.mode, stamp)
     with manifest.open("w") as handle:
         for row in rows:
             handle.write("\t".join(map(str, row)) + "\n")
@@ -91,7 +97,12 @@ def main():
         "--qos={}".format(args.qos),
         "--time={}".format(args.time),
         "--ntasks={}".format(len(rows)),
-        "--export=ALL,EXPECTED_MAIA_COMMIT={}".format(maia_commit),
+        "--job-name=reco420_{}".format(args.mode),
+        "--output=logs/reco420_{}_%j.out".format(args.mode),
+        "--error=logs/reco420_{}_%j.err".format(args.mode),
+        "--export=ALL,EXPECTED_MAIA_COMMIT={},RECO_BIB_MODE={}".format(
+            maia_commit, args.mode
+        ),
         str(repo / "submit_perlmutter_reco_split_bh.slurm"),
         str(manifest),
     ]
@@ -101,7 +112,10 @@ def main():
     print("events: {} total ({} per task)".format(
         args.jobs * args.events_per_job, args.events_per_job
     ))
-    print("N=420: 10 bulk norm42 + 10 Poisson-grouped BH files per polarity")
+    if args.mode == "legacy":
+        print("N=420 legacy: 10 inclusive norm42 files per polarity")
+    else:
+        print("N=420 split BH: 10 bulk norm42 + 10 grouped BH files per polarity")
     print("MAIAConfig: {}".format(maia_commit))
     print(" ".join(command))
     if args.dry_run:
