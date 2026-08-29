@@ -25,8 +25,9 @@ MODE=${RECO_BIB_MODE:?RECO_BIB_MODE must be legacy, bulk_only, or split_bh}
 LEGACY=${LEGACY_BIB_ROOT:-$DATA/bib-v3p0-fmt2-norm42-RandomRot/SIM}
 SPLIT=$DATA/bib-v3p0-fmt2-split-muon-v1
 BULK=$SPLIT/bulk-norm42/SIM
-BH=$SPLIT/decays-containing-muon-poisson-norot/SIM
+BH=$SPLIT/decays-containing-muon-norm1-norot-packed/SIM
 BIB_NUMBER=10
+BH_MEAN=${BH_MEAN:-7924.2}
 TRACKING_THREADS=${TRACKING_THREADS:-3}
 WORK=$(mktemp -d "$CHAIN_WORK_BASE/reco420_${MODE}_${JOB_ID}.XXXXXX")
 
@@ -73,6 +74,15 @@ source "$BENCH/setup_config.sh" "$BENCH" MAIA_v0
 set -o pipefail
 set -u
 
+if [ -n "${K4RECO_BUILD:-}" ]; then
+    if [ ! -f "$K4RECO_BUILD/overlay_entry_mix.complete" ]; then
+        echo "incomplete k4Reco build: $K4RECO_BUILD" >&2
+        exit 1
+    fi
+    export LD_LIBRARY_PATH="$K4RECO_BUILD:$K4RECO_BUILD/k4Reco:$K4RECO_BUILD/k4Reco/genConfDir/k4Reco:${LD_LIBRARY_PATH:-}"
+    export PYTHONPATH="$K4RECO_BUILD/k4Reco/genConfDir:${PYTHONPATH:-}"
+fi
+
 if [ "$(git -C "$MAIA" rev-parse HEAD)" != "$EXPECTED_MAIA_COMMIT" ]; then
     echo "MAIAConfig changed after submission" >&2
     exit 1
@@ -83,11 +93,15 @@ if [ -n "$(git -C "$MAIA" status --porcelain)" ]; then
     exit 1
 fi
 
-grep -q -- '--OverlayBHMuonsSeparately' "$MAIA/MAIAConfig/digi_args.py"
+grep -q -- '--OverlayBHMeanDecays' "$MAIA/MAIAConfig/digi_args.py"
 grep -Fq 'TrackCollections = ["SiTracks"]' \
     "$MAIA/MAIAConfig/ParticleFlow/pandora.py"
 grep -Fq 'RelTrackCollections = ["MergedTrackerHitsRelations"]' \
     "$MAIA/MAIAConfig/ParticleFlow/pandora.py"
+
+if [ "$MODE" = split_bh ]; then
+    python3 -c 'from Configurables import OverlayTimingRandomEntryMix'
+fi
 
 export OMP_NUM_THREADS=$TRACKING_THREADS
 export OPENBLAS_NUM_THREADS=1
@@ -136,8 +150,9 @@ case "$MODE" in
             --OverlayFullPathToMuPlus "$BULK/MUPLUS"
             --OverlayFullPathToMuMinus "$BULK/MUMINUS"
             --OverlayBHMuonsSeparately
-            --OverlayFullBHPathToMuPlus "$BH/MUPLUS"
-            --OverlayFullBHPathToMuMinus "$BH/MUMINUS"
+            --OverlayBHPathToMuPlus "$BH/MUPLUS"
+            --OverlayBHPathToMuMinus "$BH/MUMINUS"
+            --OverlayBHMeanDecays "$BH_MEAN"
         )
         ;;
 esac
@@ -224,11 +239,12 @@ PY
         echo "component_selection=beam_muon_decays_without_detector_bound_secondary_muons"
     else
         echo "bulk_norm42_files_per_polarity=$BIB_NUMBER"
-        echo "bh_group_files_per_polarity=$BIB_NUMBER"
+        echo "bh_mean_decays_per_polarity=$BH_MEAN"
         echo "bulk_muplus=$BULK/MUPLUS"
         echo "bulk_muminus=$BULK/MUMINUS"
         echo "bh_muplus=$BH/MUPLUS"
         echo "bh_muminus=$BH/MUMINUS"
+        echo "bh_bank_format=packed_multi_event"
         echo "bh_bank_selection=complete_mother_muon_decays_containing_any_detector_bound_muon"
     fi
     echo "calorimeter_coning=disabled"

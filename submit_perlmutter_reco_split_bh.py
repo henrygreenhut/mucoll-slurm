@@ -26,10 +26,11 @@ def arguments():
     args = parser.parse_args()
     if args.outdir is None:
         suffix = "_digi_audit" if args.digi_audit else ""
-        args.outdir = os.path.join(
-            os.environ.get("PSCRATCH", ""),
-            "mucoll/reco_n420_{}_v31{}".format(args.mode, suffix),
-        )
+        if args.mode == "split_bh":
+            name = "reco_n420_split_bh_entry_mix_v1{}".format(suffix)
+        else:
+            name = "reco_n420_{}_v31{}".format(args.mode, suffix)
+        args.outdir = os.path.join(os.environ.get("PSCRATCH", ""), "mucoll", name)
     if not 1 <= args.jobs <= 40:
         parser.error("--jobs must be between 1 and 40")
     if args.events_per_job < 1:
@@ -52,6 +53,10 @@ def main():
     source = maia / "MAIAConfig"
 
     require_text(source / "digi_args.py", "--OverlayBHMuonsSeparately")
+    require_text(source / "digi_args.py", "--OverlayBHMeanDecays")
+    require_text(
+        source / "Overlay" / "overlay_BIB.py", "OverlayTimingRandomEntryMix"
+    )
     require_text(
         source / "ParticleFlow/pandora.py",
         'RelTrackCollections = ["MergedTrackerHitsRelations"]',
@@ -129,7 +134,10 @@ def main():
     elif args.mode == "bulk_only":
         print("N=420 bulk only: 10 muon-removed norm42 files per polarity")
     else:
-        print("N=420 split BH: 10 bulk norm42 + 10 grouped BH files per polarity")
+        print(
+            "N=420 split BH: 10 bulk norm42 files + Poisson(mean={}) "
+            "BH decays per polarity".format(os.environ.get("BH_MEAN", "7924.2"))
+        )
     print("MAIAConfig: {}".format(maia_commit))
     print(" ".join(command))
     if args.dry_run:
