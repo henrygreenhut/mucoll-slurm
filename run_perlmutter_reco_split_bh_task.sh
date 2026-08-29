@@ -114,6 +114,7 @@ cp -r "$MUCOLL_CONFIG/$MUCOLL_CONFIG_NAME/PandoraSettings" ./
 GEN_SEED=$((12345 + JOB_ID))
 DIGI_SEED=$((42 + JOB_ID))
 
+GEN_START=$(date +%s)
 python3 "$BENCH/generation/pgun/pgun_edm4hep.py" \
     -s "$GEN_SEED" \
     -p 1 \
@@ -122,12 +123,15 @@ python3 "$BENCH/generation/pgun/pgun_edm4hep.py" \
     --pt 100 \
     --theta 10 170 \
     -- gen_output.edm4hep.root
+GEN_SECONDS=$(($(date +%s) - GEN_START))
 
+SIM_START=$(date +%s)
 ddsim \
     --steeringFile "$BENCH/simulation/steer_baseline.py" \
     --numberOfEvents "$EVENTS" \
     --inputFiles gen_output.edm4hep.root \
     --outputFile sim_output.edm4hep.root
+SIM_SECONDS=$(($(date +%s) - SIM_START))
 
 OVERLAY_ARGS=(
     --OverlayFullNumberBackground "$BIB_NUMBER"
@@ -157,6 +161,7 @@ case "$MODE" in
         ;;
 esac
 
+DIGI_START=$(date +%s)
 k4run "$MUCOLL_CONFIG/$MUCOLL_CONFIG_NAME/digi_steer.py" \
     -n "$EVENTS" \
     --inputFiles sim_output.edm4hep.root \
@@ -164,19 +169,24 @@ k4run "$MUCOLL_CONFIG/$MUCOLL_CONFIG_NAME/digi_steer.py" \
     --RandSeed "$DIGI_SEED" \
     --doOverlayFull \
     "${OVERLAY_ARGS[@]}"
+DIGI_SECONDS=$(($(date +%s) - DIGI_START))
 
 if [ "${DIGI_AUDIT:-0}" = 1 ]; then
     python3 "$REPO/summarize_reco_digi.py" \
         digi_output.edm4hep.root digi_summary.csv
 fi
 
+RECO_START=$(date +%s)
 k4run "$MUCOLL_CONFIG/$MUCOLL_CONFIG_NAME/reco_steer.py" \
     -n "$EVENTS" \
     --TrackingThreads "$TRACKING_THREADS" \
     --inputFiles digi_output.edm4hep.root \
     --outputFile reco_output.edm4hep.root
+RECO_SECONDS=$(($(date +%s) - RECO_START))
+TOTAL_SECONDS=$((GEN_SECONDS + SIM_SECONDS + DIGI_SECONDS + RECO_SECONDS))
 
 python3 - "$EVENTS" <<'PY'
+import csv
 import sys
 
 import numpy as np
@@ -196,12 +206,26 @@ charge = tree["PandoraPFOs/PandoraPFOs.charge"].array()
 tracks = tree["SiTracks_objIdx/SiTracks_objIdx.index"].array()
 begin = tree["PandoraPFOs/PandoraPFOs.tracks_begin"].array()
 end = tree["PandoraPFOs/PandoraPFOs.tracks_end"].array()
-pfo_count = sum(len(event) for event in pdg)
-charged_pfo_count = sum(
+pfo_counts = [len(event) for event in pdg]
+charged_pfo_counts = [
     int(np.count_nonzero(np.asarray(event))) for event in charge
-)
-track_count = sum(len(event) for event in tracks)
-links = sum(int(np.sum(np.asarray(b) - np.asarray(a))) for a, b in zip(begin, end))
+]
+track_counts = [len(event) for event in tracks]
+link_counts = [
+    int(np.sum(np.asarray(b) - np.asarray(a))) for a, b in zip(begin, end)
+]
+pfo_count = sum(pfo_counts)
+charged_pfo_count = sum(charged_pfo_counts)
+track_count = sum(track_counts)
+links = sum(link_counts)
+
+with open("reco_summary.csv", "w", newline="") as output:
+    writer = csv.writer(output)
+    writer.writerow(("event", "pfos", "charged_pfos", "tracks", "pfo_track_links"))
+    writer.writerows(
+        zip(range(expected), pfo_counts, charged_pfo_counts, track_counts, link_counts)
+    )
+
 with open("validation.txt", "w") as output:
     output.write("events={}\n".format(expected))
     output.write("pfos={}\n".format(pfo_count))
@@ -216,6 +240,15 @@ print(
     "pfo_track_links=", links,
 )
 PY
+
+{
+    echo "events=$EVENTS"
+    echo "gen_seconds=$GEN_SECONDS"
+    echo "sim_seconds=$SIM_SECONDS"
+    echo "digi_seconds=$DIGI_SECONDS"
+    echo "reco_seconds=$RECO_SECONDS"
+    echo "total_seconds=$TOTAL_SECONDS"
+} > timing.txt
 
 {
     echo "job_id=$JOB_ID"
@@ -260,7 +293,7 @@ PY
 mv gen_output.edm4hep.root "$OUTPUT/gen_output_${JOB_ID}.edm4hep.root"
 mv sim_output.edm4hep.root "$OUTPUT/sim_output_${JOB_ID}.edm4hep.root"
 mv reco_output.edm4hep.root "$RECO_OUTPUT"
-mv metadata.txt validation.txt "$OUTPUT/"
+mv metadata.txt validation.txt timing.txt reco_summary.csv "$OUTPUT/"
 if [ -f digi_summary.csv ]; then
     mv digi_summary.csv "$OUTPUT/"
 fi
