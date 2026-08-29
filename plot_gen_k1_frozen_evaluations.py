@@ -10,23 +10,11 @@ import matplotlib.pyplot as plt
 ROWS = [
     ("Unmodified test inputs", 0.8242777778, "baseline"),
     (r"Shuffle $\phi$ pair together", 0.5365777778, "group"),
-    (r"Rotate each construction by a random $\phi$", 0.5141333333, "azimuth"),
-    (r"Replace $\phi$ with uniform values", 0.5370888889, "azimuth"),
-    (r"Add $\pi/2$ to $\phi$", 0.2744666667, "azimuth"),
-    (r"Shuffle $\cos(\phi)$", 0.6686222222, "feature"),
-    (r"Shuffle $\sin(\phi)$", 0.7204444444, "feature"),
-    (r"Shuffle $\log(p_T)$", 0.6375777778, "feature"),
-    (r"Shuffle $\theta$", 0.7990444444, "feature"),
-    (r"Shuffle $\log(E)$", 0.5890444444, "feature"),
-    ("Shuffle time", 0.7238555556, "feature"),
-    (r"Shuffle particle $z$ position", 0.8414444444, "feature"),
-    (r"Shuffle particle $r$ position ($r=\sqrt{x^2+y^2}$)", 0.5395888889, "feature"),
     ("Shuffle photon indicator", 0.6048333333, "feature"),
     ("Shuffle neutron indicator", 0.7800000000, "feature"),
     ("Shuffle electron indicator", 0.8268111111, "feature"),
     ("Shuffle muon indicator", 0.8217555556, "feature"),
     ("Shuffle other-particle indicator", 0.8161000000, "feature"),
-    ("Shuffle particle indicators together", 0.5676111111, "group"),
 ]
 
 COLORS = {
@@ -47,7 +35,7 @@ def main():
     positions = list(range(len(ROWS)))
 
     plt.rcParams["font.family"] = "serif"
-    figure, axis = plt.subplots(figsize=(11.5, 11.5))
+    figure, axis = plt.subplots(figsize=(10.5, 6.5))
     bars = axis.barh(positions, aucs, height=0.68, color=colors)
     axis.axvline(0.5, color="0.45", linestyle="--", linewidth=1)
     axis.set_xlim(0.2, 0.9)

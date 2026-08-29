@@ -1,0 +1,330 @@
+{
+  "cycles": 6665,
+  "bootstrap_unit": "source cycle",
+  "unrotated": {
+    "photons": {
+      "particles": 9415611,
+      "harmonics": [
+        {
+          "harmonic": 1,
+          "cosine": 0.0009973623935336869,
+          "sine": 0.0007950272290096359,
+          "modulation_percent": 0.2550921432660743,
+          "phase_degrees": 38.55939118760742,
+          "modulation_bootstrap_std_percent": 0.10258897273167787,
+          "cycle_level_p_value": 0.06750012761984579
+        },
+        {
+          "harmonic": 2,
+          "cosine": -0.0016456347160707422,
+          "sine": 7.291870396911684e-05,
+          "modulation_percent": 0.3294498903399889,
+          "phase_degrees": 88.73143084901842,
+          "modulation_bootstrap_std_percent": 0.05361513470237909,
+          "cycle_level_p_value": 6.515040193887827e-09
+        }
+      ]
+    },
+    "neutrons": {
+      "particles": 10338789,
+      "harmonics": [
+        {
+          "harmonic": 1,
+          "cosine": -0.0004787376815939555,
+          "sine": -0.0001388336263321464,
+          "modulation_percent": 0.09969243573681799,
+          "phase_degrees": -163.8278742500399,
+          "modulation_bootstrap_std_percent": 0.045303178664346036,
+          "cycle_level_p_value": 0.1289935360857542
+        },
+        {
+          "harmonic": 2,
+          "cosine": -0.0004921703347534997,
+          "sine": 9.243734479208953e-05,
+          "modulation_percent": 0.10015513988280055,
+          "phase_degrees": 84.68143426028436,
+          "modulation_bootstrap_std_percent": 0.04279106620140152,
+          "cycle_level_p_value": 0.08851732656552967
+        }
+      ]
+    },
+    "electrons_positrons": {
+      "particles": 115041,
+      "harmonics": [
+        {
+          "harmonic": 1,
+          "cosine": 0.00352713916124984,
+          "sine": 0.0014357676935641732,
+          "modulation_percent": 0.7616334953953853,
+          "phase_degrees": 22.149417600729723,
+          "modulation_bootstrap_std_percent": 0.40673598972377245,
+          "cycle_level_p_value": 0.23877049225021052
+        },
+        {
+          "harmonic": 2,
+          "cosine": 0.0006147227507419044,
+          "sine": 0.0019227398364593613,
+          "modulation_percent": 0.40372329826193903,
+          "phase_degrees": 36.135152372666745,
+          "modulation_bootstrap_std_percent": 0.3353555678267651,
+          "cycle_level_p_value": 0.6584596253031045
+        }
+      ]
+    },
+    "muons": {
+      "particles": 987,
+      "harmonics": [
+        {
+          "harmonic": 1,
+          "cosine": -0.16931842995256471,
+          "sine": 0.0024429724530473378,
+          "modulation_percent": 33.86721059432436,
+          "phase_degrees": 179.17337823540436,
+          "modulation_bootstrap_std_percent": 4.2112342267249705,
+          "cycle_level_p_value": 1.001502247859124e-14
+        },
+        {
+          "harmonic": 2,
+          "cosine": 0.1715962404862665,
+          "sine": 0.05058891428228265,
+          "modulation_percent": 35.77960759834057,
+          "phase_degrees": 8.213118267683196,
+          "modulation_bootstrap_std_percent": 4.397249775517128,
+          "cycle_level_p_value": 6.025614038119366e-15
+        }
+      ]
+    },
+    "charged_pions": {
+      "particles": 1918,
+      "harmonics": [
+        {
+          "harmonic": 1,
+          "cosine": -0.01304055969431735,
+          "sine": -0.00020869675177859377,
+          "modulation_percent": 2.6084459087760066,
+          "phase_degrees": -179.0831357950808,
+          "modulation_bootstrap_std_percent": 2.3845489720026345,
+          "cycle_level_p_value": 0.6846251882412938
+        },
+        {
+          "harmonic": 2,
+          "cosine": -0.01984769368886669,
+          "sine": -0.022571745889073937,
+          "modulation_percent": 6.011371415069958,
+          "phase_degrees": -65.66283901461479,
+          "modulation_bootstrap_std_percent": 2.9795062194474924,
+          "cycle_level_p_value": 0.20139628476774202
+        }
+      ]
+    },
+    "protons": {
+      "particles": 1702,
+      "harmonics": [
+        {
+          "harmonic": 1,
+          "cosine": -0.008917113143642083,
+          "sine": -0.04615184999280089,
+          "modulation_percent": 9.40108113904887,
+          "phase_degrees": -100.93551006617176,
+          "modulation_bootstrap_std_percent": 3.3216945478767226,
+          "cycle_level_p_value": 0.02664218063858031
+        },
+        {
+          "harmonic": 2,
+          "cosine": -0.025378674276383236,
+          "sine": 0.034410200197223385,
+          "modulation_percent": 8.5513483980943,
+          "phase_degrees": 63.20500828287047,
+          "modulation_bootstrap_std_percent": 3.357905993917604,
+          "cycle_level_p_value": 0.058154118512503024
+        }
+      ]
+    },
+    "kaons": {
+      "particles": 324,
+      "harmonics": [
+        {
+          "harmonic": 1,
+          "cosine": 0.058085424790696394,
+          "sine": 0.0335204527615627,
+          "modulation_percent": 13.412736225626453,
+          "phase_degrees": 29.98876637396693,
+          "modulation_bootstrap_std_percent": 7.1352957030757,
+          "cycle_level_p_value": 0.25368322158714873
+        },
+        {
+          "harmonic": 2,
+          "cosine": 0.02647936397342063,
+          "sine": 0.04145142252781187,
+          "modulation_percent": 9.83743288874913,
+          "phase_degrees": 28.714684014228727,
+          "modulation_bootstrap_std_percent": 6.451863448433262,
+          "cycle_level_p_value": 0.45794996023020107
+        }
+      ]
+    }
+  },
+  "rotated": {
+    "photons": {
+      "particles": 9415611,
+      "harmonics": [
+        {
+          "harmonic": 1,
+          "cosine": 0.0006439301170538089,
+          "sine": 0.0006996065547971986,
+          "modulation_percent": 0.19016785502961722,
+          "phase_degrees": 47.37299121065258,
+          "modulation_bootstrap_std_percent": 0.09383551023377257,
+          "cycle_level_p_value": 0.18078486588660922
+        },
+        {
+          "harmonic": 2,
+          "cosine": 0.00018000313388940329,
+          "sine": 0.00018604152387558266,
+          "modulation_percent": 0.05177357504208318,
+          "phase_degrees": 22.972541909688005,
+          "modulation_bootstrap_std_percent": 0.04075494971306816,
+          "cycle_level_p_value": 0.624700332308942
+        }
+      ]
+    },
+    "neutrons": {
+      "particles": 10338789,
+      "harmonics": [
+        {
+          "harmonic": 1,
+          "cosine": -0.0003309224970456202,
+          "sine": 0.00025097386245819594,
+          "modulation_percent": 0.08306565564373618,
+          "phase_degrees": 142.82307384070322,
+          "modulation_bootstrap_std_percent": 0.044171899162743895,
+          "cycle_level_p_value": 0.23019237942022247
+        },
+        {
+          "harmonic": 2,
+          "cosine": -0.0005590514772644215,
+          "sine": 0.00012986477401079943,
+          "modulation_percent": 0.11478735361709635,
+          "phase_degrees": 83.46120981505088,
+          "modulation_bootstrap_std_percent": 0.041080385792392024,
+          "cycle_level_p_value": 0.03417053874709304
+        }
+      ]
+    },
+    "electrons_positrons": {
+      "particles": 115041,
+      "harmonics": [
+        {
+          "harmonic": 1,
+          "cosine": 0.004308818388108092,
+          "sine": 0.006331577176924303,
+          "modulation_percent": 1.531728245467154,
+          "phase_degrees": 55.76359875164328,
+          "modulation_bootstrap_std_percent": 0.43926518338729004,
+          "cycle_level_p_value": 0.003197139029875352
+        },
+        {
+          "harmonic": 2,
+          "cosine": 0.0017172207079047695,
+          "sine": -0.0019207766663854816,
+          "modulation_percent": 0.5152952536861903,
+          "phase_degrees": -24.101258587853405,
+          "modulation_bootstrap_std_percent": 0.3308118478696191,
+          "cycle_level_p_value": 0.4495878696766893
+        }
+      ]
+    },
+    "muons": {
+      "particles": 987,
+      "harmonics": [
+        {
+          "harmonic": 1,
+          "cosine": 0.016191107740393618,
+          "sine": 0.017245449070861656,
+          "modulation_percent": 4.730993483473497,
+          "phase_degrees": 46.80608604324441,
+          "modulation_bootstrap_std_percent": 3.33067150833094,
+          "cycle_level_p_value": 0.5100598618704548
+        },
+        {
+          "harmonic": 2,
+          "cosine": -0.02215081092028944,
+          "sine": -0.01878102832909517,
+          "modulation_percent": 5.808219863347768,
+          "phase_degrees": -69.85317897209137,
+          "modulation_bootstrap_std_percent": 3.5845079280133083,
+          "cycle_level_p_value": 0.4009726174361427
+        }
+      ]
+    },
+    "charged_pions": {
+      "particles": 1918,
+      "harmonics": [
+        {
+          "harmonic": 1,
+          "cosine": 0.009767454557675078,
+          "sine": -0.0030665447239784853,
+          "modulation_percent": 2.0475044818550012,
+          "phase_degrees": -17.429960496706972,
+          "modulation_bootstrap_std_percent": 2.3195391852187455,
+          "cycle_level_p_value": 0.818471975906186
+        },
+        {
+          "harmonic": 2,
+          "cosine": 0.002995327632676138,
+          "sine": -0.01050421536231504,
+          "modulation_percent": 2.1845871738611717,
+          "phase_degrees": -37.04212214762557,
+          "modulation_bootstrap_std_percent": 2.244990594074753,
+          "cycle_level_p_value": 0.7646297966784934
+        }
+      ]
+    },
+    "protons": {
+      "particles": 1702,
+      "harmonics": [
+        {
+          "harmonic": 1,
+          "cosine": -0.004492753550548984,
+          "sine": -0.011920681961146009,
+          "modulation_percent": 2.5478421684614796,
+          "phase_degrees": -110.65078867179544,
+          "modulation_bootstrap_std_percent": 2.575989359958996,
+          "cycle_level_p_value": 0.777704090386881
+        },
+        {
+          "harmonic": 2,
+          "cosine": 0.025197612425393385,
+          "sine": 0.0172415787264543,
+          "modulation_percent": 6.10636294014976,
+          "phase_degrees": 17.19102965551999,
+          "modulation_bootstrap_std_percent": 2.9433850006496516,
+          "cycle_level_p_value": 0.1788964623994457
+        }
+      ]
+    },
+    "kaons": {
+      "particles": 324,
+      "harmonics": [
+        {
+          "harmonic": 1,
+          "cosine": 0.05418777487917665,
+          "sine": 0.014742522856887475,
+          "modulation_percent": 11.231485968547844,
+          "phase_degrees": 15.219721362505735,
+          "modulation_bootstrap_std_percent": 6.31475023138999,
+          "cycle_level_p_value": 0.2867093824264147
+        },
+        {
+          "harmonic": 2,
+          "cosine": -0.07902096685440349,
+          "sine": -0.1423275752429977,
+          "modulation_percent": 32.55853306103081,
+          "phase_degrees": -59.5196245465671,
+          "modulation_bootstrap_std_percent": 7.505471308846196,
+          "cycle_level_p_value": 0.00012734354805722523
+        }
+      ]
+    }
+  }
+}

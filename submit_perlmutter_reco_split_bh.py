@@ -18,15 +18,17 @@ def arguments():
     parser.add_argument("--qos", default="regular")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--digi-audit", action="store_true")
     parser.add_argument(
         "--outdir",
         default=None,
     )
     args = parser.parse_args()
     if args.outdir is None:
+        suffix = "_digi_audit" if args.digi_audit else ""
         args.outdir = os.path.join(
             os.environ.get("PSCRATCH", ""),
-            "mucoll/reco_n420_{}_v31".format(args.mode),
+            "mucoll/reco_n420_{}_v31{}".format(args.mode, suffix),
         )
     if not 1 <= args.jobs <= 40:
         parser.error("--jobs must be between 1 and 40")
@@ -76,7 +78,14 @@ def main():
     for job_id in range(args.jobs):
         directory = output / "job_{}".format(job_id)
         reco = directory / "reco_output_{}.edm4hep.root".format(job_id)
-        if (directory / "complete").is_file() and reco.is_file() and reco.stat().st_size > 0 and not args.force:
+        audit = directory / "digi_summary.csv"
+        complete = (
+            (directory / "complete").is_file()
+            and reco.is_file()
+            and reco.stat().st_size > 0
+            and (not args.digi_audit or audit.is_file())
+        )
+        if complete and not args.force:
             skipped += 1
             continue
         rows.append((job_id, args.events_per_job, directory))
@@ -102,8 +111,8 @@ def main():
         "--job-name=reco420_{}".format(args.mode),
         "--output=logs/reco420_{}_%j.out".format(args.mode),
         "--error=logs/reco420_{}_%j.err".format(args.mode),
-        "--export=ALL,EXPECTED_MAIA_COMMIT={},RECO_BIB_MODE={}".format(
-            maia_commit, args.mode
+        "--export=ALL,EXPECTED_MAIA_COMMIT={},RECO_BIB_MODE={},DIGI_AUDIT={}".format(
+            maia_commit, args.mode, int(args.digi_audit)
         ),
         str(repo / "submit_perlmutter_reco_split_bh.slurm"),
         str(manifest),
@@ -114,6 +123,7 @@ def main():
     print("events: {} total ({} per task)".format(
         args.jobs * args.events_per_job, args.events_per_job
     ))
+    print("DIGI audit: {}".format("enabled" if args.digi_audit else "disabled"))
     if args.mode == "legacy":
         print("N=420 legacy: 10 inclusive norm42 files per polarity from 6654 common valid cycles")
     elif args.mode == "bulk_only":

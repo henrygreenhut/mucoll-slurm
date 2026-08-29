@@ -150,6 +150,11 @@ k4run "$MUCOLL_CONFIG/$MUCOLL_CONFIG_NAME/digi_steer.py" \
     --doOverlayFull \
     "${OVERLAY_ARGS[@]}"
 
+if [ "${DIGI_AUDIT:-0}" = 1 ]; then
+    python3 "$REPO/summarize_reco_digi.py" \
+        digi_output.edm4hep.root digi_summary.csv
+fi
+
 k4run "$MUCOLL_CONFIG/$MUCOLL_CONFIG_NAME/reco_steer.py" \
     -n "$EVENTS" \
     --TrackingThreads "$TRACKING_THREADS" \
@@ -230,6 +235,7 @@ PY
     echo "gen_seed=$GEN_SEED"
     echo "digi_seed=$DIGI_SEED"
     echo "tracking_threads=$TRACKING_THREADS"
+    echo "digi_audit=${DIGI_AUDIT:-0}"
     echo "image=$MUCOLL_IMAGE"
     echo "maia_commit=$EXPECTED_MAIA_COMMIT"
     echo "mucoll_slurm_commit=$(git -C "$REPO" rev-parse HEAD)"
@@ -239,6 +245,9 @@ mv gen_output.edm4hep.root "$OUTPUT/gen_output_${JOB_ID}.edm4hep.root"
 mv sim_output.edm4hep.root "$OUTPUT/sim_output_${JOB_ID}.edm4hep.root"
 mv reco_output.edm4hep.root "$RECO_OUTPUT"
 mv metadata.txt validation.txt "$OUTPUT/"
+if [ -f digi_summary.csv ]; then
+    mv digi_summary.csv "$OUTPUT/"
+fi
 rm -f digi_output.edm4hep.root
 touch "$OUTPUT/complete"
 echo "published $OUTPUT"
