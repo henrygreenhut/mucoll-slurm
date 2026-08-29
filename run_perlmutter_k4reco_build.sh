@@ -17,7 +17,7 @@ rm -f "$K4RECO_BUILD/overlay_entry_mix.complete"
 cmake \
     -S "$K4RECO_SOURCE" \
     -B "$K4RECO_BUILD" \
-    -DBUILD_TRACKING=ON \
+    -DBUILD_TRACKING=OFF \
     -DBUILD_TESTING=OFF \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo
 cmake --build "$K4RECO_BUILD" --parallel 8
