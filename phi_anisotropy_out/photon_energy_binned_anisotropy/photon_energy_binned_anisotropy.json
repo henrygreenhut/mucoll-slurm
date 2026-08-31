@@ -1,0 +1,410 @@
+{
+  "unrotated_store": "/pscratch/sd/h/hgreen/mucoll/libtest/stores/gen_split_mothers_MUPLUS.h5",
+  "rotated_store": "/pscratch/sd/h/hgreen/mucoll/libtest/stores/gen_fixed_k1_MUPLUS.h5",
+  "cycles": 6665,
+  "bootstrap_unit": "matched source cycle",
+  "bootstrap_samples": 2000,
+  "permutation_samples": 5000,
+  "energy_bins": [
+    {
+      "energy_bin_MeV": "<0.2",
+      "photons": 223360,
+      "unrotated": {
+        "c2": -0.0015116788746285903,
+        "s2": 0.0013413842752516367,
+        "vertical_modulation_percent": 0.30233577492571806,
+        "vertical_modulation_intervals": {
+          "std": 0.29917004180391776,
+          "low68": 0.0007069923984886596,
+          "high68": 0.5911190972713362,
+          "low95": -0.3163492800095125,
+          "high95": 0.8689284668582521
+        },
+        "amplitude_percent": 0.4042021669358402,
+        "phase_degrees": 69.20791860180523,
+        "vector_p_value": 0.4003879714162712,
+        "vector_holm_p_value": 1.0
+      },
+      "rotated": {
+        "c2": 0.0021442756968396634,
+        "s2": 0.0020682416424533537,
+        "vertical_modulation_percent": -0.4288551393679327,
+        "vertical_modulation_intervals": {
+          "std": 0.30068296769511293,
+          "low68": -0.7247301257041577,
+          "high68": -0.13634702683972455,
+          "low95": -1.019844944494116,
+          "high95": 0.17938920480034884
+        },
+        "amplitude_percent": 0.5958369493623359,
+        "phase_degrees": 21.982974541268582,
+        "vector_p_value": 0.14803889948749713,
+        "vector_holm_p_value": 0.9454500636996079
+      },
+      "paired_difference": {
+        "vertical_modulation_percent": 0.7311909142936508,
+        "intervals": {
+          "std": 0.42334203730134373,
+          "low68": 0.32838574197510784,
+          "high68": 1.1490547194604264,
+          "low95": -0.13227696778597886,
+          "high95": 1.5269125342719396
+        },
+        "signed_axis_p_value": 0.09338132373525294,
+        "signed_axis_holm_p_value": 0.3735252949410118,
+        "vector_p_value": 0.2087152245594768,
+        "vector_holm_p_value": 0.8348608982379072
+      }
+    },
+    {
+      "energy_bin_MeV": "0.2-0.5",
+      "photons": 1405870,
+      "unrotated": {
+        "c2": -0.0021899793050836015,
+        "s2": -4.3896678014238796e-05,
+        "vertical_modulation_percent": 0.4379958610167203,
+        "vertical_modulation_intervals": {
+          "std": 0.1251650125713939,
+          "low68": 0.31515885848938835,
+          "high68": 0.5648172167956226,
+          "low95": 0.1937139687001792,
+          "high95": 0.6818170780453382
+        },
+        "amplitude_percent": 0.43808384015095286,
+        "phase_degrees": -89.42584899640617,
+        "vector_p_value": 0.0021902013712263276,
+        "vector_holm_p_value": 0.013141208227357965
+      },
+      "rotated": {
+        "c2": 0.00016012072439909153,
+        "s2": 0.000225310804626429,
+        "vertical_modulation_percent": -0.032024144879818306,
+        "vertical_modulation_intervals": {
+          "std": 0.12663086329280981,
+          "low68": -0.15564553618416044,
+          "high68": 0.08795983288354792,
+          "low95": -0.2805507781807233,
+          "high95": 0.21909107337553055
+        },
+        "amplitude_percent": 0.055282404095154426,
+        "phase_degrees": 27.299943402728086,
+        "vector_p_value": 0.9053342769190718,
+        "vector_holm_p_value": 1.0
+      },
+      "paired_difference": {
+        "vertical_modulation_percent": 0.4700200058965386,
+        "intervals": {
+          "std": 0.17755975667054422,
+          "low68": 0.2969821372247306,
+          "high68": 0.6483377660309197,
+          "low95": 0.12739830077239536,
+          "high95": 0.8162602433968531
+        },
+        "signed_axis_p_value": 0.007998400319936013,
+        "signed_axis_holm_p_value": 0.04799040191961608,
+        "vector_p_value": 0.029046425353396327,
+        "vector_holm_p_value": 0.17427855212037796
+      }
+    },
+    {
+      "energy_bin_MeV": "0.5-1",
+      "photons": 3035396,
+      "unrotated": {
+        "c2": -0.0021867153868220675,
+        "s2": 0.0002845124259837432,
+        "vertical_modulation_percent": 0.4373430773644135,
+        "vertical_modulation_intervals": {
+          "std": 0.08673275487389337,
+          "low68": 0.35188628826853147,
+          "high68": 0.5233608097954225,
+          "low95": 0.261725259641252,
+          "high95": 0.6006849287589192
+        },
+        "amplitude_percent": 0.4410293189121802,
+        "phase_degrees": 86.29345942130952,
+        "vector_p_value": 2.712330780074637e-06,
+        "vector_holm_p_value": 2.1698646240597095e-05
+      },
+      "rotated": {
+        "c2": 6.456525780095562e-05,
+        "s2": 2.9119806874325364e-05,
+        "vertical_modulation_percent": -0.012913051560191124,
+        "vertical_modulation_intervals": {
+          "std": 0.08423960782969288,
+          "low68": -0.09938196807543438,
+          "high68": 0.07248292619412708,
+          "low95": -0.17557146425130588,
+          "high95": 0.1481823381583993
+        },
+        "amplitude_percent": 0.01416564247367816,
+        "phase_degrees": 12.138010192431192,
+        "vector_p_value": 0.9862168918035389,
+        "vector_holm_p_value": 1.0
+      },
+      "paired_difference": {
+        "vertical_modulation_percent": 0.45025612892460465,
+        "intervals": {
+          "std": 0.12185128751038996,
+          "low68": 0.32818402477476055,
+          "high68": 0.5725806019759936,
+          "low95": 0.20771912390160666,
+          "high95": 0.6800409232174693
+        },
+        "signed_axis_p_value": 0.0007998400319936012,
+        "signed_axis_holm_p_value": 0.00639872025594881,
+        "vector_p_value": 0.0010203253714381687,
+        "vector_holm_p_value": 0.00816260297150535
+      }
+    },
+    {
+      "energy_bin_MeV": "1-2",
+      "photons": 2486370,
+      "unrotated": {
+        "c2": -0.0016777824020773856,
+        "s2": 0.00017090650519134115,
+        "vertical_modulation_percent": 0.3355564804154771,
+        "vertical_modulation_intervals": {
+          "std": 0.09301153802266925,
+          "low68": 0.24771172577372685,
+          "high68": 0.43022739712014724,
+          "low95": 0.14304412613434042,
+          "high95": 0.5158068441975726
+        },
+        "amplitude_percent": 0.3372929185285265,
+        "phase_degrees": 87.09182744241123,
+        "vector_p_value": 0.0013848408401990959,
+        "vector_holm_p_value": 0.009693885881393671
+      },
+      "rotated": {
+        "c2": -0.00023620293354939163,
+        "s2": 0.0001926991226381722,
+        "vertical_modulation_percent": 0.047240586709878324,
+        "vertical_modulation_intervals": {
+          "std": 0.09239919573258652,
+          "low68": -0.038912503504669925,
+          "high68": 0.14046789119486927,
+          "low95": -0.1397036345665252,
+          "high95": 0.22736967974007546
+        },
+        "amplitude_percent": 0.06096713136858569,
+        "phase_degrees": 70.39586987776505,
+        "vector_p_value": 0.7992853430963892,
+        "vector_holm_p_value": 1.0
+      },
+      "paired_difference": {
+        "vertical_modulation_percent": 0.28831589370559874,
+        "intervals": {
+          "std": 0.13029320073679948,
+          "low68": 0.15526992789323388,
+          "high68": 0.41369461647952693,
+          "low95": 0.03543237531696151,
+          "high95": 0.5371148800659563
+        },
+        "signed_axis_p_value": 0.032993401319736056,
+        "signed_axis_holm_p_value": 0.16496700659868027,
+        "vector_p_value": 0.08612131910125659,
+        "vector_holm_p_value": 0.43060659550628294
+      }
+    },
+    {
+      "energy_bin_MeV": "2-3",
+      "photons": 1046426,
+      "unrotated": {
+        "c2": 0.00020327796356079674,
+        "s2": 0.00016991992369313767,
+        "vertical_modulation_percent": -0.04065559271215935,
+        "vertical_modulation_intervals": {
+          "std": 0.1373490939434871,
+          "low68": -0.17116557693265994,
+          "high68": 0.09803324487921998,
+          "low95": -0.3194818354730252,
+          "high95": 0.22853654015338468
+        },
+        "amplitude_percent": 0.05298856893229193,
+        "phase_degrees": 19.946114856749855,
+        "vector_p_value": 0.9332129590661153,
+        "vector_holm_p_value": 1.0
+      },
+      "rotated": {
+        "c2": -0.0007297069544288583,
+        "s2": 0.0008025717614048142,
+        "vertical_modulation_percent": 0.14594139088577165,
+        "vertical_modulation_intervals": {
+          "std": 0.1430162470081173,
+          "low68": -0.001274982902318083,
+          "high68": 0.28215155127962144,
+          "low95": -0.1316307416870426,
+          "high95": 0.42450478535163516
+        },
+        "amplitude_percent": 0.2169418052424443,
+        "phase_degrees": 66.13872568977756,
+        "vector_p_value": 0.3033731990498643,
+        "vector_holm_p_value": 1.0
+      },
+      "paired_difference": {
+        "vertical_modulation_percent": -0.186596983597931,
+        "intervals": {
+          "std": 0.1996674199979705,
+          "low68": -0.3781248817161865,
+          "high68": 0.01586102822982333,
+          "low95": -0.5780308109343585,
+          "high95": 0.2042892491485582
+        },
+        "signed_axis_p_value": 0.34013197360527897,
+        "signed_axis_holm_p_value": 1.0,
+        "vector_p_value": 0.5156755116981093,
+        "vector_holm_p_value": 1.0
+      }
+    },
+    {
+      "energy_bin_MeV": "3-5",
+      "photons": 750924,
+      "unrotated": {
+        "c2": -0.0016215753044437346,
+        "s2": -0.0001663558779890326,
+        "vertical_modulation_percent": 0.32431506088874695,
+        "vertical_modulation_intervals": {
+          "std": 0.161585073871604,
+          "low68": 0.16136001541590894,
+          "high68": 0.48432781244555023,
+          "low95": 0.00497917339033247,
+          "high95": 0.6328807265487042
+        },
+        "amplitude_percent": 0.32601722323357657,
+        "phase_degrees": -87.07128581763287,
+        "vector_p_value": 0.1280091196954196,
+        "vector_holm_p_value": 0.640045598477098
+      },
+      "rotated": {
+        "c2": 0.002277367347819535,
+        "s2": 3.53155033797053e-05,
+        "vertical_modulation_percent": -0.455473469563907,
+        "vertical_modulation_intervals": {
+          "std": 0.16374056806234544,
+          "low68": -0.6160532666686507,
+          "high68": -0.29866333502514625,
+          "low95": -0.7792836115939623,
+          "high95": -0.13138909644802674
+        },
+        "amplitude_percent": 0.45552823059360636,
+        "phase_degrees": 0.4442118500634914,
+        "vector_p_value": 0.020881180032839022,
+        "vector_holm_p_value": 0.16704944026271218
+      },
+      "paired_difference": {
+        "vertical_modulation_percent": 0.779788530452654,
+        "intervals": {
+          "std": 0.23194651132848224,
+          "low68": 0.5526289308063151,
+          "high68": 1.0116842405802304,
+          "low95": 0.3222008976595271,
+          "high95": 1.2310735899691005
+        },
+        "signed_axis_p_value": 0.0015996800639872025,
+        "signed_axis_holm_p_value": 0.011197760447910418,
+        "vector_p_value": 0.003474419779365463,
+        "vector_holm_p_value": 0.02432093845555824
+      }
+    },
+    {
+      "energy_bin_MeV": "5-10",
+      "photons": 361802,
+      "unrotated": {
+        "c2": -0.0012273341082438903,
+        "s2": -0.0016309738336237316,
+        "vertical_modulation_percent": 0.24546682164877806,
+        "vertical_modulation_intervals": {
+          "std": 0.24376633233091757,
+          "low68": 0.006754988284754944,
+          "high68": 0.49752179940696284,
+          "low95": -0.19685414710432045,
+          "high95": 0.733869680731955
+        },
+        "amplitude_percent": 0.40823643439674107,
+        "phase_degrees": -63.481025393106584,
+        "vector_p_value": 0.24751488426646368,
+        "vector_holm_p_value": 0.9900595370658547
+      },
+      "rotated": {
+        "c2": 0.0002347276484058466,
+        "s2": -0.0002915114711489314,
+        "vertical_modulation_percent": -0.04694552968116932,
+        "vertical_modulation_intervals": {
+          "std": 0.23318914406649402,
+          "low68": -0.2744508376702421,
+          "high68": 0.18548180422866578,
+          "low95": -0.49300139703823426,
+          "high95": 0.41964677510181275
+        },
+        "amplitude_percent": 0.07485345863420154,
+        "phase_degrees": -25.579335514111193,
+        "vector_p_value": 0.9519815711867003,
+        "vector_holm_p_value": 1.0
+      },
+      "paired_difference": {
+        "vertical_modulation_percent": 0.29241235132994736,
+        "intervals": {
+          "std": 0.33326800738201207,
+          "low68": -0.03267134869639929,
+          "high68": 0.6342386857949652,
+          "low95": -0.3394712105173263,
+          "high95": 0.9824315598453226
+        },
+        "signed_axis_p_value": 0.3693261347730454,
+        "signed_axis_holm_p_value": 1.0,
+        "vector_p_value": 0.5141148668823277,
+        "vector_holm_p_value": 1.0
+      }
+    },
+    {
+      "energy_bin_MeV": ">=10",
+      "photons": 105463,
+      "unrotated": {
+        "c2": 0.00170414463543306,
+        "s2": -0.002869892070818953,
+        "vertical_modulation_percent": -0.340828927086612,
+        "vertical_modulation_intervals": {
+          "std": 0.4634428971488328,
+          "low68": -0.7939101591229516,
+          "high68": 0.12302568508989763,
+          "low95": -1.2517699435670506,
+          "high95": 0.5848455124811848
+        },
+        "amplitude_percent": 0.6675444385694416,
+        "phase_degrees": -29.64905960513671,
+        "vector_p_value": 0.35826022560620596,
+        "vector_holm_p_value": 1.0
+      },
+      "rotated": {
+        "c2": 0.003322256252619953,
+        "s2": -0.003370081450707693,
+        "vertical_modulation_percent": -0.6644512505239907,
+        "vertical_modulation_intervals": {
+          "std": 0.46480363821575765,
+          "low68": -1.1453969869571052,
+          "high68": -0.20007547787665989,
+          "low95": -1.5457187881198275,
+          "high95": 0.22818313182970953
+        },
+        "amplitude_percent": 0.9464636409810245,
+        "phase_degrees": -22.704721838730496,
+        "vector_p_value": 0.1350642948142297,
+        "vector_holm_p_value": 0.9454500636996079
+      },
+      "paired_difference": {
+        "vertical_modulation_percent": 0.3236223234373787,
+        "intervals": {
+          "std": 0.6532798996443554,
+          "low68": -0.3074865641176767,
+          "high68": 0.98837352790634,
+          "low95": -0.9857171394431166,
+          "high95": 1.5813573880418004
+        },
+        "signed_axis_p_value": 0.6126774645070986,
+        "signed_axis_holm_p_value": 1.0,
+        "vector_p_value": 0.8776148119116116,
+        "vector_holm_p_value": 1.0
+      }
+    }
+  ]
+}

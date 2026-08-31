@@ -52,7 +52,11 @@ def main():
     fine_bins = np.linspace(-np.pi, np.pi, 33)
     axis.hist(particles["phi_muons"], bins=fine_bins, histtype="step", linewidth=3, color="#0072B2", label="native")
     axis.hist(particles["phi_muons_rotated"], bins=fine_bins, histtype="step", linewidth=3, color="#D55E00", label="rotated")
-    format_axis(axis, r"Muon momentum $\phi$", "Muon count")
+    format_axis(
+        axis,
+        fr"Muon momentum $\phi$ ({len(particles['phi_muons']):,} muons)",
+        "Muon count",
+    )
     save(figure, "phi_all_muons")
 
     figure, axis = plt.subplots(figsize=(10.5, 7.15))

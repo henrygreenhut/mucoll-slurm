@@ -46,14 +46,15 @@ def available_interventions(names):
     return interventions(names) + [
         "shuffle:photon_phi",
         "shuffle:nonphoton_phi",
+        "shuffle:muon_phi",
     ]
 
 
-def shuffle_selected_phi(features, changed, names, rng, photons):
-    photon_index = names.index("pdg_gamma")
+def shuffle_selected_phi(features, changed, names, rng, indicator, selected=True):
+    indicator_index = names.index(indicator)
     columns = [names.index("cosphi"), names.index("sinphi")]
     masks = [
-        (values[:, photon_index] > 0.5) == photons
+        (values[:, indicator_index] > 0.5) == selected
         for values in features
     ]
     count = sum(int(np.count_nonzero(mask)) for mask in masks)
@@ -81,11 +82,15 @@ def transform(features, names, mode, rng):
         group = mode.split(":", 1)[1]
         if group == "photon_phi":
             return shuffle_selected_phi(
-                features, changed, names, rng, photons=True
+                features, changed, names, rng, "pdg_gamma"
             )
         if group == "nonphoton_phi":
             return shuffle_selected_phi(
-                features, changed, names, rng, photons=False
+                features, changed, names, rng, "pdg_gamma", selected=False
+            )
+        if group == "muon_phi":
+            return shuffle_selected_phi(
+                features, changed, names, rng, "pdg_mu"
             )
         if group == "phi_pair":
             columns = [names.index("cosphi"), names.index("sinphi")]
