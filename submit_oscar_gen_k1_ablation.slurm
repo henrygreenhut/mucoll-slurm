@@ -15,7 +15,7 @@ set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
 if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
-    echo "usage: $0 {no-muons-photons|no-energy-scales|no-particle-id} {main|null} [train|smoke]"
+    echo "usage: $0 {no-photons|no-muons-photons|no-energy-scales|no-particle-id} {main|null} [train|smoke]"
     exit 2
 fi
 
@@ -26,6 +26,9 @@ MODE=${3:-train}
 FEATURES=expanded
 FILTER_ARGS=()
 case "$ABLATION" in
+    no-photons)
+        FILTER_ARGS=(--exclude-photons)
+        ;;
     no-muons-photons)
         FILTER_ARGS=(--exclude-muons --exclude-photons)
         ;;
