@@ -5,6 +5,7 @@
 #SBATCH -c 1
 #SBATCH --mem=16g
 #SBATCH -t 01:00:00
+#SBATCH --exclude=node2336
 #SBATCH -o photon_z_harmonics_%j.out
 #SBATCH -e photon_z_harmonics_%j.err
 

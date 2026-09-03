@@ -5,6 +5,7 @@
 #SBATCH -c 1
 #SBATCH --mem=16g
 #SBATCH -t 01:00:00
+#SBATCH --exclude=node2336
 #SBATCH -o mother_bank_%j.out
 #SBATCH -e mother_bank_%j.err
 

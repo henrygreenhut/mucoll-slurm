@@ -11,10 +11,11 @@ import numpy as np
 LABELS = [
     "All particles",
     "Muons removed",
+    "Photons removed",
     "Muons and photons\nremoved",
 ]
-MAIN_AUCS = [0.79825, 0.8432222222, 0.5701444444]
-NULL_AUCS = [0.4938944444, 0.4918111111, 0.5064]
+MAIN_AUCS = [0.79825, 0.8432222222, 0.6039555556, 0.5701444444]
+NULL_AUCS = [0.4938944444, 0.4918111111, 0.5070222222, 0.5064]
 
 
 def main():
