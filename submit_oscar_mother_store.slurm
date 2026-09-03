@@ -22,7 +22,8 @@ module load ngc-tensorflow-container/25.02-tf2-py3-azkb
 FLUKA_DIR=/oscar/data/mleblan6/mucoll/bib/FLUKA
 TASKLIST=/oscar/data/mleblan6/mucoll/bib/logs/gen/tasklist.txt
 BENCHMARKS_DIR="$SLURM_SUBMIT_DIR/../mucoll-benchmarks"
-OUTPUT=/oscar/data/mleblan6/mucoll/hgreenhu/mucoll/libtest/stores/gen_split_mothers_${POLARITY}.h5
+DEFAULT_OUTPUT=/oscar/data/mleblan6/mucoll/hgreenhu/mucoll/libtest/stores/gen_split_mothers_${POLARITY}.h5
+OUTPUT=${MOTHER_STORE_OUTPUT:-$DEFAULT_OUTPUT}
 PARTIAL="${OUTPUT}.partial.${SLURM_JOB_ID}"
 
 if [ -e "$OUTPUT" ]; then

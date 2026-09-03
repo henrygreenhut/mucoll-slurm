@@ -102,7 +102,7 @@ def find_cycle_files(tasklist, fluka_directory, polarity):
 def group_particles_by_mother(records):
     # Exact mother-decay position identifies particles from the same decay.
     positions = records[["x_mu", "y_mu", "z_mu"]]
-    _, first_particle, sorted_group = np.unique(
+    unique_positions, first_particle, sorted_group = np.unique(
         positions, return_index=True, return_inverse=True
     )
 
@@ -113,7 +113,8 @@ def group_particles_by_mother(records):
 
     particle_order = np.argsort(mother_number, kind="stable")
     particles_per_mother = np.bincount(mother_number).astype(np.int64)
-    return particle_order, particles_per_mother
+    mother_positions = unique_positions[groups_by_appearance]
+    return particle_order, particles_per_mother, mother_positions
 
 
 def convert_cycle(records, fluka_to_pdg, pdg_properties, invert_z):
@@ -126,7 +127,9 @@ def convert_cycle(records, fluka_to_pdg, pdg_properties, invert_z):
     records = records[known]
     pdg = pdg[known]
 
-    particle_order, mother_counts = group_particles_by_mother(records)
+    particle_order, mother_counts, mother_positions = group_particles_by_mother(
+        records
+    )
     records = records[particle_order]
     pdg = pdg[particle_order]
 
@@ -152,7 +155,14 @@ def convert_cycle(records, fluka_to_pdg, pdg_properties, invert_z):
         "vy": (records["y"] * 10.0).astype(np.float32),
         "vz": (z_sign * records["z"] * 10.0).astype(np.float32),
     }
-    return mother_counts, particles, skipped
+    mother_decay_positions = np.column_stack(
+        (
+            mother_positions["x_mu"] * 10.0,
+            mother_positions["y_mu"] * 10.0,
+            z_sign * mother_positions["z_mu"] * 10.0,
+        )
+    ).astype(np.float32)
+    return mother_counts, mother_decay_positions, particles, skipped
 
 
 def create_particle_datasets(output):
@@ -197,6 +207,7 @@ def build_mother_bank(arguments):
     cycle_offsets = [0]
     mother_cycle_ids = []
     mother_local_ids = []
+    mother_decay_positions = []
     skipped_particles = 0
 
     with h5py.File(output_path, "w") as output:
@@ -211,7 +222,7 @@ def build_mother_bank(arguments):
                 )
 
             records = np.fromfile(input_path, dtype=FLUKA_RECORD)
-            mother_counts, particles, skipped = convert_cycle(
+            mother_counts, decay_positions, particles, skipped = convert_cycle(
                 records, fluka_to_pdg, pdg_properties, invert_z
             )
 
@@ -224,6 +235,7 @@ def build_mother_bank(arguments):
             number_of_mothers = len(mother_counts)
             mother_cycle_ids.extend([cycle] * number_of_mothers)
             mother_local_ids.extend(range(number_of_mothers))
+            mother_decay_positions.append(decay_positions)
             cycle_offsets.append(cycle_offsets[-1] + number_of_mothers)
             skipped_particles += skipped
 
@@ -242,6 +254,14 @@ def build_mother_bank(arguments):
         write_dataset(output, "mother_offsets", mother_offsets, np.int64)
         write_dataset(output, "mother_cycle_ids", mother_cycle_ids, np.int64)
         write_dataset(output, "mother_local_ids", mother_local_ids, np.int32)
+        positions = output.create_dataset(
+            "mother_decay_positions",
+            data=np.concatenate(mother_decay_positions),
+        )
+        positions.attrs["columns"] = np.asarray(
+            ["x", "y", "z"], dtype=h5py.string_dtype()
+        )
+        positions.attrs["units"] = "mm"
         write_dataset(output, "cycle_ids", cycles, np.int64)
         write_dataset(output, "cycle_offsets", cycle_offsets, np.int64)
         output.create_dataset(
