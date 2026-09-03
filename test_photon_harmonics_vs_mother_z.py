@@ -83,13 +83,8 @@ class PhotonHarmonicProfileTests(unittest.TestCase):
             path = Path(directory) / "bank.h5"
             self.write_bank(path)
             data = load_mother_statistics(path)
-            edges = bin_edges([data], width=1000.0)
-            result = summarize(
-                data,
-                edges,
-                bootstrap_samples=20,
-                rng=np.random.default_rng(4),
-            )
+            edges = bin_edges(data["z"], width=1000.0)
+            result = summarize(data, edges)
 
         np.testing.assert_array_equal(result["mother_counts"], [2, 2])
         np.testing.assert_array_equal(result["photon_counts"], [4, 4])
@@ -109,12 +104,9 @@ class PhotonHarmonicProfileTests(unittest.TestCase):
                 "sys.argv",
                 [
                     "photon_harmonics_vs_mother_z.py",
-                    "--bank",
-                    f"MUPLUS={bank}",
+                    str(bank),
                     "--output-directory",
                     str(output),
-                    "--bootstrap-samples",
-                    "20",
                 ],
             ):
                 analyze()
@@ -135,8 +127,9 @@ class PhotonHarmonicProfileTests(unittest.TestCase):
                     .with_suffix(suffix)
                     .is_file()
                 )
-            self.assertTrue(figure.with_suffix(".pdf").is_file())
-            self.assertTrue(figure.with_suffix(".png").is_file())
+            for name in ("c2", "s2", "a2"):
+                self.assertTrue(Path(f"{figure}_{name}.pdf").is_file())
+                self.assertTrue(Path(f"{figure}_{name}.png").is_file())
 
 
 if __name__ == "__main__":

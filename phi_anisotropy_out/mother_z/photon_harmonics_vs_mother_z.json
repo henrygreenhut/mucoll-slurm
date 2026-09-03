@@ -1,0 +1,21 @@
+{
+  "banks": {
+    "MUPLUS": "/oscar/data/mleblan6/mucoll/hgreenhu/mucoll/libtest/stores/gen_split_mothers_with_positions_MUPLUS.h5",
+    "MUMINUS": "/oscar/data/mleblan6/mucoll/hgreenhu/mucoll/libtest/stores/gen_split_mothers_with_positions_MUMINUS.h5"
+  },
+  "particle_selection": "pdg == 22",
+  "phi_definition": "atan2(py, px)",
+  "harmonics": {
+    "c2": "sum(cos(2 phi)) / number of photons",
+    "s2": "sum(sin(2 phi)) / number of photons",
+    "a2": "sqrt(c2^2 + s2^2)"
+  },
+  "bin_width_mm": 1000.0,
+  "bootstrap_unit": "source cycle",
+  "bootstrap_samples": 500,
+  "seed": 1701,
+  "cycles": {
+    "MUPLUS": 6665,
+    "MUMINUS": 6665
+  }
+}

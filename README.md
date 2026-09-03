@@ -117,35 +117,29 @@ the original GEN task list preserves the cycle-number mapping.
 
 ### Photon harmonics versus mother-muon decay position
 
-The position-aware mother stores retain `(x_mu, y_mu, z_mu)` in millimetres as
-`mother_decay_positions`. Build them under new names so the stores used by
-existing training jobs remain unchanged:
+The position-aware MUPLUS mother store retains `(x_mu, y_mu, z_mu)` in
+millimetres as `mother_decay_positions`. Build it under a new name so the
+store used by existing training jobs remains unchanged:
 
 ```bash
 STORE_DIR=/oscar/data/mleblan6/mucoll/hgreenhu/mucoll/libtest/stores
 
-plus_job=$(sbatch --parsable \
+mother_job=$(sbatch --parsable \
   --export=ALL,MOTHER_STORE_OUTPUT="$STORE_DIR/gen_split_mothers_with_positions_MUPLUS.h5" \
   submit_oscar_mother_store.slurm MUPLUS)
 
-minus_job=$(sbatch --parsable \
-  --export=ALL,MOTHER_STORE_OUTPUT="$STORE_DIR/gen_split_mothers_with_positions_MUMINUS.h5" \
-  submit_oscar_mother_store.slurm MUMINUS)
-
-sbatch --dependency="afterok:$plus_job:$minus_job" \
-  --export=ALL,MUPLUS_BANK="$STORE_DIR/gen_split_mothers_with_positions_MUPLUS.h5",MUMINUS_BANK="$STORE_DIR/gen_split_mothers_with_positions_MUMINUS.h5" \
+sbatch --dependency="afterok:$mother_job" \
+  --export=ALL,MUPLUS_BANK="$STORE_DIR/gen_split_mothers_with_positions_MUPLUS.h5" \
   submit_oscar_photon_harmonics_vs_mother_z.slurm
 ```
 
 The analysis reports photon-weighted `C2`, `S2`, and `A2` in fixed-width
-mother-decay-z bins. Its default bin width is 1 m, and its uncertainty bands
-come from resampling complete source cycles. Set `BIN_WIDTH_MM` or
-`BOOTSTRAP_SAMPLES` through `sbatch --export` to change those choices. The
-numerical `.npz`, `.csv`, and `.json` outputs and the `.pdf` and `.png` figure
-are written under
-`$STORE_DIR/photon_harmonics_vs_mother_z`. Quadrupole regions can be added to
-the plotting command as `--quad LABEL:Z_MIN_M:Z_MAX_M` once their lattice
-coordinates are established.
+mother-decay-z bins. Its default bin width is 5 m. Set `BIN_WIDTH_MM` through
+`sbatch --export` to change it. The numerical `.npz`, `.csv`, and `.json`
+outputs are written under
+`$STORE_DIR/photon_harmonics_vs_mother_z`. Copy the `.npz` file to a machine
+separate `C2`, `S2`, and `A2` figures. Quadrupole regions can be added as
+`--quad LABEL:Z_MIN_M:Z_MAX_M` once their lattice coordinates are established.
 
 No rotated library is materialized. For reuse factor `k`, a pseudo-event with
 `M` mother-equivalents samples `M/k` distinct mothers, draws `k` independent
