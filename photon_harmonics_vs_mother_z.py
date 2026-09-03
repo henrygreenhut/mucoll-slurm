@@ -34,8 +34,8 @@ def load_mother_statistics(path):
         pdg = particles["pdg"][:]
         photon_indices = np.flatnonzero(pdg == 22)
         phi = np.arctan2(
-            particles["py"][photon_indices],
-            particles["px"][photon_indices],
+            particles["py"][:][photon_indices],
+            particles["px"][:][photon_indices],
         )
 
     number_of_mothers = len(offsets) - 1
@@ -95,6 +95,23 @@ def ratios(counts, cosine, sine):
     return c2, s2, np.hypot(c2, s2)
 
 
+def bootstrap_profiles(counts, cosine, sine, samples, rng, batch_size=32):
+    number_of_cycles, number_of_bins = counts.shape
+    result = np.empty((samples, 3, number_of_bins))
+    probabilities = np.full(number_of_cycles, 1.0 / number_of_cycles)
+
+    for start in range(0, samples, batch_size):
+        stop = min(start + batch_size, samples)
+        weights = rng.multinomial(
+            number_of_cycles, probabilities, size=stop - start
+        ).astype(np.float64)
+        result[start:stop] = np.stack(
+            ratios(weights @ counts, weights @ cosine, weights @ sine),
+            axis=1,
+        )
+    return result
+
+
 def summarize(data, edges, bootstrap_samples, rng):
     number_of_bins = len(edges) - 1
     selected = (data["z"] >= edges[0]) & (data["z"] <= edges[-1])
@@ -115,15 +132,13 @@ def summarize(data, edges, bootstrap_samples, rng):
     photon_counts = cycle_counts.sum(axis=0)
     c2, s2, a2 = ratios(photon_counts, cycle_cosine.sum(axis=0), cycle_sine.sum(axis=0))
 
-    bootstrap = np.empty((bootstrap_samples, 3, number_of_bins))
-    for sample in range(bootstrap_samples):
-        chosen = rng.integers(0, number_of_cycles, number_of_cycles)
-        weights = np.bincount(chosen, minlength=number_of_cycles)
-        bootstrap[sample] = ratios(
-            weights @ cycle_counts,
-            weights @ cycle_cosine,
-            weights @ cycle_sine,
-        )
+    bootstrap = bootstrap_profiles(
+        cycle_counts,
+        cycle_cosine,
+        cycle_sine,
+        bootstrap_samples,
+        rng,
+    )
 
     intervals = np.full((4, 3, number_of_bins), np.nan)
     populated = photon_counts > 0
@@ -214,7 +229,16 @@ def main():
     if len(set(labels)) != len(labels):
         parser.error("bank labels must be unique")
 
-    datasets = [load_mother_statistics(path) for _, path in args.bank]
+    datasets = []
+    for label, path in args.bank:
+        print(f"Loading {label}: {path}", flush=True)
+        data = load_mother_statistics(path)
+        print(
+            f"  {len(data['cycle_ids']):,} mothers, "
+            f"{int(data['counts'].sum()):,} photons",
+            flush=True,
+        )
+        datasets.append(data)
     try:
         edges = bin_edges(datasets, args.bin_width_mm, args.z_min_mm, args.z_max_mm)
     except ValueError as error:
@@ -222,6 +246,7 @@ def main():
 
     results = {}
     for index, (label, _) in enumerate(args.bank):
+        print(f"Calculating {label} profile", flush=True)
         results[label] = summarize(
             datasets[index],
             edges,
