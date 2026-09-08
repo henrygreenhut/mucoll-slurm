@@ -19,7 +19,7 @@ from photon_harmonics_vs_mother_z import (
     main as analyze,
     summarize,
 )
-from plot_photon_harmonics_vs_mother_z import main as plot
+from plot_photon_harmonics_vs_mother_z import main as plot, rebin
 
 
 class MotherPositionTests(unittest.TestCase):
@@ -53,6 +53,21 @@ class MotherPositionTests(unittest.TestCase):
 
 
 class PhotonHarmonicProfileTests(unittest.TestCase):
+    def test_rebin_preserves_photon_weighted_harmonics(self):
+        data = {
+            "z_center_mm": np.array([-4500.0, -3500.0, 500.0]),
+            "photon_counts": np.array([10, 30, 20]),
+            "c2": np.array([0.2, -0.2, 0.5]),
+            "s2": np.array([0.1, 0.3, 0.0]),
+            "a2": np.zeros(3),
+        }
+
+        result = rebin(data, 5000.0)
+
+        np.testing.assert_array_equal(result["photon_counts"], [40, 20])
+        np.testing.assert_allclose(result["c2"], [-0.1, 0.5])
+        np.testing.assert_allclose(result["s2"], [0.25, 0.0])
+
     def write_bank(self, path):
         phi = np.array(
             [

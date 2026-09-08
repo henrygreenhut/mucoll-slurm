@@ -32,12 +32,37 @@ def load_muplus(source):
     }
 
 
+def rebin(data, width):
+    if width <= 0:
+        raise ValueError("rebin width must be positive")
+
+    groups = np.floor(data["z_center_mm"] / width).astype(np.int64)
+    unique_groups, inverse = np.unique(groups, return_inverse=True)
+    photons = np.bincount(inverse, weights=data["photon_counts"])
+    cosine = np.bincount(
+        inverse, weights=data["photon_counts"] * data["c2"]
+    )
+    sine = np.bincount(
+        inverse, weights=data["photon_counts"] * data["s2"]
+    )
+    c2 = np.divide(cosine, photons, out=np.zeros_like(cosine), where=photons > 0)
+    s2 = np.divide(sine, photons, out=np.zeros_like(sine), where=photons > 0)
+    return {
+        "z_center_mm": (unique_groups + 0.5) * width,
+        "photon_counts": photons,
+        "c2": c2,
+        "s2": s2,
+        "a2": np.hypot(c2, s2),
+    }
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("input", type=Path)
     parser.add_argument("--output-prefix", required=True, type=Path)
     parser.add_argument("--minimum-photons", type=int, default=10_000)
     parser.add_argument("--maximum-distance-m", type=float)
+    parser.add_argument("--rebin-width-mm", type=float)
     parser.add_argument(
         "--quad",
         action="append",
@@ -49,6 +74,11 @@ def main():
 
     source = np.load(args.input)
     data = load_muplus(source)
+    if args.rebin_width_mm is not None:
+        try:
+            data = rebin(data, args.rebin_width_mm)
+        except ValueError as error:
+            parser.error(str(error))
     distance = np.abs(data["z_center_mm"] / 1000.0)
     selected = data["photon_counts"] >= args.minimum_photons
     if args.maximum_distance_m is not None:
