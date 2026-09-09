@@ -55,8 +55,9 @@ for path in "$IMAGE" "$BENCHMARK_DIR"; do
     [ -e "$path" ] || { echo "Missing required path: $path" >&2; exit 1; }
 done
 
-OUT_DIR="$(cd "$(dirname "$OUTFILE")" 2>/dev/null && pwd || true)"
+OUT_DIR="$(dirname "$OUTFILE")"
 mkdir -p "$OUT_DIR"
+OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 OUT_NAME="$(basename "$OUTFILE")"
 
 echo "=== neutrino signal SIM: $NEVENTS events, seed $SEED, PDG $PDG ==="
