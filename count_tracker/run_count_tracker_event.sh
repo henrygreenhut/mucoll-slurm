@@ -146,5 +146,9 @@ run_one_reco() {
 [ "$DO_COUNT" -eq 1 ] && run_one_reco COUNT
 
 echo "=== done: $OUTPUT ==="
-[ "$DO_SIM" -eq 1 ]   && echo "  SIM   -> $OUTPUT/SIM/reco/reco_output.edm4hep.root"
-[ "$DO_COUNT" -eq 1 ] && echo "  COUNT -> $OUTPUT/COUNT/reco/reco_output.edm4hep.root"
+if [ "$DO_SIM" -eq 1 ]; then
+    echo "  SIM   -> $OUTPUT/SIM/reco/reco_output.edm4hep.root"
+fi
+if [ "$DO_COUNT" -eq 1 ]; then
+    echo "  COUNT -> $OUTPUT/COUNT/reco/reco_output.edm4hep.root"
+fi
