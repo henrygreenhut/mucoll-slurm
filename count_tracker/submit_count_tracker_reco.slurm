@@ -8,7 +8,7 @@
 #
 #  Chain it after the sampling array so it runs unattended:
 #    SAMP=$(sbatch --parsable ... submit_count_tracker_sample.slurm)
-#    ... export CONDITIONS/CONSTRUCTION/SPLIT/COHORT/NEV/SIGNAL/COUNT_SAMPLES/GEOMAP/EVENTS_OUT/CT_DIR
+#    ... export CONDITIONS/CONSTRUCTION/SPLIT/SIGNAL/COUNT_SAMPLES/GEOMAP/EVENTS_OUT/CT_DIR
 #    sbatch --dependency=afterok:$SAMP --array=0-9 submit_count_tracker_reco.slurm
 # =============================================================================
 #SBATCH --job-name=count_reco
@@ -20,16 +20,34 @@
 set -euo pipefail
 
 : "${CT_DIR:?}"; : "${CONDITIONS:?}"; : "${CONSTRUCTION:?}"; : "${SPLIT:?}"
-: "${COHORT:?}"; : "${NEV:?}"; : "${SIGNAL:?}"; : "${COUNT_SAMPLES:?}"
+: "${SIGNAL:?}"; : "${COUNT_SAMPLES:?}"
 : "${GEOMAP:?}"; : "${EVENTS_OUT:?}"
 export IMAGE="${IMAGE:?}" BENCHMARK_DIR="${BENCHMARK_DIR:?}" GENBIB_DIR="${GENBIB_DIR:?}"
 
 NUM_SHARDS="${NUM_SHARDS:-${SLURM_ARRAY_TASK_COUNT:-1}}"
 SHARD="${SLURM_ARRAY_TASK_ID:-0}"
 
+# Read identities from the conditions manifest. This supports source-event IDs
+# such as training_domain_000123 and avoids reconstructing a guessed filename.
+mapfile -t EVENT_IDS < <(python3 -c '
+import json, sys
+manifest, split = sys.argv[1:]
+report = json.load(open(manifest))
+for event in report["events"]:
+    if event["split"] == split:
+        print(event["event_id"])
+' "$CONDITIONS/manifest.json" "$SPLIT")
+
+TOTAL="${#EVENT_IDS[@]}"
+if [ -n "${NEV:-}" ]; then
+    [ "$NEV" -le "$TOTAL" ] || { echo "NEV=$NEV exceeds $TOTAL manifest events" >&2; exit 1; }
+    TOTAL="$NEV"
+fi
+[ "$TOTAL" -gt 0 ] || { echo "No $SPLIT events in conditions manifest" >&2; exit 1; }
+
 i="$SHARD"
-while [ "$i" -lt "$NEV" ]; do
-    eid=$(printf "%s_%s_%06d" "$CONSTRUCTION" "$COHORT" "$i")
+while [ "$i" -lt "$TOTAL" ]; do
+    eid="${EVENT_IDS[$i]}"
     out="$EVENTS_OUT/$eid"
     if [ -f "$out/SIM/reco/reco_output.edm4hep.root" ] && \
        [ -f "$out/COUNT/reco/reco_output.edm4hep.root" ]; then

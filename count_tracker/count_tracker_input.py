@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write one SIM or COUNT tracker input, without overlay timing selection.
+"""Write one SIM or COUNT tracker input for a COUNT tracker comparison.
 
 Use the same conditions event and neutrino SIM record for a SIM/COUNT pair.
 COUNT input arrays must already have geometric CellIDs assigned by GenBIB.
@@ -18,6 +18,8 @@ from count_tracker_conditions import (
     CELL_ID_ENCODING, COLLECTIONS, CONSTRUCTIONS, IN_TIME_WINDOW_NS, POLARITIES,
     decode_cell_ids, flight_corrected_time, sensor_counts, validate_manifest,
 )
+
+INPUT_CONSTRUCTIONS = (*CONSTRUCTIONS, "training_domain")
 
 
 def sha256_file(path):
@@ -88,7 +90,33 @@ def load_event(directory, split, event_id, construction):
     """Load the exact source record and check its saved condition digests."""
     directory = Path(directory).resolve()
     report = json.loads((directory / "manifest.json").read_text())
-    manifest = validate_manifest(report["manifest"], directory)
+    manifest = report["manifest"]
+    if construction == "training_domain":
+        if report.get("kind") != "count_tracker_training_domain_conditions":
+            raise ValueError("Expected a training-domain conditions manifest")
+        if manifest.get("schema_version") != 2:
+            raise ValueError("Training-domain manifest must be schema_version 2")
+        if manifest.get("cell_id_encoding") != CELL_ID_ENCODING:
+            raise ValueError("Training-domain manifest has a different CellID encoding")
+        if manifest.get("selection") != "inside_bounds == True":
+            raise ValueError("Training-domain manifest has an unverified HDF selection")
+        if manifest.get("generator_training_holdout") is not False:
+            raise ValueError("Training-domain manifest must state that it is not a holdout")
+        verification = report.get("training_array_verification", {})
+        if (verification.get("status") != "exact ordered match"
+                or verification.get("selection") != manifest["selection"]):
+            raise ValueError("Training-domain HDF rows were not verified against the NPY files")
+        events = manifest.get("events")
+        if not isinstance(events, list) or not events:
+            raise ValueError("Training-domain manifest must contain events")
+        identities = [(event.get("split"), event.get("event_id")) for event in events]
+        source_events = [event.get("source_event") for event in events]
+        if any(split not in ("train", "val", "test") for split, _ in identities):
+            raise ValueError("Training-domain event has an invalid evaluation split")
+        if len(identities) != len(set(identities)) or len(source_events) != len(set(source_events)):
+            raise ValueError("Training-domain source events must be unique across splits")
+    else:
+        manifest = validate_manifest(manifest, directory)
     if manifest["construction"] != construction:
         raise ValueError("Conditions belong to a different SIM construction")
     matches = [event for event in manifest["events"]
@@ -107,7 +135,24 @@ def load_event(directory, split, event_id, construction):
         expected[short] = sensor_counts(rows)
         if np.any(rows[:, 0] != system) or len(rows) != saved["hits"]:
             raise ValueError(f"Invalid conditions or recorded hit count: {path}")
-    return matches[0], expected
+    event = matches[0]
+    if construction == "training_domain":
+        arrays = event.get("sim_arrays")
+        if not isinstance(arrays, dict) or set(arrays) != set(COLLECTIONS):
+            raise ValueError("Training-domain event must declare all six SIM arrays")
+        for short, saved in arrays.items():
+            path = Path(saved["path"])
+            path = (directory / path).resolve() if not path.is_absolute() else path.resolve()
+            try:
+                path.relative_to(directory)
+            except ValueError as error:
+                raise ValueError("Training-domain SIM array escapes its conditions directory") from error
+            if sha256_file(path) != saved["sha256"]:
+                raise ValueError(f"Training-domain SIM array changed after preparation: {path}")
+            if saved.get("hits") != sum(expected[short].values()):
+                raise ValueError(f"Training-domain {short} SIM and condition counts differ")
+            saved["path"] = str(path)
+    return event, expected
 
 
 def read_frame(path, entry):
@@ -153,6 +198,38 @@ def append_sim_hits(collections, event):
                     copied.setOverlay(True)
                     collections[short].push_back(copied)
             del frame, reader
+
+
+def append_training_domain_sim_hits(collections, event, expected):
+    """Write the exact selected HDF source rows, with no additional hit cut."""
+    import edm4hep
+
+    for short, (system, _) in COLLECTIONS.items():
+        path = Path(event["sim_arrays"][short]["path"])
+        rows = np.load(path, mmap_mode="r", allow_pickle=False)
+        if rows.ndim != 2 or rows.shape[1] != 11 or rows.dtype.kind not in "fiu":
+            raise ValueError(f"Training-domain {short} SIM rows must have shape (N, 11)")
+        if not np.all(np.isfinite(rows)) or np.any(rows[:, 0] < 0):
+            raise ValueError(f"Training-domain {short} SIM rows contain invalid values")
+        labels = rows[:, 5:10]
+        if not np.all(labels == np.rint(labels)):
+            raise ValueError(f"Training-domain {short} has noninteger sensor labels")
+        labels = labels.astype(np.int64)
+        if sensor_counts(labels) != expected[short]:
+            raise ValueError(f"Training-domain {short} occupancy differs from conditions")
+        ids = rows[:, 10]
+        if not np.all(ids == np.rint(ids)):
+            raise ValueError(f"Training-domain {short} has noninteger CellIDs")
+        ids = ids.astype(np.uint64)
+        if not np.array_equal(decode_cell_ids(ids, system), labels):
+            raise ValueError(f"Training-domain {short} CellIDs disagree with sensor labels")
+        for row, cell_id in zip(rows, ids):
+            hit = collections[short].create()
+            hit.setEDep(float(row[0]))
+            hit.setPosition(edm4hep.Vector3d(*map(float, row[1:4])))
+            hit.setTime(float(row[4]))
+            hit.setCellID(int(cell_id))
+            hit.setOverlay(True)
 
 
 def append_count_hits(collections, directory, expected, tolerance=0.0):
@@ -214,7 +291,10 @@ def write_input(args):
     collections = {short: edm4hep.SimTrackerHitCollection() for short in COLLECTIONS}
     count_provenance = None
     if args.sample == "SIM":
-        append_sim_hits(collections, event)
+        if args.construction == "training_domain":
+            append_training_domain_sim_hits(collections, event, expected)
+        else:
+            append_sim_hits(collections, event)
         targets = expected  # SIM copies real hits, so occupancy must match exactly.
     else:
         count_provenance, targets = append_count_hits(
@@ -246,8 +326,6 @@ def write_input(args):
         report = {
             "sample": args.sample, "event": event,
             "construction": args.construction,
-            **CONSTRUCTIONS[args.construction],
-            "norm1_equivalents_per_polarity": 420,
             "signal": {"path": str(Path(args.signal).resolve()), "entry": args.signal_entry},
             "conditions_manifest_sha256": sha256_file(Path(args.conditions) / "manifest.json"),
             "count_arrays": count_provenance,
@@ -255,6 +333,17 @@ def write_input(args):
             "hits": {short: sum(counts.values()) for short, counts in targets.items()},
             "input_sha256": sha256_file(root_path),
         }
+        if args.construction == "training_domain":
+            report.update({
+                "source_domain": "COUNT model training-data source",
+                "generator_training_holdout": False,
+                "source_event": event["source_event"],
+            })
+        else:
+            report.update({
+                **CONSTRUCTIONS[args.construction],
+                "norm1_equivalents_per_polarity": 420,
+            })
         if args.sample == "COUNT":
             totals = {"expected": 0, "written": 0, "dropped": 0, "reassigned": 0}
             for short in COLLECTIONS:
@@ -272,7 +361,7 @@ def write_input(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--conditions", required=True, help="Prepared condition directory")
-    parser.add_argument("--construction", choices=tuple(CONSTRUCTIONS), required=True)
+    parser.add_argument("--construction", choices=INPUT_CONSTRUCTIONS, required=True)
     parser.add_argument("--split", choices=("train", "val", "test"), required=True)
     parser.add_argument("--event-id", required=True)
     parser.add_argument("--sample", choices=("SIM", "COUNT"), required=True)
