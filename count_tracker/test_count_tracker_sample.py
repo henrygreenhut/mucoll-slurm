@@ -177,7 +177,7 @@ class DriverTests(unittest.TestCase):
                     conditions=str(cond_dir), split="test", event_id=None,
                     model_root=str(tmp / "models"), paper1_root=None,
                     collections=shorts, seed_base=0, max_rounds=10,
-                    device="cpu", output=str(out_dir))
+                    device="cpu", num_shards=1, shard_index=0, output=str(out_dir))
                 cts.sample_events(args)
             finally:
                 (cts.load_paper1, cts.resolve_device, cts.resolve_model_dir,
@@ -193,20 +193,65 @@ class DriverTests(unittest.TestCase):
             self.assertEqual(len(manifest["events"]), 2)
             self.assertEqual(set(manifest["events"][0]["collections"]), set(shorts))
 
-    def test_driver_refuses_existing_output(self):
+    def _run_driver(self, cond_dir, out_dir, tmp, shorts, on_sample=None, **overrides):
+        def fake_loop(sampler, conditions, seed, **kwargs):
+            if on_sample:
+                on_sample(kwargs.get("label", ""))
+            labels = np.asarray(conditions)[:, 1:]
+            head = np.zeros((len(conditions), 5), dtype=np.float32)
+            return np.column_stack([head, labels]).astype(np.float32)
+
+        saved = (cts.load_paper1, cts.resolve_device, cts.resolve_model_dir,
+                 cts.CollectionSampler, cts.run_rejection_loop)
+        try:
+            cts.load_paper1 = lambda root: ("paper1",)
+            cts.resolve_device = lambda spec: types.SimpleNamespace(type="cpu")
+            cts.resolve_model_dir = lambda model_root, short: Path(model_root) / short
+            cts.CollectionSampler = lambda short, *a, **k: types.SimpleNamespace(
+                short=short, y_lookup=np.zeros((0, 4)))
+            cts.run_rejection_loop = fake_loop
+            args = types.SimpleNamespace(
+                conditions=str(cond_dir), split="test", event_id=None,
+                model_root=str(tmp / "models"), paper1_root=None, collections=shorts,
+                seed_base=0, max_rounds=10, device="cpu", num_shards=1, shard_index=0,
+                output=str(out_dir))
+            for key, value in overrides.items():
+                setattr(args, key, value)
+            cts.sample_events(args)
+        finally:
+            (cts.load_paper1, cts.resolve_device, cts.resolve_model_dir,
+             cts.CollectionSampler, cts.run_rejection_loop) = saved
+
+    def test_driver_resumes_and_skips_existing(self):
+        event_ids = ["norm1_SIM_A_000000", "norm1_SIM_A_000001"]
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             cond_dir = tmp / "conditions"
-            self._make_conditions_dir(cond_dir, ["VBC"], ["norm1_SIM_A_000000"])
+            self._make_conditions_dir(cond_dir, ["VBC"], event_ids)
             out_dir = tmp / "count_samples"
-            out_dir.mkdir()
-            args = types.SimpleNamespace(
-                conditions=str(cond_dir), split="test", event_id=None,
-                model_root=str(tmp / "models"), paper1_root=None,
-                collections=["VBC"], seed_base=0, max_rounds=10,
-                device="cpu", output=str(out_dir))
-            with self.assertRaises(FileExistsError):
-                cts.sample_events(args)
+            done = out_dir / "test" / "norm1_SIM_A_000000" / "tabddpm_VBC_samples.npy"
+            done.parent.mkdir(parents=True)
+            np.save(done, np.zeros((2, 9), np.float32))  # a previously-finished event
+            sampled = []
+            self._run_driver(cond_dir, out_dir, tmp, ["VBC"],
+                             on_sample=lambda label: sampled.append(label))
+            self.assertEqual(len(sampled), 1)  # only the unfinished event is sampled
+            self.assertTrue((out_dir / "test" / "norm1_SIM_A_000001"
+                             / "tabddpm_VBC_samples.npy").is_file())
+
+    def test_sharding_partitions_all_events(self):
+        event_ids = [f"norm1_SIM_A_{i:06d}" for i in range(4)]
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            cond_dir = tmp / "conditions"
+            self._make_conditions_dir(cond_dir, ["VBC"], event_ids)
+            out_dir = tmp / "count_samples"
+            for shard in (0, 1):
+                self._run_driver(cond_dir, out_dir, tmp, ["VBC"],
+                                 num_shards=2, shard_index=shard)
+            for event_id in event_ids:
+                self.assertTrue((out_dir / "test" / event_id
+                                 / "tabddpm_VBC_samples.npy").is_file(), event_id)
 
 
 if __name__ == "__main__":

@@ -22,6 +22,7 @@ import gc
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -355,77 +356,75 @@ def sample_events(args):
     ]
     if not wanted:
         raise ValueError(f"No events for split={args.split} event_id={args.event_id}")
+    # Interleaved shard so several GPU jobs can share one output directory.
+    if args.num_shards > 1:
+        wanted = wanted[args.shard_index::args.num_shards]
+    if not wanted:
+        print(f"shard {args.shard_index}/{args.num_shards}: no events; nothing to do")
+        return
     shorts = args.collections or list(COLLECTIONS)
 
     output = Path(args.output).resolve()
-    if output.exists():
-        raise FileExistsError(f"Refusing to replace {output}")
-    output.parent.mkdir(parents=True, exist_ok=True)
+    output.mkdir(parents=True, exist_ok=True)  # shared and resumable across shards
 
     paper1_root = args.paper1_root or (Path(args.model_root) / "paper1-inference")
-    paper1 = load_paper1(paper1_root)
     device = resolve_device(args.device)
+    paper1 = None  # loaded lazily once a model is actually needed
 
-    with tempfile.TemporaryDirectory(prefix=".count_samples_", dir=output.parent) as work:
-        work = Path(work)
-        event_records = {summary["event_id"]: {} for summary in wanted}
-        model_dirs = {}
-        # Collection-outer, event-inner: load each model once.
-        for short in shorts:
-            model_dir = resolve_model_dir(args.model_root, short)
-            model_dirs[short] = str(model_dir)
-            sampler = CollectionSampler(short, model_dir, device, paper1)
-            print(f"[{short}] model {model_dir.name}", flush=True)
-            for summary in wanted:
-                event_id = summary["event_id"]
-                source = conditions_dir / args.split / event_id / f"{short}_conditions.npy"
-                conditions = np.load(source, allow_pickle=False)
-                expected_hits = len(conditions)
-                seed = event_seed(args.seed_base, construction, cohort, event_id, short)
-                label = f"[{short} {event_id}] "
-                out_rows = run_rejection_loop(
-                    sampler, conditions, seed,
-                    oversample=1, max_rejection_rounds=args.max_rounds,
-                    work_dir=work, label=label,
-                )
-                if len(out_rows) != expected_hits:
-                    raise RuntimeError(
-                        f"{label}produced {len(out_rows)} rows for {expected_hits} conditions"
-                    )
-                destination = work / args.split / event_id
-                destination.mkdir(parents=True, exist_ok=True)
-                out_path = destination / f"tabddpm_{short}_samples.npy"
-                np.save(out_path, out_rows.astype(np.float32), allow_pickle=False)
-                event_records[event_id][short] = {
-                    "hits": int(expected_hits),
-                    "seed": int(seed),
-                    "sha256": sha256_file(out_path),
-                }
+    model_dirs = {}
+    records = {summary["event_id"]: {} for summary in wanted}
+    # Collection-outer, event-inner: load each model at most once; skip events
+    # whose output already exists so reruns and parallel shards are safe.
+    for short in shorts:
+        model_dir = resolve_model_dir(args.model_root, short)
+        model_dirs[short] = str(model_dir)
+        pending = [s for s in wanted if not (
+            output / args.split / s["event_id"] / f"tabddpm_{short}_samples.npy").exists()]
+        if not pending:
+            print(f"[{short}] all {len(wanted)} events already sampled; skipping", flush=True)
+            continue
+        if paper1 is None:
+            paper1 = load_paper1(paper1_root)
+        sampler = CollectionSampler(short, model_dir, device, paper1)
+        print(f"[{short}] model {model_dir.name}: {len(pending)}/{len(wanted)} to sample",
+              flush=True)
+        for summary in pending:
+            event_id = summary["event_id"]
+            destination = output / args.split / event_id
+            out_path = destination / f"tabddpm_{short}_samples.npy"
+            source = conditions_dir / args.split / event_id / f"{short}_conditions.npy"
+            conditions = np.load(source, allow_pickle=False)
+            expected_hits = len(conditions)
+            seed = event_seed(args.seed_base, construction, cohort, event_id, short)
+            out_rows = run_rejection_loop(
+                sampler, conditions, seed, oversample=1,
+                max_rejection_rounds=args.max_rounds, work_dir=output,
+                label=f"[{short} {event_id}] ")
+            if len(out_rows) != expected_hits:
+                raise RuntimeError(
+                    f"[{short} {event_id}] produced {len(out_rows)} rows for "
+                    f"{expected_hits} conditions")
+            destination.mkdir(parents=True, exist_ok=True)
+            tmp = destination / f".tabddpm_{short}_samples.{os.getpid()}.npy"
+            np.save(tmp, out_rows.astype(np.float32), allow_pickle=False)
+            os.replace(tmp, out_path)  # atomic; safe against concurrent shards
+            records[event_id][short] = {"hits": int(expected_hits), "seed": int(seed)}
 
-        result = {
-            "kind": "count_tracker_samples",
-            "construction": construction,
-            "cohort": cohort,
-            "split": args.split,
-            "collections": shorts,
-            "seed_base": args.seed_base,
-            "max_rounds": args.max_rounds,
-            "device": str(device),
-            "vendored_from": "GenBIB-ML sample.py @ a483be7",
-            "paper1_root": str(Path(paper1_root).resolve()),
-            "model_dirs": model_dirs,
-            "conditions_dir": str(conditions_dir),
-            "conditions_manifest_sha256": sha256_file(conditions_dir / "manifest.json"),
-            "events": [
-                {"event_id": eid, "split": args.split, "collections": event_records[eid]}
-                for eid in (s["event_id"] for s in wanted)
-            ],
-        }
-        (work / "manifest.json").write_text(json.dumps(result, indent=2) + "\n")
-        if output.exists():
-            raise FileExistsError(f"Output appeared during sampling: {output}")
-        work.rename(output)
-    print(f"Wrote COUNT samples for {len(wanted)} event(s) to {output}")
+    shard_manifest = {
+        "kind": "count_tracker_samples_shard",
+        "construction": construction, "cohort": cohort, "split": args.split,
+        "collections": shorts, "seed_base": args.seed_base, "max_rounds": args.max_rounds,
+        "device": str(device), "vendored_from": "GenBIB-ML sample.py @ a483be7",
+        "paper1_root": str(Path(paper1_root).resolve()), "model_dirs": model_dirs,
+        "conditions_dir": str(conditions_dir),
+        "conditions_manifest_sha256": sha256_file(conditions_dir / "manifest.json"),
+        "shard": {"index": args.shard_index, "num": args.num_shards},
+        "events": [{"event_id": eid, "split": args.split, "collections": records[eid]}
+                   for eid in (s["event_id"] for s in wanted)],
+    }
+    tag = f".shard{args.shard_index}of{args.num_shards}" if args.num_shards > 1 else ""
+    (output / f"manifest{tag}.json").write_text(json.dumps(shard_manifest, indent=2) + "\n")
+    print(f"shard {args.shard_index}/{args.num_shards}: sampled {len(wanted)} event(s) -> {output}")
 
 
 def main():
@@ -445,10 +444,16 @@ def main():
     parser.add_argument("--seed-base", type=int, default=0)
     parser.add_argument("--max-rounds", type=int, default=10000)
     parser.add_argument("--device", default="auto", help="auto, cuda, or cpu")
-    parser.add_argument("--output", required=True, help="New output directory")
+    parser.add_argument("--num-shards", type=int, default=1,
+                        help="split the event list across this many parallel GPU jobs")
+    parser.add_argument("--shard-index", type=int, default=0,
+                        help="which interleaved shard this job handles (0-based)")
+    parser.add_argument("--output", required=True, help="Output directory (shared, resumable)")
     args = parser.parse_args()
     if args.seed_base < 0:
         parser.error("--seed-base must be nonnegative")
+    if args.num_shards < 1 or not (0 <= args.shard_index < args.num_shards):
+        parser.error("--shard-index must be in [0, --num-shards)")
     sample_events(args)
 
 
