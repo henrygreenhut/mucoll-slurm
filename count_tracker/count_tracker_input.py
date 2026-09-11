@@ -58,17 +58,21 @@ def validate_count_rows(rows, system, expected, tolerance=0.0):
     if np.any(labels[:, 0] != system):
         raise ValueError("Assigned hits belong to a different tracker system")
     actual = sensor_counts(labels)
-    missing = sum((expected - actual).values())
-    extra = sum((actual - expected).values())
     total_expected = sum(expected.values())
-    fraction = missing / total_expected if total_expected else 0.0
-    if fraction > tolerance:
+    written = len(labels)
+    dropped = total_expected - written                # hits lost entirely (assign 'unresolved')
+    reassigned = sum((actual - expected).values())    # hits moved to a neighbour sensor
+    drop_fraction = dropped / total_expected if total_expected else 0.0
+    # Gate on hits LOST -- drops remove tracking input. Reassignments keep the hit
+    # (a one-sensor position smear) so they are recorded but not gated. See the
+    # CellID-policy note in COUNT_TRACKER_STUDY.md.
+    if drop_fraction > tolerance:
         raise ValueError(
-            f"Sensor occupancy mismatch: {missing} missing, {extra} extra "
-            f"({fraction:.3%} of {total_expected} exceeds tolerance {tolerance:.3%})"
+            f"CellID assignment dropped {dropped} of {total_expected} hits "
+            f"({drop_fraction:.3%} exceeds tolerance {tolerance:.3%})"
         )
-    stats = {"expected": int(total_expected), "written": int(len(labels)),
-             "missing": int(missing), "extra": int(extra)}
+    stats = {"expected": int(total_expected), "written": int(written),
+             "dropped": int(dropped), "reassigned": int(reassigned)}
     return labels, stats
 
 
@@ -148,9 +152,9 @@ def append_count_hits(collections, directory, expected, tolerance=0.0):
         path = Path(directory) / f"{name}_SimTrackerHit_conditional_reco9_0.npy"
         rows = np.load(path, mmap_mode="r", allow_pickle=False)
         labels, stats = validate_count_rows(rows, system, expected[short], tolerance)
-        if stats["missing"] or stats["extra"]:
-            print(f"[{short}] occupancy: {stats['missing']} missing, {stats['extra']} extra "
-                  f"of {stats['expected']} (recorded, within tolerance)", flush=True)
+        if stats["dropped"] or stats["reassigned"]:
+            print(f"[{short}] {stats['dropped']} dropped, {stats['reassigned']} reassigned "
+                  f"of {stats['expected']} (recorded)", flush=True)
         cell_ids = pack_cell_ids(labels)
         for row, cell_id in zip(rows, cell_ids):
             hit = collections[short].create()
@@ -240,13 +244,13 @@ def write_input(args):
             "input_sha256": sha256_file(root_path),
         }
         if args.sample == "COUNT":
-            totals = {"expected": 0, "written": 0, "missing": 0, "extra": 0}
+            totals = {"expected": 0, "written": 0, "dropped": 0, "reassigned": 0}
             for short in COLLECTIONS:
                 for key in totals:
                     totals[key] += count_provenance[short][key]
             report["count_tolerance"] = args.count_tolerance
             report["count_occupancy_totals"] = totals
-            report["count_occupancy_exact"] = totals["missing"] == 0 and totals["extra"] == 0
+            report["count_occupancy_exact"] = totals["dropped"] == 0 and totals["reassigned"] == 0
         (work / "manifest.json").write_text(json.dumps(report, indent=2) + "\n")
         if destination.exists():
             raise FileExistsError(f"Output appeared during writing: {destination}")

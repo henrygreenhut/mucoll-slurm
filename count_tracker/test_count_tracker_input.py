@@ -24,34 +24,34 @@ class AssignedHitTests(unittest.TestCase):
         np.testing.assert_array_equal(self.rows, original)
         self.assertEqual(len(labels), 2)
         np.testing.assert_array_equal(labels, [[2, -1, 0, 0, 3]] * 2)
-        self.assertEqual(stats, {"expected": 2, "written": 2, "missing": 0, "extra": 0})
+        self.assertEqual(stats, {"expected": 2, "written": 2, "dropped": 0, "reassigned": 0})
 
-    def test_reassignment_fails_at_default_zero_tolerance(self):
+    def test_reassignment_is_recorded_but_not_gated(self):
+        # A hit moved to a neighbour sensor loses no hit, so it is never gated,
+        # even at the default zero tolerance -- only recorded.
         self.rows[1, 9] = 4
-        with self.assertRaisesRegex(ValueError, "1 missing, 1 extra"):
-            writer.validate_count_rows(self.rows, 2, self.expected)
+        labels, stats = writer.validate_count_rows(self.rows, 2, self.expected)
+        self.assertEqual(stats, {"expected": 2, "written": 2, "dropped": 0, "reassigned": 1})
 
     def _uniform_rows(self, n, sensor=3):
         row = [0.001, 10, 20, -500, 0.0, 2, -1, 0, 0, sensor]
         return np.tile(row, (n, 1)).astype(np.float64)
 
-    def test_small_reassignment_within_tolerance_is_recorded_not_raised(self):
+    def test_many_reassignments_pass_because_no_hit_is_lost(self):
         rows = self._uniform_rows(100)
-        rows[0, 9] = 4  # one hit moved to a neighbour sensor
+        rows[:20, 9] = 4  # 20% moved to a neighbour -- no loss, so it passes at tol 0
         expected = Counter({(2, -1, 0, 0, 3): 100})
-        labels, stats = writer.validate_count_rows(rows, 2, expected, tolerance=0.05)
-        self.assertEqual(len(labels), 100)
-        self.assertEqual(stats, {"expected": 100, "written": 100, "missing": 1, "extra": 1})
+        labels, stats = writer.validate_count_rows(rows, 2, expected, tolerance=0.0)
+        self.assertEqual(stats, {"expected": 100, "written": 100, "dropped": 0, "reassigned": 20})
 
     def test_dropped_hits_within_tolerance_are_recorded(self):
         rows = self._uniform_rows(98)  # two hits dropped by CellID assignment
         expected = Counter({(2, -1, 0, 0, 3): 100})
         labels, stats = writer.validate_count_rows(rows, 2, expected, tolerance=0.05)
-        self.assertEqual(stats, {"expected": 100, "written": 98, "missing": 2, "extra": 0})
+        self.assertEqual(stats, {"expected": 100, "written": 98, "dropped": 2, "reassigned": 0})
 
-    def test_mismatch_beyond_tolerance_still_raises(self):
-        rows = self._uniform_rows(100)
-        rows[:10, 9] = 4  # 10% reassigned exceeds the 5% tolerance
+    def test_drops_beyond_tolerance_raise(self):
+        rows = self._uniform_rows(88)  # 12 hits lost exceeds the 5% tolerance
         expected = Counter({(2, -1, 0, 0, 3): 100})
         with self.assertRaisesRegex(ValueError, "exceeds tolerance"):
             writer.validate_count_rows(rows, 2, expected, tolerance=0.05)
@@ -74,7 +74,7 @@ class AssignedHitTests(unittest.TestCase):
 
     def test_zero_hit_collection_and_signed_cell_id(self):
         labels, stats = writer.validate_count_rows(np.empty((0, 10)), 2, Counter())
-        self.assertEqual(stats, {"expected": 0, "written": 0, "missing": 0, "extra": 0})
+        self.assertEqual(stats, {"expected": 0, "written": 0, "dropped": 0, "reassigned": 0})
         self.assertEqual(writer.pack_cell_ids(labels).shape, (0,))
         cell_id = writer.pack_cell_ids(np.array([[2, -1, 7, 2047, 255]]))[0]
         self.assertEqual(int(cell_id), 2 | (3 << 5) | (7 << 7) | (2047 << 13) | (255 << 24))
