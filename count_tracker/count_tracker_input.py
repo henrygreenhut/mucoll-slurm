@@ -28,8 +28,18 @@ def sha256_file(path):
     return digest.hexdigest()
 
 
-def validate_count_rows(rows, system, expected):
-    """Check assigned hits without clipping, filtering, or resampling them."""
+def validate_count_rows(rows, system, expected, tolerance=0.0):
+    """Check assigned hits without clipping, filtering, or resampling them.
+
+    Geometric CellID assignment (assign_actual_cellid) drops hits whose
+    generated position resolves to no sensor and reassigns others to a
+    neighbour, so the assigned occupancy no longer matches the conditioned
+    occupancy exactly. Rather than repair the hits, we tolerate a small
+    mismatch and record it: raise only if the missing fraction exceeds
+    ``tolerance``. Returns ``(labels, stats)``. See COUNT_TRACKER_STUDY.md
+    decision on the CellID policy; this deficit is COUNT-only and must be
+    accounted for when interpreting any SIM-vs-COUNT separation.
+    """
     rows = np.asarray(rows)
     if rows.ndim != 2 or rows.shape[1] != 10 or rows.dtype.kind not in "fiu":
         raise ValueError("Assigned hits must be a numeric (N, 10) array")
@@ -48,11 +58,18 @@ def validate_count_rows(rows, system, expected):
     if np.any(labels[:, 0] != system):
         raise ValueError("Assigned hits belong to a different tracker system")
     actual = sensor_counts(labels)
-    if actual != expected:
-        missing = sum((expected - actual).values())
-        extra = sum((actual - expected).values())
-        raise ValueError(f"Sensor occupancy mismatch: {missing} missing, {extra} extra")
-    return labels
+    missing = sum((expected - actual).values())
+    extra = sum((actual - expected).values())
+    total_expected = sum(expected.values())
+    fraction = missing / total_expected if total_expected else 0.0
+    if fraction > tolerance:
+        raise ValueError(
+            f"Sensor occupancy mismatch: {missing} missing, {extra} extra "
+            f"({fraction:.3%} of {total_expected} exceeds tolerance {tolerance:.3%})"
+        )
+    stats = {"expected": int(total_expected), "written": int(len(labels)),
+             "missing": int(missing), "extra": int(extra)}
+    return labels, stats
 
 
 def pack_cell_ids(labels):
@@ -122,14 +139,18 @@ def append_sim_hits(collections, event):
             del frame, reader
 
 
-def append_count_hits(collections, directory, expected):
+def append_count_hits(collections, directory, expected, tolerance=0.0):
     import edm4hep
 
     provenance = {}
+    actual_occupancy = {}
     for short, (system, name) in COLLECTIONS.items():
         path = Path(directory) / f"{name}_SimTrackerHit_conditional_reco9_0.npy"
         rows = np.load(path, mmap_mode="r", allow_pickle=False)
-        labels = validate_count_rows(rows, system, expected[short])
+        labels, stats = validate_count_rows(rows, system, expected[short], tolerance)
+        if stats["missing"] or stats["extra"]:
+            print(f"[{short}] occupancy: {stats['missing']} missing, {stats['extra']} extra "
+                  f"of {stats['expected']} (recorded, within tolerance)", flush=True)
         cell_ids = pack_cell_ids(labels)
         for row, cell_id in zip(rows, cell_ids):
             hit = collections[short].create()
@@ -138,8 +159,9 @@ def append_count_hits(collections, directory, expected):
             hit.setTime(float(row[4]))
             hit.setCellID(int(cell_id))
             hit.setOverlay(True)
-        provenance[short] = {"path": str(path.resolve()), "sha256": sha256_file(path)}
-    return provenance
+        actual_occupancy[short] = sensor_counts(labels)
+        provenance[short] = {"path": str(path.resolve()), "sha256": sha256_file(path), **stats}
+    return provenance, actual_occupancy
 
 
 def write_input(args):
@@ -177,11 +199,14 @@ def write_input(args):
     count_provenance = None
     if args.sample == "SIM":
         append_sim_hits(collections, event)
+        targets = expected  # SIM copies real hits, so occupancy must match exactly.
     else:
-        count_provenance = append_count_hits(collections, args.count_arrays, expected)
+        count_provenance, targets = append_count_hits(
+            collections, args.count_arrays, expected, args.count_tolerance)
     for short, (system, name) in COLLECTIONS.items():
-        if hit_counts(collections[short], system) != expected[short]:
-            raise ValueError(f"Final {short} occupancy differs from the conditions")
+        if hit_counts(collections[short], system) != targets[short]:
+            reference = "conditions" if args.sample == "SIM" else "assigned arrays"
+            raise ValueError(f"Final {short} occupancy differs from the {reference}")
         frame.put(collections[short], name)
 
     metadata = podio.Frame()
@@ -199,7 +224,7 @@ def write_input(args):
         # Reopen the serialized data before publishing a completed input.
         check_reader, check = read_frame(root_path, 0)
         for short, (system, name) in COLLECTIONS.items():
-            if hit_counts(check.get(name), system) != expected[short]:
+            if hit_counts(check.get(name), system) != targets[short]:
                 raise ValueError(f"Serialized {short} occupancy changed")
         del check, check_reader
         report = {
@@ -211,9 +236,17 @@ def write_input(args):
             "conditions_manifest_sha256": sha256_file(Path(args.conditions) / "manifest.json"),
             "count_arrays": count_provenance,
             "overlay_time_selection": False,
-            "hits": {short: sum(counts.values()) for short, counts in expected.items()},
+            "hits": {short: sum(counts.values()) for short, counts in targets.items()},
             "input_sha256": sha256_file(root_path),
         }
+        if args.sample == "COUNT":
+            totals = {"expected": 0, "written": 0, "missing": 0, "extra": 0}
+            for short in COLLECTIONS:
+                for key in totals:
+                    totals[key] += count_provenance[short][key]
+            report["count_tolerance"] = args.count_tolerance
+            report["count_occupancy_totals"] = totals
+            report["count_occupancy_exact"] = totals["missing"] == 0 and totals["extra"] == 0
         (work / "manifest.json").write_text(json.dumps(report, indent=2) + "\n")
         if destination.exists():
             raise FileExistsError(f"Output appeared during writing: {destination}")
@@ -230,10 +263,17 @@ def main():
     parser.add_argument("--signal", required=True, help="Neutrino SIM ROOT file")
     parser.add_argument("--signal-entry", required=True, type=int)
     parser.add_argument("--count-arrays", help="Assigned arrays for this single event")
+    parser.add_argument(
+        "--count-tolerance", type=float, default=0.05,
+        help="COUNT only: max per-collection fraction of conditioned hits that CellID "
+             "assignment may drop/reassign before the input is rejected (default 0.05). "
+             "The actual per-collection deficit is always recorded in the manifest.")
     parser.add_argument("--output", required=True, help="New output directory")
     args = parser.parse_args()
     if (args.sample == "COUNT") != bool(args.count_arrays):
         parser.error("--count-arrays is required for COUNT and must be omitted for SIM")
+    if not 0.0 <= args.count_tolerance <= 1.0:
+        parser.error("--count-tolerance must be in [0, 1]")
     if args.signal_entry < 0:
         parser.error("--signal-entry must be nonnegative")
     write_input(args)
