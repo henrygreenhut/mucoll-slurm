@@ -19,7 +19,8 @@ from count_tracker_conditions import (
     decode_cell_ids, flight_corrected_time, sensor_counts, validate_manifest,
 )
 
-INPUT_CONSTRUCTIONS = (*CONSTRUCTIONS, "training_domain")
+ARRAY_SIM_CONSTRUCTIONS = ("norm42_reservoir",)
+INPUT_CONSTRUCTIONS = (*CONSTRUCTIONS, *ARRAY_SIM_CONSTRUCTIONS)
 
 
 def sha256_file(path):
@@ -91,30 +92,34 @@ def load_event(directory, split, event_id, construction):
     directory = Path(directory).resolve()
     report = json.loads((directory / "manifest.json").read_text())
     manifest = report["manifest"]
-    if construction == "training_domain":
-        if report.get("kind") != "count_tracker_training_domain_conditions":
-            raise ValueError("Expected a training-domain conditions manifest")
+    if construction == "norm42_reservoir":
+        if report.get("kind") != "count_tracker_reservoir_conditions":
+            raise ValueError("Expected a norm42 reservoir conditions manifest")
         if manifest.get("schema_version") != 2:
-            raise ValueError("Training-domain manifest must be schema_version 2")
+            raise ValueError("Reservoir manifest must be schema_version 2")
         if manifest.get("cell_id_encoding") != CELL_ID_ENCODING:
-            raise ValueError("Training-domain manifest has a different CellID encoding")
-        if manifest.get("selection") != "inside_bounds == True":
-            raise ValueError("Training-domain manifest has an unverified HDF selection")
+            raise ValueError("Reservoir manifest has a different CellID encoding")
         if manifest.get("generator_training_holdout") is not False:
-            raise ValueError("Training-domain manifest must state that it is not a holdout")
-        verification = report.get("training_array_verification", {})
+            raise ValueError("Reservoir manifest must state that it is not a holdout")
+        if manifest.get("physical_event_boundaries") is not False:
+            raise ValueError("Reservoir manifest must state that physical boundaries are absent")
+        if manifest.get("template", {}).get("construction") != "norm42":
+            raise ValueError("Reservoir occupancy template must be norm42")
+        if manifest.get("sampling", {}).get("reuse_policy") not in ("none", "within-split"):
+            raise ValueError("Reservoir manifest has an unknown reuse policy")
+        verification = report.get("verification_report", {})
         if (verification.get("status") != "exact ordered match"
-                or verification.get("selection") != manifest["selection"]):
-            raise ValueError("Training-domain HDF rows were not verified against the NPY files")
+                or verification.get("selection") != "inside_bounds == True"):
+            raise ValueError("Reservoir was not based on verified training arrays")
         events = manifest.get("events")
         if not isinstance(events, list) or not events:
-            raise ValueError("Training-domain manifest must contain events")
+            raise ValueError("Reservoir manifest must contain events")
         identities = [(event.get("split"), event.get("event_id")) for event in events]
-        source_events = [event.get("source_event") for event in events]
+        template_ids = [event.get("template_event_id") for event in events]
         if any(split not in ("train", "val", "test") for split, _ in identities):
-            raise ValueError("Training-domain event has an invalid evaluation split")
-        if len(identities) != len(set(identities)) or len(source_events) != len(set(source_events)):
-            raise ValueError("Training-domain source events must be unique across splits")
+            raise ValueError("Reservoir event has an invalid classifier split")
+        if len(identities) != len(set(identities)) or len(template_ids) != len(set(template_ids)):
+            raise ValueError("Reservoir template events must be unique across splits")
     else:
         manifest = validate_manifest(manifest, directory)
     if manifest["construction"] != construction:
@@ -136,21 +141,21 @@ def load_event(directory, split, event_id, construction):
         if np.any(rows[:, 0] != system) or len(rows) != saved["hits"]:
             raise ValueError(f"Invalid conditions or recorded hit count: {path}")
     event = matches[0]
-    if construction == "training_domain":
+    if construction in ARRAY_SIM_CONSTRUCTIONS:
         arrays = event.get("sim_arrays")
         if not isinstance(arrays, dict) or set(arrays) != set(COLLECTIONS):
-            raise ValueError("Training-domain event must declare all six SIM arrays")
+            raise ValueError("Prepared empirical event must declare all six SIM arrays")
         for short, saved in arrays.items():
             path = Path(saved["path"])
             path = (directory / path).resolve() if not path.is_absolute() else path.resolve()
             try:
                 path.relative_to(directory)
             except ValueError as error:
-                raise ValueError("Training-domain SIM array escapes its conditions directory") from error
+                raise ValueError("Prepared SIM array escapes its conditions directory") from error
             if sha256_file(path) != saved["sha256"]:
-                raise ValueError(f"Training-domain SIM array changed after preparation: {path}")
+                raise ValueError(f"Prepared SIM array changed after preparation: {path}")
             if saved.get("hits") != sum(expected[short].values()):
-                raise ValueError(f"Training-domain {short} SIM and condition counts differ")
+                raise ValueError(f"Prepared {short} SIM and condition counts differ")
             saved["path"] = str(path)
     return event, expected
 
@@ -200,29 +205,29 @@ def append_sim_hits(collections, event):
             del frame, reader
 
 
-def append_training_domain_sim_hits(collections, event, expected):
-    """Write the exact selected HDF source rows, with no additional hit cut."""
+def append_array_sim_hits(collections, event, expected):
+    """Write prepared empirical SIM rows, with no additional hit selection."""
     import edm4hep
 
     for short, (system, _) in COLLECTIONS.items():
         path = Path(event["sim_arrays"][short]["path"])
         rows = np.load(path, mmap_mode="r", allow_pickle=False)
         if rows.ndim != 2 or rows.shape[1] != 11 or rows.dtype.kind not in "fiu":
-            raise ValueError(f"Training-domain {short} SIM rows must have shape (N, 11)")
+            raise ValueError(f"Prepared {short} SIM rows must have shape (N, 11)")
         if not np.all(np.isfinite(rows)) or np.any(rows[:, 0] < 0):
-            raise ValueError(f"Training-domain {short} SIM rows contain invalid values")
+            raise ValueError(f"Prepared {short} SIM rows contain invalid values")
         labels = rows[:, 5:10]
         if not np.all(labels == np.rint(labels)):
-            raise ValueError(f"Training-domain {short} has noninteger sensor labels")
+            raise ValueError(f"Prepared {short} has noninteger sensor labels")
         labels = labels.astype(np.int64)
         if sensor_counts(labels) != expected[short]:
-            raise ValueError(f"Training-domain {short} occupancy differs from conditions")
+            raise ValueError(f"Prepared {short} occupancy differs from conditions")
         ids = rows[:, 10]
         if not np.all(ids == np.rint(ids)):
-            raise ValueError(f"Training-domain {short} has noninteger CellIDs")
+            raise ValueError(f"Prepared {short} has noninteger CellIDs")
         ids = ids.astype(np.uint64)
         if not np.array_equal(decode_cell_ids(ids, system), labels):
-            raise ValueError(f"Training-domain {short} CellIDs disagree with sensor labels")
+            raise ValueError(f"Prepared {short} CellIDs disagree with sensor labels")
         for row, cell_id in zip(rows, ids):
             hit = collections[short].create()
             hit.setEDep(float(row[0]))
@@ -291,8 +296,8 @@ def write_input(args):
     collections = {short: edm4hep.SimTrackerHitCollection() for short in COLLECTIONS}
     count_provenance = None
     if args.sample == "SIM":
-        if args.construction == "training_domain":
-            append_training_domain_sim_hits(collections, event, expected)
+        if args.construction in ARRAY_SIM_CONSTRUCTIONS:
+            append_array_sim_hits(collections, event, expected)
         else:
             append_sim_hits(collections, event)
         targets = expected  # SIM copies real hits, so occupancy must match exactly.
@@ -333,11 +338,13 @@ def write_input(args):
             "hits": {short: sum(counts.values()) for short, counts in targets.items()},
             "input_sha256": sha256_file(root_path),
         }
-        if args.construction == "training_domain":
+        if args.construction == "norm42_reservoir":
             report.update({
-                "source_domain": "COUNT model training-data source",
+                "source_domain": "COUNT model training-data hit reservoir",
                 "generator_training_holdout": False,
-                "source_event": event["source_event"],
+                "physical_event_boundaries": False,
+                "event_correlation_policy": "independent empirical draw conditional on sensor",
+                "template_event_id": event["template_event_id"],
             })
         else:
             report.update({
