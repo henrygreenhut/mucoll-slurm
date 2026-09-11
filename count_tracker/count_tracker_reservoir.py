@@ -10,11 +10,12 @@ boundaries.  This program constructs a controlled reconstruction closure:
 * both samples pass through the usual common digitization and reconstruction.
 
 ``--reuse-policy none`` uses every reservoir row at most once in the complete
-cohort and is intended for the small pilot. ``within-split`` deterministically
-partitions each sensor's reservoir among classifier splits, samples distinct
-rows within an event, and permits a row to recur only in different events of
-the same split.  A complete sensor-capacity audit runs before any output is
-published.  Neither mode restores physical inter-hit or mother-muon grouping.
+cohort. ``within-split`` deterministically partitions each sensor's reservoir
+among classifier splits and permits rows to recur only inside one split. It
+draws distinct rows within an event when possible and uses replacement when an
+event requests more hits than its split-local sensor pool contains. A complete
+sensor-capacity audit runs before any output is published. Neither mode
+restores physical inter-hit or mother-muon grouping.
 """
 
 import argparse
@@ -176,21 +177,23 @@ def available_by_sensor(keys):
     return {int(key): int(count) for key, count in zip(unique, counts)}
 
 
-def capacity_errors(available, requested, by_split, max_event, reuse_policy):
+def capacity_errors(available, requested, by_split, _max_event, reuse_policy):
     errors = []
     for key, total in requested.items():
         have = available.get(key, 0)
         if reuse_policy == "none" and total > have:
             errors.append((key, total, have, "cohort"))
         if reuse_policy == "within-split":
-            minimum = sum(max_event[split].get(key, 0) for split in SPLITS)
+            # Every split requesting this sensor needs a nonempty, disjoint
+            # pool. Reuse within that pool handles larger event demands.
+            minimum = sum(by_split[split].get(key, 0) > 0 for split in SPLITS)
             if minimum > have:
-                errors.append((key, minimum, have, "split-isolated event maxima"))
+                errors.append((key, minimum, have, "split-isolated nonempty pools"))
     return errors
 
 
 def allocate_split_pool_sizes(available, demand, minima):
-    """Allocate a disjoint sensor pool to splits, respecting one-event maxima."""
+    """Allocate a disjoint sensor pool to splits, respecting their minima."""
     sizes = {split: int(minima.get(split, 0)) for split in SPLITS}
     if sum(sizes.values()) > available:
         raise ValueError("Split-isolated sensor pools cannot satisfy one event")
@@ -264,32 +267,37 @@ def draw_indices(pool_keys, events, short, seed, reuse_policy):
                 for split in SPLITS
             }
             demand = {split: len(positions) for split, positions in positions_by_split.items()}
-            maxima = {}
-            for split, positions in positions_by_split.items():
-                counts_by_event = Counter(int(owners[p]) for p in positions)
-                maxima[split] = max(counts_by_event.values(), default=0)
-            sizes = allocate_split_pool_sizes(len(candidates), demand, maxima)
+            minima = {split: int(bool(len(positions)))
+                      for split, positions in positions_by_split.items()}
+            sizes = allocate_split_pool_sizes(len(candidates), demand, minima)
             shuffled = rng_for(seed, short, key_int, "split-pools").permutation(candidates)
             cursor = 0
             for split in SPLITS:
                 split_pool = shuffled[cursor:cursor + sizes[split]]
                 cursor += sizes[split]
                 used = set()
+                within_event_reused = 0
+                events_using_replacement = 0
                 positions = positions_by_split[split]
                 for event_index in sorted(set(int(owners[p]) for p in positions)):
                     event_positions = positions[owners[positions] == event_index]
+                    replace = len(event_positions) > len(split_pool)
                     chosen = rng_for(
                         seed, short, key_int, split, events[event_index]["event_id"]
-                    ).choice(split_pool, size=len(event_positions), replace=False)
+                    ).choice(split_pool, size=len(event_positions), replace=replace)
                     for position, row_index in zip(event_positions, chosen):
                         outputs[event_index][local_positions[position]] = row_index
                     used.update(map(int, chosen))
+                    within_event_reused += len(chosen) - len(np.unique(chosen))
+                    events_using_replacement += int(replace)
                 if len(positions):
                     split_records[split] = {
                         "available_pool": int(len(split_pool)),
                         "requested": int(len(positions)),
                         "unique_used": int(len(used)),
                         "reused": int(len(positions) - len(used)),
+                        "within_event_reused": int(within_event_reused),
+                        "events_using_replacement": int(events_using_replacement),
                         "unique_fraction": float(len(used) / len(positions)),
                     }
 
@@ -407,6 +415,11 @@ def prepare(args):
                 "cohort": template_manifest.get("sampling", {}).get("cohort", "unknown"),
                 "seed": args.seed,
                 "reuse_policy": args.reuse_policy,
+                "split_isolation": True,
+                "within_event_sampling": (
+                    "without replacement unless the split-local sensor pool is exhausted"
+                    if args.reuse_policy == "within-split" else "without replacement"
+                ),
             },
             "template": {
                 "construction": "norm42",

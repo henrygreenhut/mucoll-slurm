@@ -57,6 +57,18 @@ class ReservoirTests(unittest.TestCase):
         self.assertTrue(set(indices[0]).isdisjoint(indices[2]))
         self.assertTrue(set(indices[1]).isdisjoint(indices[2]))
         self.assertEqual(audit[0]["splits"]["train"]["reused"], 3)
+        self.assertEqual(audit[0]["splits"]["train"]["within_event_reused"], 0)
+
+    def test_within_split_uses_replacement_for_sparse_sensor(self):
+        pool_keys = reservoir.encode_sensor_keys(condition(3, 2))
+        events = [event("test_a", "test", condition(3, 5))]
+        indices, audit = reservoir.draw_indices(
+            pool_keys, events, "VBC", seed=12, reuse_policy="within-split")
+        self.assertEqual(len(indices[0]), 5)
+        self.assertTrue(set(indices[0]).issubset({0, 1}))
+        record = audit[0]["splits"]["test"]
+        self.assertEqual(record["events_using_replacement"], 1)
+        self.assertGreater(record["within_event_reused"], 0)
 
     def test_capacity_rules_distinguish_the_two_policies(self):
         requested = {7: 6}
@@ -69,9 +81,9 @@ class ReservoirTests(unittest.TestCase):
         self.assertEqual(len(reservoir.capacity_errors(
             {7: 4}, requested, by_split, maxima, "none")), 1)
         self.assertEqual(reservoir.capacity_errors(
-            {7: 4}, requested, by_split, maxima, "within-split"), [])
+            {7: 2}, requested, by_split, maxima, "within-split"), [])
         self.assertEqual(len(reservoir.capacity_errors(
-            {7: 3}, requested, by_split, maxima, "within-split")), 1)
+            {7: 1}, requested, by_split, maxima, "within-split")), 1)
 
     def test_split_pool_allocation_respects_event_minima(self):
         sizes = reservoir.allocate_split_pool_sizes(
