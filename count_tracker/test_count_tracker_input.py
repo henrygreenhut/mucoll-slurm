@@ -81,12 +81,23 @@ class AssignedHitTests(unittest.TestCase):
 
 
 class SimCopyTests(unittest.TestCase):
-    def test_all_source_hits_are_copied_without_time_selection(self):
+    def test_only_in_time_hits_are_copied_with_flight_correction(self):
+        class Position:
+            def __init__(self, x, y, z):
+                self.x, self.y, self.z = x, y, z
+
         class Hit:
-            def __init__(self, time):
+            def __init__(self, time, pos=(0.0, 0.0, 0.0)):
                 self.time = time
+                self.pos = Position(*pos)
                 self.overlay = False
                 self.relations = True
+
+            def getTime(self):
+                return self.time
+
+            def getPosition(self):
+                return self.pos
 
             def clone(self, relations):
                 result = copy.copy(self)
@@ -100,7 +111,11 @@ class SimCopyTests(unittest.TestCase):
             def push_back(self, value):
                 self.append(value)
 
-        hits = {name: [Hit(-10), Hit(0), Hit(20)] for _, name in writer.COLLECTIONS.values()}
+        # kept: t=0 @ origin (tof 0); t=8 @ 1.5 m (tof ~3.0 after flight correction).
+        # dropped: t=-10 (tof -10), t=20 @ origin (tof 20), t=1e12 (out-of-time tail).
+        template = [Hit(0.0), Hit(-10.0), Hit(8.0, (1500.0, 0.0, 0.0)), Hit(20.0), Hit(1e12)]
+        hits = {name: [copy.copy(h) for h in template]
+                for _, name in writer.COLLECTIONS.values()}
 
         class Frame:
             def get(self, name):
@@ -114,9 +129,9 @@ class SimCopyTests(unittest.TestCase):
         with patch.object(writer, "read_frame", return_value=(object(), Frame())):
             writer.append_sim_hits(output, event)
         for short, (_, name) in writer.COLLECTIONS.items():
-            self.assertEqual([hit.time for hit in output[short]], [-10, 0, 20] * 2)
+            # Two polarity sources, each contributing the two in-time hits.
+            self.assertEqual([hit.time for hit in output[short]], [0.0, 8.0] * 2)
             self.assertTrue(all(hit.overlay and not hit.relations for hit in output[short]))
-            self.assertTrue(all(not hit.overlay and hit.relations for hit in hits[name]))
 
 
 if __name__ == "__main__":

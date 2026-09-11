@@ -15,8 +15,8 @@ import tempfile
 import numpy as np
 
 from count_tracker_conditions import (
-    CELL_ID_ENCODING, COLLECTIONS, CONSTRUCTIONS, POLARITIES, decode_cell_ids, sensor_counts,
-    validate_manifest,
+    CELL_ID_ENCODING, COLLECTIONS, CONSTRUCTIONS, IN_TIME_WINDOW_NS, POLARITIES,
+    decode_cell_ids, flight_corrected_time, sensor_counts, validate_manifest,
 )
 
 
@@ -126,17 +126,29 @@ def hit_counts(collection, system):
     return sensor_counts(decode_cell_ids(ids, system))
 
 
-def append_sim_hits(collections, event):
-    """Copy every BIB tracker hit, retaining scalar fields and removing links.
+def hit_in_time(hit, window=IN_TIME_WINDOW_NS):
+    """Flight-corrected in-time test for one podio SimTrackerHit."""
+    position = hit.getPosition()
+    tof = flight_corrected_time(hit.getTime(), position.x, position.y, position.z)
+    return window[0] <= tof <= window[1]
 
-    BIB MCParticles are not merged, consistent with the existing study.
-    clone(False) avoids dangling particle relations into separate source files.
+
+def append_sim_hits(collections, event):
+    """Copy the in-time BIB hits, retaining scalar fields and removing links.
+
+    Only hits inside the flight-corrected window are copied -- the same window
+    count_tracker_conditions counts and the domain COUNT was trained on -- so SIM
+    and COUNT enter the digitizer on one footing. Out-of-time hits are dropped by
+    the digitizer regardless, so SIM's reconstructed tracks are unchanged. BIB
+    MCParticles are not merged; clone(False) drops relations into source files.
     """
     for polarity in POLARITIES:
         for source in event["sources"][polarity]:
             reader, frame = read_frame(source["path"], source["entry"])
             for short, (_, name) in COLLECTIONS.items():
                 for hit in frame.get(name):
+                    if not hit_in_time(hit):
+                        continue
                     copied = hit.clone(False)
                     copied.setOverlay(True)
                     collections[short].push_back(copied)

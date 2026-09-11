@@ -86,6 +86,18 @@ class ConditionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "outside"):
             conditions.decode_cell_ids(np.array([1 << 32], dtype=np.uint64), 1)
 
+    def test_in_time_window_uses_flight_correction(self):
+        # t=0 @ origin -> tof 0 (in); t=8 @ 1.5 m -> tof ~3.0 (in after correction);
+        # t=20 @ origin -> tof 20 (out); huge time -> out (out-of-time tail).
+        mask = conditions.in_time_mask(
+            np.array([0.0, 8.0, 20.0, 1e6]),
+            np.array([0.0, 1500.0, 0.0, 0.0]), np.zeros(4), np.zeros(4))
+        np.testing.assert_array_equal(mask, [True, True, False, False])
+        # Bounds are inclusive at exactly -0.5 and 15.0 ns.
+        edge = conditions.in_time_mask(
+            np.array([-0.5, 15.0, -0.51, 15.01]), np.zeros(4), np.zeros(4), np.zeros(4))
+        np.testing.assert_array_equal(edge, [True, True, False, False])
+
     def test_equal_totals_do_not_hide_sensor_reassignment(self):
         expected = np.array([[1, 0, 0, 0, 0], [1, 0, 0, 1, 0]], dtype=np.int64)
         conditions.require_matching_counts(expected, expected[::-1])

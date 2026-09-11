@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Prepare COUNT sensor conditions from explicit, uncut SIM source lists.
+"""Prepare COUNT sensor conditions from explicit SIM source lists.
 
-This step reads CellIDs only. It does not select sources, filter hits, generate
-hits, reconstruct events, or submit jobs. See COUNT_TRACKER_STUDY.md for the
-manifest format and the still-open production choices.
+This step counts per-sensor occupancy of the in-time BIB hits. It applies the
+flight-corrected time window the COUNT generative model was trained on
+(-0.5 <= t - |r|/c <= 15 ns) so the conditioning target matches the hits the
+model can actually represent; it applies no energy or spatial selection. It does
+not select sources, generate hits, reconstruct events, or submit jobs. See
+COUNT_TRACKER_STUDY.md for the manifest format and the still-open choices.
 """
 
 import argparse
@@ -31,6 +34,26 @@ CONSTRUCTIONS = {
     "norm1": {"n_files_per_polarity": 420, "file_normalization": 1},
     "norm42": {"n_files_per_polarity": 10, "file_normalization": 42},
 }
+
+# Flight-corrected in-time window matching the COUNT training set (t - |r|/c),
+# confirmed by clipping every training collection to exactly these bounds.
+# Shared with count_tracker_input's SIM copy so both classes use one footing.
+SPEED_OF_LIGHT_MM_NS = 299.792458
+IN_TIME_WINDOW_NS = (-0.5, 15.0)
+
+
+def flight_corrected_time(time, x, y, z):
+    """Subtract the c-speed time of flight from the origin to the hit."""
+    return time - np.sqrt(x * x + y * y + z * z) / SPEED_OF_LIGHT_MM_NS
+
+
+def in_time_mask(time, x, y, z, window=IN_TIME_WINDOW_NS):
+    """Boolean mask for hits inside the flight-corrected in-time window."""
+    tof = flight_corrected_time(
+        np.asarray(time, dtype=np.float64), np.asarray(x, dtype=np.float64),
+        np.asarray(y, dtype=np.float64), np.asarray(z, dtype=np.float64),
+    )
+    return (tof >= window[0]) & (tof <= window[1])
 
 
 def decode_cell_ids(cell_ids, system):
@@ -138,7 +161,12 @@ def validate_manifest(manifest, base):
 
 
 def read_source_counts(path, entry):
-    """Read all six CellID branches, with no time or energy selection."""
+    """Count per-sensor occupancy of the in-time BIB hits in one entry.
+
+    Reads CellID, time, and position; keeps only hits inside the flight-corrected
+    window (matching the COUNT training set) before counting. No energy or spatial
+    selection is applied.
+    """
     import uproot
 
     result = {}
@@ -149,11 +177,15 @@ def read_source_counts(path, entry):
         if entry >= events.num_entries:
             raise ValueError(f"Entry {entry} does not exist in {path}")
         for short, (system, name) in COLLECTIONS.items():
-            values = events[name][f"{name}.cellID"].array(
-                entry_start=entry, entry_stop=entry + 1, library="ak"
-            )[0]
-            ids = np.asarray(values)
-            result[short] = sensor_counts(decode_cell_ids(ids, system))
+            def branch(field):
+                return np.asarray(events[name][f"{name}.{field}"].array(
+                    entry_start=entry, entry_stop=entry + 1, library="ak")[0])
+            ids = branch("cellID")
+            if len(ids):
+                keep = in_time_mask(branch("time"), branch("position.x"),
+                                    branch("position.y"), branch("position.z"))
+                ids = ids[keep]
+            result[short] = sensor_counts(decode_cell_ids(np.asarray(ids), system))
     return result
 
 
@@ -193,7 +225,11 @@ def prepare(manifest_path, output):
             print(f"Prepared {event['split']}/{event['event_id']}", flush=True)
         report = {
             "manifest": manifest, "input_manifest_sha256": hashlib.sha256(raw).hexdigest(),
-            "selection": "all stored SIM tracker hits; no additional cuts",
+            "selection": (f"flight-corrected in-time BIB: {IN_TIME_WINDOW_NS[0]} <= "
+                          f"t - |r|/c <= {IN_TIME_WINDOW_NS[1]} ns "
+                          f"(c={SPEED_OF_LIGHT_MM_NS} mm/ns); no energy or spatial cut"),
+            "time_window_ns": list(IN_TIME_WINDOW_NS),
+            "speed_of_light_mm_ns": SPEED_OF_LIGHT_MM_NS,
             "condition_columns": ["system", "side", "layer", "module", "sensor"],
             "events": summaries,
         }
