@@ -133,6 +133,40 @@ class SimCopyTests(unittest.TestCase):
             self.assertEqual([hit.time for hit in output[short]], [0.0, 8.0] * 2)
             self.assertTrue(all(hit.overlay and not hit.relations for hit in output[short]))
 
+    def test_all_stored_hits_are_copied_without_time_selection(self):
+        class Position:
+            x = y = z = 0.0
+
+        class Hit:
+            def __init__(self, time):
+                self.time = time
+            def getTime(self): return self.time
+            def getPosition(self): return Position()
+            def clone(self, relations): return copy.copy(self)
+            def setOverlay(self, value): self.overlay = value
+
+        class Collection(list):
+            def push_back(self, value): self.append(value)
+
+        template = [Hit(-10.0), Hit(0.0), Hit(20.0), Hit(1e12)]
+        hits = {name: [copy.copy(h) for h in template]
+                for _, name in writer.COLLECTIONS.values()}
+
+        class Frame:
+            def get(self, name): return hits[name]
+
+        event = {
+            "_hit_selection": "all-stored",
+            "sources": {polarity: [{"path": f"{polarity}.root", "entry": 0}]
+                        for polarity in writer.POLARITIES},
+        }
+        output = {short: Collection() for short in writer.COLLECTIONS}
+        with patch.object(writer, "read_frame", return_value=(object(), Frame())):
+            writer.append_sim_hits(output, event)
+        for short in writer.COLLECTIONS:
+            self.assertEqual([hit.time for hit in output[short]], [-10.0, 0.0, 20.0, 1e12] * 2)
+            self.assertTrue(all(hit.overlay for hit in output[short]))
+
 
 if __name__ == "__main__":
     unittest.main()

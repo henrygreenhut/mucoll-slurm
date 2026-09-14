@@ -15,7 +15,8 @@ import tempfile
 import numpy as np
 
 from count_tracker_conditions import (
-    CELL_ID_ENCODING, COLLECTIONS, CONSTRUCTIONS, IN_TIME_WINDOW_NS, POLARITIES,
+    CELL_ID_ENCODING, COLLECTIONS, CONSTRUCTIONS, HIT_SELECTIONS,
+    IN_TIME_WINDOW_NS, POLARITIES,
     decode_cell_ids, flight_corrected_time, sensor_counts, validate_manifest,
 )
 
@@ -122,6 +123,9 @@ def load_event(directory, split, event_id, construction):
             raise ValueError("Reservoir template events must be unique across splits")
     else:
         manifest = validate_manifest(manifest, directory)
+        hit_selection = report.get("hit_selection", "flight-corrected")
+        if hit_selection not in HIT_SELECTIONS:
+            raise ValueError("Conditions manifest has an unknown hit selection")
     if manifest["construction"] != construction:
         raise ValueError("Conditions belong to a different SIM construction")
     matches = [event for event in manifest["events"]
@@ -140,7 +144,9 @@ def load_event(directory, split, event_id, construction):
         expected[short] = sensor_counts(rows)
         if np.any(rows[:, 0] != system) or len(rows) != saved["hits"]:
             raise ValueError(f"Invalid conditions or recorded hit count: {path}")
-    event = matches[0]
+    event = dict(matches[0])
+    if construction not in ARRAY_SIM_CONSTRUCTIONS:
+        event["_hit_selection"] = hit_selection
     if construction in ARRAY_SIM_CONSTRUCTIONS:
         arrays = event.get("sim_arrays")
         if not isinstance(arrays, dict) or set(arrays) != set(COLLECTIONS):
@@ -184,20 +190,16 @@ def hit_in_time(hit, window=IN_TIME_WINDOW_NS):
 
 
 def append_sim_hits(collections, event):
-    """Copy the in-time BIB hits, retaining scalar fields and removing links.
-
-    Only hits inside the flight-corrected window are copied -- the same window
-    count_tracker_conditions counts and the domain COUNT was trained on -- so SIM
-    and COUNT enter the digitizer on one footing. Out-of-time hits are dropped by
-    the digitizer regardless, so SIM's reconstructed tracks are unchanged. BIB
-    MCParticles are not merged; clone(False) drops relations into source files.
-    """
+    """Copy the manifest-selected BIB hits while removing source relations."""
+    hit_selection = event.get("_hit_selection", "flight-corrected")
+    if hit_selection not in HIT_SELECTIONS:
+        raise ValueError(f"Unknown hit selection: {hit_selection}")
     for polarity in POLARITIES:
         for source in event["sources"][polarity]:
             reader, frame = read_frame(source["path"], source["entry"])
             for short, (_, name) in COLLECTIONS.items():
                 for hit in frame.get(name):
-                    if not hit_in_time(hit):
+                    if hit_selection == "flight-corrected" and not hit_in_time(hit):
                         continue
                     copied = hit.clone(False)
                     copied.setOverlay(True)
@@ -328,13 +330,16 @@ def write_input(args):
             if hit_counts(check.get(name), system) != targets[short]:
                 raise ValueError(f"Serialized {short} occupancy changed")
         del check, check_reader
+        recorded_event = {key: value for key, value in event.items()
+                          if not key.startswith("_")}
         report = {
-            "sample": args.sample, "event": event,
+            "sample": args.sample, "event": recorded_event,
             "construction": args.construction,
             "signal": {"path": str(Path(args.signal).resolve()), "entry": args.signal_entry},
             "conditions_manifest_sha256": sha256_file(Path(args.conditions) / "manifest.json"),
             "count_arrays": count_provenance,
             "overlay_time_selection": False,
+            "bib_input_selection": event.get("_hit_selection", "prepared-array"),
             "hits": {short: sum(counts.values()) for short, counts in targets.items()},
             "input_sha256": sha256_file(root_path),
         }

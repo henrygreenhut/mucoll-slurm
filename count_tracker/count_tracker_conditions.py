@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """Prepare COUNT sensor conditions from explicit SIM source lists.
 
-This step counts per-sensor occupancy of the in-time BIB hits. It applies the
-flight-corrected time window the COUNT generative model was trained on
-(-0.5 <= t - |r|/c <= 15 ns) so the conditioning target matches the hits the
-model can actually represent; it applies no energy or spatial selection. It does
-not select sources, generate hits, reconstruct events, or submit jobs. See
-COUNT_TRACKER_STUDY.md for the manifest format and the still-open choices.
+This step counts per-sensor occupancy in explicit BIB sources. The requested hit
+selection is recorded with the resulting conditions and is later enforced when
+the direct SIM input is written. It does not select sources, generate hits,
+reconstruct events, or submit jobs.
 """
 
 import argparse
@@ -35,11 +33,12 @@ CONSTRUCTIONS = {
     "norm42": {"n_files_per_polarity": 10, "file_normalization": 42},
 }
 
-# Flight-corrected in-time window matching the COUNT training set (t - |r|/c),
-# confirmed by clipping every training collection to exactly these bounds.
-# Shared with count_tracker_input's SIM copy so both classes use one footing.
+# Inferred from the observed support of the COUNT training arrays and retained
+# only to reproduce the earlier direct cohorts. Producer provenance did not
+# establish this as a preprocessing timing cut.
 SPEED_OF_LIGHT_MM_NS = 299.792458
 IN_TIME_WINDOW_NS = (-0.5, 15.0)
+HIT_SELECTIONS = ("flight-corrected", "all-stored")
 
 
 def flight_corrected_time(time, x, y, z):
@@ -160,13 +159,10 @@ def validate_manifest(manifest, base):
     return manifest
 
 
-def read_source_counts(path, entry):
-    """Count per-sensor occupancy of the in-time BIB hits in one entry.
-
-    Reads CellID, time, and position; keeps only hits inside the flight-corrected
-    window (matching the COUNT training set) before counting. No energy or spatial
-    selection is applied.
-    """
+def read_source_counts(path, entry, hit_selection="flight-corrected"):
+    """Count per-sensor occupancy of selected BIB hits in one entry."""
+    if hit_selection not in HIT_SELECTIONS:
+        raise ValueError(f"Unknown hit selection: {hit_selection}")
     import uproot
 
     result = {}
@@ -181,7 +177,7 @@ def read_source_counts(path, entry):
                 return np.asarray(events[name][f"{name}.{field}"].array(
                     entry_start=entry, entry_stop=entry + 1, library="ak")[0])
             ids = branch("cellID")
-            if len(ids):
+            if len(ids) and hit_selection == "flight-corrected":
                 keep = in_time_mask(branch("time"), branch("position.x"),
                                     branch("position.y"), branch("position.z"))
                 ids = ids[keep]
@@ -189,7 +185,9 @@ def read_source_counts(path, entry):
     return result
 
 
-def prepare(manifest_path, output):
+def prepare(manifest_path, output, hit_selection="flight-corrected"):
+    if hit_selection not in HIT_SELECTIONS:
+        raise ValueError(f"Unknown hit selection: {hit_selection}")
     manifest_path = Path(manifest_path).resolve()
     raw = manifest_path.read_bytes()
     manifest = validate_manifest(json.loads(raw), manifest_path.parent)
@@ -205,7 +203,8 @@ def prepare(manifest_path, output):
             totals = {short: Counter() for short in COLLECTIONS}
             for polarity in POLARITIES:
                 for source in event["sources"][polarity]:
-                    counts = read_source_counts(source["path"], source["entry"])
+                    counts = read_source_counts(
+                        source["path"], source["entry"], hit_selection)
                     for short in COLLECTIONS:
                         totals[short].update(counts[short])
             destination = work / event["split"] / event["event_id"]
@@ -223,16 +222,26 @@ def prepare(manifest_path, output):
                 }
             summaries.append(summary)
             print(f"Prepared {event['split']}/{event['event_id']}", flush=True)
+        if hit_selection == "flight-corrected":
+            selection_description = (
+                f"flight-corrected in-time BIB: {IN_TIME_WINDOW_NS[0]} <= "
+                f"t - |r|/c <= {IN_TIME_WINDOW_NS[1]} ns "
+                f"(c={SPEED_OF_LIGHT_MM_NS} mm/ns); no energy or spatial cut")
+        else:
+            selection_description = (
+                "all stored SIM tracker hits; no time, energy, or spatial cut")
         report = {
             "manifest": manifest, "input_manifest_sha256": hashlib.sha256(raw).hexdigest(),
-            "selection": (f"flight-corrected in-time BIB: {IN_TIME_WINDOW_NS[0]} <= "
-                          f"t - |r|/c <= {IN_TIME_WINDOW_NS[1]} ns "
-                          f"(c={SPEED_OF_LIGHT_MM_NS} mm/ns); no energy or spatial cut"),
-            "time_window_ns": list(IN_TIME_WINDOW_NS),
-            "speed_of_light_mm_ns": SPEED_OF_LIGHT_MM_NS,
+            "hit_selection": hit_selection,
+            "selection": selection_description,
             "condition_columns": ["system", "side", "layer", "module", "sensor"],
             "events": summaries,
         }
+        if hit_selection == "flight-corrected":
+            report.update({
+                "time_window_ns": list(IN_TIME_WINDOW_NS),
+                "speed_of_light_mm_ns": SPEED_OF_LIGHT_MM_NS,
+            })
         (work / "manifest.json").write_text(json.dumps(report, indent=2) + "\n")
         if output.exists():
             raise FileExistsError(f"Output appeared during preparation: {output}")
@@ -243,8 +252,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--output", required=True)
+    parser.add_argument(
+        "--hit-selection", choices=HIT_SELECTIONS, default="flight-corrected",
+        help="BIB hits used for per-sensor counts (default: %(default)s)")
     args = parser.parse_args()
-    prepare(args.manifest, args.output)
+    prepare(args.manifest, args.output, args.hit_selection)
 
 
 if __name__ == "__main__":

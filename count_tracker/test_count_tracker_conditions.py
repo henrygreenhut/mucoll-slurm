@@ -65,9 +65,14 @@ class ConditionTests(unittest.TestCase):
             source.write_text(json.dumps(data))
             output = Path(directory) / "conditions"
             with patch.object(conditions, "read_source_counts", return_value=counts) as read:
-                conditions.prepare(source, output)
+                conditions.prepare(source, output, "all-stored")
             self.assertEqual(read.call_count, 20)
+            self.assertTrue(all(call.args[2] == "all-stored" for call in read.call_args_list))
+            report = json.loads((output / "manifest.json").read_text())
+            self.assertEqual(report["hit_selection"], "all-stored")
+            self.assertNotIn("time_window_ns", report)
             event, expected = load_event(output, "train", "norm42_SIM_A_000000", "norm42")
+            self.assertEqual(event["_hit_selection"], "all-stored")
             # norm42 file contents already include their normalization: do not
             # multiply their actual hit counts by 42 a second time.
             self.assertEqual(expected["VBC"], Counter({(1, 0, 0, 0, 0): 140}))
@@ -139,7 +144,8 @@ class ConditionTests(unittest.TestCase):
                 source["entry"] = 1
         data["events"].append(second)
 
-        def read(path, entry):
+        def read(path, entry, hit_selection):
+            self.assertEqual(hit_selection, "flight-corrected")
             result = {short: Counter() for short in conditions.COLLECTIONS}
             if Path(path).stem == "0":
                 sensor = 0 if Path(path).parent.name == "MUPLUS" else 1
