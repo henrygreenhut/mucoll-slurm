@@ -133,6 +133,39 @@ class SeedTests(unittest.TestCase):
         self.assertTrue(0 <= a <= 0x7FFFFFFF)
 
 
+class ModelResolutionTests(unittest.TestCase):
+    @staticmethod
+    def _complete_model(root, name):
+        model = root / name
+        (model / "dataset").mkdir(parents=True)
+        for relative in ("model.pt", "run_config.json", "y_lookup.npy",
+                         "dataset/info.json"):
+            (model / relative).touch()
+        return model
+
+    def test_architecture_tokens_do_not_control_model_discovery(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            expected = self._complete_model(
+                root, "VBC_TABDDPM_mother_muon_local_phi_dim1024_b4096")
+            self.assertEqual(cts.resolve_model_dir(root, "VBC"), expected.resolve())
+
+    def test_incomplete_sibling_is_ignored(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            expected = self._complete_model(root, "VBC_TABDDPM_complete")
+            (root / "VBC_TABDDPM_truncated").mkdir()
+            self.assertEqual(cts.resolve_model_dir(root, "VBC"), expected.resolve())
+
+    def test_multiple_complete_models_are_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._complete_model(root, "VBC_TABDDPM_a")
+            self._complete_model(root, "VBC_TABDDPM_b")
+            with self.assertRaisesRegex(ValueError, "Multiple complete VBC models"):
+                cts.resolve_model_dir(root, "VBC")
+
+
 class DriverTests(unittest.TestCase):
     def _make_conditions_dir(self, root, shorts, event_ids):
         report = {"manifest": {"schema_version": 2, "construction": "norm1",

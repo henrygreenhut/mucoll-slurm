@@ -306,18 +306,29 @@ def run_rejection_loop(sampler, conditions, seed, *, oversample=1,
 # --- Driver ------------------------------------------------------------------
 
 def resolve_model_dir(model_root, short):
-    """Pick the canonical <SHORT>_TABDDPM_*_dim2048_b4096 model directory.
+    """Return the one complete TabDDPM checkpoint for a collection.
 
-    A stray truncated sibling (e.g. VBC_..._x4096x40) is filtered out by
-    requiring a real directory that contains model.pt and y_lookup.npy.
+    Architecture and training choices belong to ``run_config.json`` and are
+    read by :class:`CollectionSampler`; directory-name architecture tokens are
+    not part of this interface.  Refuse an ambiguous model root rather than
+    silently selecting one checkpoint from several scientific alternatives.
     """
     model_root = Path(model_root).expanduser().resolve()
-    for candidate in sorted(model_root.glob(f"{short}_TABDDPM_*_dim2048_b4096")):
-        if candidate.is_dir() and (candidate / "model.pt").is_file() and (
-            candidate / "y_lookup.npy"
-        ).is_file():
-            return candidate
-    raise FileNotFoundError(f"No usable {short} model under {model_root}")
+    required = ("model.pt", "run_config.json", "y_lookup.npy", "dataset/info.json")
+    candidates = [
+        candidate for candidate in sorted(model_root.glob(f"{short}_TABDDPM_*"))
+        if candidate.is_dir()
+        and all((candidate / relative).is_file() for relative in required)
+    ]
+    if not candidates:
+        raise FileNotFoundError(f"No complete {short} model under {model_root}")
+    if len(candidates) > 1:
+        names = ", ".join(candidate.name for candidate in candidates)
+        raise ValueError(
+            f"Multiple complete {short} models under {model_root}: {names}. "
+            "Use a model root containing one checkpoint per collection."
+        )
+    return candidates[0]
 
 
 def event_seed(seed_base, construction, cohort, event_id, short):

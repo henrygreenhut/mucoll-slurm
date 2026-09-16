@@ -7,6 +7,7 @@
 #    mkdir -p "$OUTC/logs"
 #    CONDITIONS=$OUTC/norm42/conditions SPLIT=test MODEL_ROOT=$MODELS \
 #    OUTPUT=$OUTC/norm42/count_samples CT_DIR=$CT SEED_BASE=12345 \
+#    EVENT_ID=norm42_cmp_000000 PAPER1_ROOT=/path/to/paper1-inference \
 #      sbatch --array=0-5 -o "$OUTC/logs/sample_%A_%a.out" -e "$OUTC/logs/sample_%A_%a.err" \
 #      $CT/submit_count_tracker_sample.slurm
 #
@@ -31,6 +32,9 @@ CT_DIR="${CT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 SEED_BASE="${SEED_BASE:-12345}"
 CONDA_MODULE="${CONDA_MODULE:-miniforge3/25.3.0-3-a6hh}"
 GENBIB_ENV="${GENBIB_ENV:-genbib}"
+PAPER1_ROOT="${PAPER1_ROOT:-$MODEL_ROOT/paper1-inference}"
+EVENT_ARGS=()
+[ -n "${EVENT_ID:-}" ] && EVENT_ARGS=(--event-id "$EVENT_ID")
 
 # Shards come from the array size (override with NUM_SHARDS if your Slurm does
 # not export SLURM_ARRAY_TASK_COUNT); a non-array run is a single shard.
@@ -51,6 +55,8 @@ python -c "import torch; print('cuda', torch.cuda.is_available(),
 
 python count_tracker_sample.py \
     --conditions "$CONDITIONS" --split "$SPLIT" --model-root "$MODEL_ROOT" \
+    --paper1-root "$PAPER1_ROOT" \
+    "${EVENT_ARGS[@]}" \
     --seed-base "$SEED_BASE" \
     --num-shards "$NUM_SHARDS" --shard-index "$SHARD_INDEX" \
     --output "$OUTPUT"
