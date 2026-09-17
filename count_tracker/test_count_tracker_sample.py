@@ -111,6 +111,22 @@ class RejectionLoopTests(unittest.TestCase):
                                        max_rejection_rounds=1, work_dir=work)
         self.assertTrue(hasattr(ctx.exception, "unfilled_conditions"))
 
+    def test_drop_policy_returns_accepted_hits_and_unfilled_report(self):
+        short = "VBC"
+        sensors = [(0, 1, 5, 0), (0, 1, 6, 0)]
+        conditions = self._conditions(short, sensors)
+        sampler = make_sampler(short, y_lookup=np.array(sensors, dtype=np.int64),
+                               reject_rows=(1,))
+        with tempfile.TemporaryDirectory() as work:
+            out, report = cts.run_rejection_loop(
+                sampler, conditions, seed=0, max_rejection_rounds=1,
+                unfilled_policy="drop", return_report=True, work_dir=work)
+        self.assertEqual(len(out), 1)
+        self.assertEqual(report["requested_hits"], 2)
+        self.assertEqual(report["generated_hits"], 1)
+        self.assertEqual(report["unfilled_hits"], 1)
+        np.testing.assert_array_equal(report["unfilled_conditions"], conditions[[1]])
+
     def test_sampler_sample_method_delegates_to_loop(self):
         short = "VBC"
         sensors = [(0, 1, 5, 0), (0, 1, 6, 0)]
@@ -195,7 +211,11 @@ class DriverTests(unittest.TestCase):
             def fake_loop(sampler, conditions, seed, **kwargs):
                 labels = np.asarray(conditions)[:, 1:]
                 head = np.zeros((len(conditions), 5), dtype=np.float32)
-                return np.column_stack([head, labels]).astype(np.float32)
+                rows = np.column_stack([head, labels]).astype(np.float32)
+                report = {"requested_hits": len(rows), "generated_hits": len(rows),
+                          "unfilled_hits": 0, "rejection_rounds": 1,
+                          "unfilled_conditions": np.empty((0, 5), dtype=np.int64)}
+                return rows, report
 
             saved = (cts.load_paper1, cts.resolve_device, cts.resolve_model_dir,
                      cts.CollectionSampler, cts.run_rejection_loop)
@@ -210,6 +230,7 @@ class DriverTests(unittest.TestCase):
                     conditions=str(cond_dir), split="test", event_id=None,
                     model_root=str(tmp / "models"), paper1_root=None,
                     collections=shorts, seed_base=0, max_rounds=10,
+                    unfilled_policy="error",
                     device="cpu", num_shards=1, shard_index=0, output=str(out_dir))
                 cts.sample_events(args)
             finally:
@@ -226,13 +247,24 @@ class DriverTests(unittest.TestCase):
             self.assertEqual(len(manifest["events"]), 2)
             self.assertEqual(set(manifest["events"][0]["collections"]), set(shorts))
 
-    def _run_driver(self, cond_dir, out_dir, tmp, shorts, on_sample=None, **overrides):
+    def _run_driver(self, cond_dir, out_dir, tmp, shorts, on_sample=None,
+                    drop_last=False, **overrides):
         def fake_loop(sampler, conditions, seed, **kwargs):
             if on_sample:
                 on_sample(kwargs.get("label", ""))
             labels = np.asarray(conditions)[:, 1:]
+            unfilled = (np.asarray(conditions)[-1:].copy() if drop_last
+                        else np.empty((0, 5), dtype=np.int64))
+            if drop_last:
+                labels = labels[:-1]
             head = np.zeros((len(conditions), 5), dtype=np.float32)
-            return np.column_stack([head, labels]).astype(np.float32)
+            if drop_last:
+                head = head[:-1]
+            rows = np.column_stack([head, labels]).astype(np.float32)
+            report = {"requested_hits": len(conditions), "generated_hits": len(rows),
+                      "unfilled_hits": len(unfilled), "rejection_rounds": 1,
+                      "unfilled_conditions": unfilled}
+            return rows, report
 
         saved = (cts.load_paper1, cts.resolve_device, cts.resolve_model_dir,
                  cts.CollectionSampler, cts.run_rejection_loop)
@@ -247,6 +279,7 @@ class DriverTests(unittest.TestCase):
                 conditions=str(cond_dir), split="test", event_id=None,
                 model_root=str(tmp / "models"), paper1_root=None, collections=shorts,
                 seed_base=0, max_rounds=10, device="cpu", num_shards=1, shard_index=0,
+                unfilled_policy="error",
                 output=str(out_dir))
             for key, value in overrides.items():
                 setattr(args, key, value)
@@ -285,6 +318,24 @@ class DriverTests(unittest.TestCase):
             for event_id in event_ids:
                 self.assertTrue((out_dir / "test" / event_id
                                  / "tabddpm_VBC_samples.npy").is_file(), event_id)
+
+    def test_driver_records_dropped_unfilled_conditions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            cond_dir = tmp / "conditions"
+            self._make_conditions_dir(cond_dir, ["VBC"], ["event_0"])
+            out_dir = tmp / "count_samples"
+            self._run_driver(cond_dir, out_dir, tmp, ["VBC"], drop_last=True,
+                             unfilled_policy="drop")
+            event_dir = out_dir / "test" / "event_0"
+            self.assertEqual(len(np.load(event_dir / "tabddpm_VBC_samples.npy")), 1)
+            self.assertEqual(
+                len(np.load(event_dir / "tabddpm_VBC_unfilled_conditions.npy")), 1)
+            manifest = json.loads((out_dir / "manifest.json").read_text())
+            record = manifest["events"][0]["collections"]["VBC"]
+            self.assertEqual(record["requested_hits"], 2)
+            self.assertEqual(record["generated_hits"], 1)
+            self.assertEqual(record["unfilled_hits"], 1)
 
 
 if __name__ == "__main__":

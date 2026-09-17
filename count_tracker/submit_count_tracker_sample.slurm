@@ -33,6 +33,8 @@ SEED_BASE="${SEED_BASE:-12345}"
 CONDA_MODULE="${CONDA_MODULE:-miniforge3/25.3.0-3-a6hh}"
 GENBIB_ENV="${GENBIB_ENV:-genbib}"
 PAPER1_ROOT="${PAPER1_ROOT:-$MODEL_ROOT/paper1-inference}"
+MAX_ROUNDS="${MAX_ROUNDS:-10000}"
+UNFILLED_POLICY="${UNFILLED_POLICY:-error}"
 EVENT_ARGS=()
 [ -n "${EVENT_ID:-}" ] && EVENT_ARGS=(--event-id "$EVENT_ID")
 
@@ -58,5 +60,6 @@ python count_tracker_sample.py \
     --paper1-root "$PAPER1_ROOT" \
     "${EVENT_ARGS[@]}" \
     --seed-base "$SEED_BASE" \
+    --max-rounds "$MAX_ROUNDS" --unfilled-policy "$UNFILLED_POLICY" \
     --num-shards "$NUM_SHARDS" --shard-index "$SHARD_INDEX" \
     --output "$OUTPUT"

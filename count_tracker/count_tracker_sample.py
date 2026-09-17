@@ -212,7 +212,8 @@ class CollectionSampler:
 
 
 def run_rejection_loop(sampler, conditions, seed, *, oversample=1,
-                       max_rejection_rounds=10000, work_dir=None, label=""):
+                       max_rejection_rounds=10000, unfilled_policy="error",
+                       return_report=False, work_dir=None, label=""):
     """Fill every requested condition via the TabDDPM rejection sampler.
 
     Mirrors GenBIB main()'s loop exactly around the paper1 callables. Returns an
@@ -222,13 +223,19 @@ def run_rejection_loop(sampler, conditions, seed, *, oversample=1,
     tabddpm_sample, inverse_geometry_transform, _build_xy_z_lookup, \
         snap_z_to_detector_xy, apply_material_map_hybrid = sampler.paper1
 
+    if unfilled_policy not in ("error", "drop"):
+        raise ValueError("unfilled_policy must be error or drop")
     conditions = np.asarray(conditions, dtype=np.int64)
     if conditions.ndim != 2 or conditions.shape[1] != 5:
         raise ValueError("conditions must have shape (N, 5)")
     if len(conditions) and np.any(conditions[:, 0] != sampler.system_id):
         raise ValueError(f"conditions belong to system != {sampler.system_id}")
     if len(conditions) == 0:
-        return np.empty((0, sampler.num_features + 4), dtype=np.float32)
+        empty = np.empty((0, sampler.num_features + 4), dtype=np.float32)
+        report = {"requested_hits": 0, "generated_hits": 0,
+                  "unfilled_hits": 0, "rejection_rounds": 0,
+                  "unfilled_conditions": np.empty((0, 5), dtype=np.int64)}
+        return (empty, report) if return_report else empty
 
     class_ids = map_conditions_to_classes(conditions, sampler.y_lookup)
     conditions = np.repeat(conditions, oversample, axis=0)
@@ -241,10 +248,12 @@ def run_rejection_loop(sampler, conditions, seed, *, oversample=1,
 
     with tempfile.TemporaryDirectory(prefix="genbib_tabddpm_", dir=work_parent) as work:
         sample_job = dict(sampler.sample_job_common, parent_dir=work)
+        rounds_run = 0
         for round_id in range(max_rejection_rounds):
             remaining = np.flatnonzero(unfilled)
             if len(remaining) == 0:
                 break
+            rounds_run = round_id + 1
             requested_ids = class_ids[remaining]
             print(
                 f"{label}round {round_id + 1}: {len(remaining):,}/{len(class_ids):,} remaining",
@@ -294,13 +303,28 @@ def run_rejection_loop(sampler, conditions, seed, *, oversample=1,
 
                 torch.cuda.empty_cache()
 
-    if np.any(unfilled):
+    unfilled_conditions = conditions[unfilled].copy()
+    if len(unfilled_conditions) and unfilled_policy == "error":
         error = RuntimeError(
             f"{int(unfilled.sum())} conditions remain after {max_rejection_rounds} rounds"
         )
-        error.unfilled_conditions = conditions[unfilled]
+        error.unfilled_conditions = unfilled_conditions
         raise error
-    return output
+    if len(unfilled_conditions):
+        print(
+            f"{label}dropping {len(unfilled_conditions):,}/{len(conditions):,} "
+            f"conditions unfilled after {rounds_run} rounds",
+            flush=True,
+        )
+    output = output[~unfilled]
+    report = {
+        "requested_hits": int(len(conditions)),
+        "generated_hits": int(len(output)),
+        "unfilled_hits": int(len(unfilled_conditions)),
+        "rejection_rounds": int(rounds_run),
+        "unfilled_conditions": unfilled_conditions,
+    }
+    return (output, report) if return_report else output
 
 
 # --- Driver ------------------------------------------------------------------
@@ -389,6 +413,33 @@ def sample_events(args):
     for short in shorts:
         model_dir = resolve_model_dir(args.model_root, short)
         model_dirs[short] = str(model_dir)
+        for summary in wanted:
+            event_id = summary["event_id"]
+            destination = output / args.split / event_id
+            out_path = destination / f"tabddpm_{short}_samples.npy"
+            if not out_path.exists():
+                continue
+            source = conditions_dir / args.split / event_id / f"{short}_conditions.npy"
+            requested_hits = len(np.load(source, mmap_mode="r", allow_pickle=False))
+            generated_hits = len(np.load(out_path, mmap_mode="r", allow_pickle=False))
+            unfilled_path = destination / f"tabddpm_{short}_unfilled_conditions.npy"
+            unfilled_hits = (len(np.load(unfilled_path, mmap_mode="r", allow_pickle=False))
+                             if unfilled_path.exists() else requested_hits - generated_hits)
+            if generated_hits + unfilled_hits != requested_hits:
+                raise RuntimeError(
+                    f"Existing {short}/{event_id} samples and unfilled diagnostics "
+                    "do not account for every requested condition")
+            records[event_id][short] = {
+                "requested_hits": int(requested_hits),
+                "generated_hits": int(generated_hits),
+                "unfilled_hits": int(unfilled_hits),
+                "rejection_rounds": None,
+                "seed": int(event_seed(
+                    args.seed_base, construction, cohort, event_id, short)),
+                "unfilled_conditions_path": (
+                    str(unfilled_path.resolve()) if unfilled_path.exists() else None),
+                "resumed_existing": True,
+            }
         pending = [s for s in wanted if not (
             output / args.split / s["event_id"] / f"tabddpm_{short}_samples.npy").exists()]
         if not pending:
@@ -407,24 +458,43 @@ def sample_events(args):
             conditions = np.load(source, allow_pickle=False)
             expected_hits = len(conditions)
             seed = event_seed(args.seed_base, construction, cohort, event_id, short)
-            out_rows = run_rejection_loop(
+            out_rows, sampling_report = run_rejection_loop(
                 sampler, conditions, seed, oversample=1,
-                max_rejection_rounds=args.max_rounds, work_dir=output,
+                max_rejection_rounds=args.max_rounds,
+                unfilled_policy=args.unfilled_policy, return_report=True,
+                work_dir=output,
                 label=f"[{short} {event_id}] ")
-            if len(out_rows) != expected_hits:
+            if args.unfilled_policy == "error" and len(out_rows) != expected_hits:
                 raise RuntimeError(
                     f"[{short} {event_id}] produced {len(out_rows)} rows for "
                     f"{expected_hits} conditions")
             destination.mkdir(parents=True, exist_ok=True)
+            unfilled = sampling_report.pop("unfilled_conditions")
+            if len(out_rows) + len(unfilled) != expected_hits:
+                raise RuntimeError(
+                    f"[{short} {event_id}] generated and unfilled rows do not "
+                    f"account for {expected_hits} requested conditions")
+            unfilled_path = destination / f"tabddpm_{short}_unfilled_conditions.npy"
+            if len(unfilled):
+                tmp_unfilled = destination / (
+                    f".tabddpm_{short}_unfilled_conditions.{os.getpid()}.npy")
+                np.save(tmp_unfilled, unfilled.astype(np.int64), allow_pickle=False)
+                os.replace(tmp_unfilled, unfilled_path)
             tmp = destination / f".tabddpm_{short}_samples.{os.getpid()}.npy"
             np.save(tmp, out_rows.astype(np.float32), allow_pickle=False)
             os.replace(tmp, out_path)  # atomic; safe against concurrent shards
-            records[event_id][short] = {"hits": int(expected_hits), "seed": int(seed)}
+            records[event_id][short] = {
+                **sampling_report,
+                "seed": int(seed),
+                "unfilled_conditions_path": (
+                    str(unfilled_path.resolve()) if len(unfilled) else None),
+            }
 
     shard_manifest = {
         "kind": "count_tracker_samples_shard",
         "construction": construction, "cohort": cohort, "split": args.split,
         "collections": shorts, "seed_base": args.seed_base, "max_rounds": args.max_rounds,
+        "unfilled_policy": args.unfilled_policy,
         "device": str(device), "vendored_from": "GenBIB-ML sample.py @ a483be7",
         "paper1_root": str(Path(paper1_root).resolve()), "model_dirs": model_dirs,
         "conditions_dir": str(conditions_dir),
@@ -454,6 +524,10 @@ def main():
     )
     parser.add_argument("--seed-base", type=int, default=0)
     parser.add_argument("--max-rounds", type=int, default=10000)
+    parser.add_argument(
+        "--unfilled-policy", choices=("error", "drop"), default="error",
+        help="error, or publish accepted hits and record unresolved conditions",
+    )
     parser.add_argument("--device", default="auto", help="auto, cuda, or cpu")
     parser.add_argument("--num-shards", type=int, default=1,
                         help="split the event list across this many parallel GPU jobs")
@@ -463,6 +537,8 @@ def main():
     args = parser.parse_args()
     if args.seed_base < 0:
         parser.error("--seed-base must be nonnegative")
+    if args.max_rounds < 1:
+        parser.error("--max-rounds must be positive")
     if args.num_shards < 1 or not (0 <= args.shard_index < args.num_shards):
         parser.error("--shard-index must be in [0, --num-shards)")
     sample_events(args)

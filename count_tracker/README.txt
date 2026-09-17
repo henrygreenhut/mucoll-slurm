@@ -23,6 +23,15 @@ available at its run-config path, pass the existing inference checkout
 explicitly and treat successful one-event sampling/reconstruction as the
 compatibility checkpoint before scaling up.
 
+The sampler remains strict by default (`--unfilled-policy error`, up to 10000
+rounds). For checkpoints with unsupported sensor conditions, use an explicit
+finite policy such as `--max-rounds 100 --unfilled-policy drop`. Accepted hits
+are published, while every unresolved five-column condition is saved beside
+the collection as `tabddpm_<SHORT>_unfilled_conditions.npy`; requested,
+generated, and unfilled counts are recorded in the sampler manifest. The input
+writer separately records the resulting occupancy deficit after CellID
+assignment. This policy must remain fixed across compared COUNT cohorts.
+
 After that checkpoint, compare the unchanged prior SIM arm with the new COUNT
 arm using `count_tracker_checkpoint_report.py`. It reports the six collection
 counts before and after digitization, their survival fractions, and the number
