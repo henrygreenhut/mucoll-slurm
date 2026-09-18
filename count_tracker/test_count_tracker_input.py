@@ -121,7 +121,7 @@ class SimCopyTests(unittest.TestCase):
             def get(self, name):
                 return hits[name]
 
-        event = {"sources": {
+        event = {"_hit_selection": "flight-corrected", "sources": {
             polarity: [{"path": f"{polarity}.root", "entry": 0}]
             for polarity in writer.POLARITIES
         }}

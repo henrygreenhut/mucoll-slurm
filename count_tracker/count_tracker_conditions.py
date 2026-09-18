@@ -159,7 +159,7 @@ def validate_manifest(manifest, base):
     return manifest
 
 
-def read_source_counts(path, entry, hit_selection="flight-corrected"):
+def read_source_counts(path, entry, hit_selection="all-stored"):
     """Count per-sensor occupancy of selected BIB hits in one entry."""
     if hit_selection not in HIT_SELECTIONS:
         raise ValueError(f"Unknown hit selection: {hit_selection}")
@@ -185,7 +185,7 @@ def read_source_counts(path, entry, hit_selection="flight-corrected"):
     return result
 
 
-def prepare(manifest_path, output, hit_selection="flight-corrected"):
+def prepare(manifest_path, output, hit_selection="all-stored"):
     if hit_selection not in HIT_SELECTIONS:
         raise ValueError(f"Unknown hit selection: {hit_selection}")
     manifest_path = Path(manifest_path).resolve()
@@ -253,7 +253,7 @@ def main():
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument(
-        "--hit-selection", choices=HIT_SELECTIONS, default="flight-corrected",
+        "--hit-selection", choices=HIT_SELECTIONS, default="all-stored",
         help="BIB hits used for per-sensor counts (default: %(default)s)")
     args = parser.parse_args()
     prepare(args.manifest, args.output, args.hit_selection)

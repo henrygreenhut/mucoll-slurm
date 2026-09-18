@@ -1,6 +1,13 @@
 Reconstructed-track two-sample classifiers
 ==========================================
 
+Direct SIM-vs-COUNT cohorts use every stored SIM tracker hit when constructing
+per-sensor conditions. No timing selection is applied before digitization;
+the shared digitization configuration determines timing acceptance for both
+arms. `count_tracker_conditions.py` therefore defaults to `all-stored`.
+`flight-corrected` remains available only to reproduce the earlier selected
+control cohort and must be requested explicitly.
+
 Mother-muon diffusion checkpoint
 --------------------------------
 For the direct norm42 comparison, use the six conditional local-phi models in

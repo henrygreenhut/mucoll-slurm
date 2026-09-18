@@ -145,7 +145,7 @@ class ConditionTests(unittest.TestCase):
         data["events"].append(second)
 
         def read(path, entry, hit_selection):
-            self.assertEqual(hit_selection, "flight-corrected")
+            self.assertEqual(hit_selection, "all-stored")
             result = {short: Counter() for short in conditions.COLLECTIONS}
             if Path(path).stem == "0":
                 sensor = 0 if Path(path).parent.name == "MUPLUS" else 1

@@ -123,7 +123,7 @@ def load_event(directory, split, event_id, construction):
             raise ValueError("Reservoir template events must be unique across splits")
     else:
         manifest = validate_manifest(manifest, directory)
-        hit_selection = report.get("hit_selection", "flight-corrected")
+        hit_selection = report.get("hit_selection", "all-stored")
         if hit_selection not in HIT_SELECTIONS:
             raise ValueError("Conditions manifest has an unknown hit selection")
     if manifest["construction"] != construction:
@@ -191,7 +191,7 @@ def hit_in_time(hit, window=IN_TIME_WINDOW_NS):
 
 def append_sim_hits(collections, event):
     """Copy the manifest-selected BIB hits while removing source relations."""
-    hit_selection = event.get("_hit_selection", "flight-corrected")
+    hit_selection = event.get("_hit_selection", "all-stored")
     if hit_selection not in HIT_SELECTIONS:
         raise ValueError(f"Unknown hit selection: {hit_selection}")
     for polarity in POLARITIES:
