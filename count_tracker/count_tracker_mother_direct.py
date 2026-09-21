@@ -26,6 +26,7 @@ FILES_COLUMNS = (
     "file_id", "polarity", "mother_start", "mother_count",
     "hit_count", "row_start", "row_count",
 )
+TRACKER_FIELDS = ("eDep", "position.x", "position.y", "position.z", "time", "cellID")
 
 
 def sha256_file(path):
@@ -127,8 +128,7 @@ def read_cycle(path, expected_entries):
             raise ValueError(
                 f"{path}: {tree.num_entries} entries, metadata expects {expected_entries}")
         for short, (system, name) in COLLECTIONS.items():
-            values = [flatten_branch(tree, name, field) for field in (
-                "EDep", "position.x", "position.y", "position.z", "time", "cellID")]
+            values = [flatten_branch(tree, name, field) for field in TRACKER_FIELDS]
             try:
                 rows, summary = all_tracker_rows(values, system)
             except ValueError as error:

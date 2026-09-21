@@ -12,6 +12,10 @@ import count_tracker_mother_direct as mother
 
 
 class MotherDirectTests(unittest.TestCase):
+    def test_split_mother_edm4hep_source_schema_uses_lowercase_edep(self):
+        self.assertEqual(mother.TRACKER_FIELDS, (
+            "eDep", "position.x", "position.y", "position.z", "time", "cellID"))
+
     def test_cycle_metadata_requires_and_retains_both_polarities(self):
         files = np.array([
             [0, 1, 0, 2, 3, 0, 2], [0, -1, 2, 1, 4, 2, 1],
