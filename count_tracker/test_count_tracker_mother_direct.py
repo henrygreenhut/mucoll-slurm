@@ -127,6 +127,8 @@ class MotherDirectTests(unittest.TestCase):
             loaded, expected = writer.load_event(
                 root, "test", event_id, mother.CONSTRUCTION)
             self.assertEqual(loaded["event_id"], event_id)
+            self.assertEqual(loaded["_source_domain"], None)
+            self.assertEqual(loaded["_source_cycle_pool"]["count"], 10)
             self.assertTrue(all(sum(counts.values()) == 1 for counts in expected.values()))
 
 

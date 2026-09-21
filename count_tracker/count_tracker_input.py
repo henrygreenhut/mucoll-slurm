@@ -199,6 +199,9 @@ def load_event(directory, split, event_id, construction):
         if np.any(rows[:, 0] != system) or len(rows) != saved["hits"]:
             raise ValueError(f"Invalid conditions or recorded hit count: {path}")
     event = dict(matches[0])
+    if construction == "norm1_mother_direct":
+        event["_source_domain"] = manifest.get("source_domain")
+        event["_source_cycle_pool"] = manifest["source_cycle_pool"]
     if construction not in ARRAY_SIM_CONSTRUCTIONS:
         event["_hit_selection"] = hit_selection
     if construction in ARRAY_SIM_CONSTRUCTIONS:
@@ -407,14 +410,14 @@ def write_input(args):
             })
         elif args.construction == "norm1_mother_direct":
             report.update({
-                "source_domain": event.get("source_domain", manifest.get("source_domain")),
+                "source_domain": event["_source_domain"],
                 "generator_training_holdout": False,
                 "model_split_used": False,
                 "analysis_split_used": False,
                 "classifier_ready": False,
                 "physical_event_boundaries": True,
                 "hit_selection": "all-stored",
-                "source_cycle_pool": manifest["source_cycle_pool"],
+                "source_cycle_pool": event["_source_cycle_pool"],
                 "n_files_per_polarity": 420,
                 "file_normalization": 1,
                 "norm1_equivalents_per_polarity": 420,
