@@ -1,6 +1,133 @@
 Reconstructed-track two-sample classifiers
 ==========================================
 
+Direct norm1 mother-muon track comparison
+-----------------------------------------
+This comparison uses the original unrotated norm1 split-mother SIM files. It
+draws from all 6666 complete source cycles and uses neither an analysis split
+nor the diffusion model's saved train/validation split. It is a 20-event track
+comparison diagnostic and is explicitly not a classifier-ready cohort.
+
+Each source ROOT file is one FLUKA cycle and its event entries are individual
+mother-muon groups. One comparison event draws 420 cycle IDs with replacement
+for MUPLUS and, independently, 420 cycle IDs with replacement for MUMINUS. All
+mother entries and all stored tracker hits in each draw are aggregated. A
+cycle may therefore recur within an event or between events.
+
+The empirical SIM arm and COUNT condition arm are derived from exactly the same
+stored hits. No preprocessing timing, energy, or spatial selection is applied.
+The normal digitizer later applies the same detector timing selection to both
+arms. The manifest explicitly records that neither the model split nor an
+analysis split was used and that this cohort is not a model-validation holdout.
+
+Prepare all 20 event definitions on an OSCAR compute node. Event zero will be
+the end-to-end checkpoint and remains the same event when the cohort is scaled:
+
+    srun --partition=batch --cpus-per-task=4 --mem=32G --time=04:00:00 --pty bash
+    module load miniforge3/25.3.0-3-a6hh
+    eval "$(conda shell.bash hook)"
+    conda activate count-hdf
+
+    REPO="$(git rev-parse --show-toplevel)"
+    CT_DIR="$REPO/count_tracker"
+    BASE="/oscar/scratch/$USER/mucoll/count_tracker_cmp/norm1_mother_direct20"
+    SIM_ROOT="/oscar/data/mleblan6/mucoll/hgreenhu/mucoll/bib-v3p0-fmt2-norm1-split-mother-norot/SIM"
+    DATA_ROOT="/oscar/data/mleblan6/mucoll/speng44/bib_gen_mother_moun/data"
+
+    python "$CT_DIR/count_tracker_mother_direct.py" \
+      --sim-root "$SIM_ROOT" \
+      --metadata "$DATA_ROOT/primary_muon_npy/metadata" \
+      --cohort trackcmp --seed 12345 \
+      --events 20 \
+      --output "$BASE/conditions"
+
+The event IDs are ``norm1_mother_direct_trackcmp_000000`` through
+``...000019``. The output manifest records the complete source pool, every
+ordered draw and source file, independent polarity streams, source metadata,
+per-collection counts, and hashes of the prepared SIM and condition arrays.
+
+Use the same model runtime, signal, geometry, and reconstruction checkout as
+the successful earlier comparison. First sample and reconstruct only event
+zero:
+
+    CONDITIONS="$BASE/conditions"
+    COUNT_SAMPLES="$BASE/count_samples"
+    EVENTS_OUT="$BASE/events"
+    MODEL_ROOT="/oscar/data/mleblan6/mucoll/speng44/bib_gen_mother_moun/new_diffusion"
+    SIGNAL="/oscar/scratch/$USER/mucoll/count_tracker_cmp/norm42_mother_muon20/signal/signal.root"
+    GEOMAP="/oscar/scratch/$USER/mucoll/count_tracker_smoke/geomap/maia_cellid_sensor_geometry.npz"
+    GENBIB_DIR="/oscar/data/mleblan6/mucoll/hgreenhu/mucoll/GenBIB-ML"
+    BENCHMARK_DIR="/oscar/data/mleblan6/mucoll/hgreenhu/mucoll/mucoll-benchmarks"
+    IMAGE="/oscar/data/mleblan6/mucoll/mucoll-sim-ubuntu24:v3.0.sif"
+    PAPER1_ROOT="/oscar/data/mleblan6/mucoll/speng44/bib_gen_model/ddpm_outputs/tabddpm/local_phi/paper1-inference"
+    EVENT0="norm1_mother_direct_trackcmp_000000"
+    mkdir -p "$BASE/logs"
+
+    SAMPLE0=$(sbatch --parsable \
+      --export=ALL,CONDITIONS="$CONDITIONS",SPLIT=test,MODEL_ROOT="$MODEL_ROOT",OUTPUT="$COUNT_SAMPLES",CT_DIR="$CT_DIR",PAPER1_ROOT="$PAPER1_ROOT",EVENT_ID="$EVENT0",MAX_ROUNDS=100,UNFILLED_POLICY=drop \
+      -o "$BASE/logs/sample0_%j.out" -e "$BASE/logs/sample0_%j.err" \
+      "$CT_DIR/submit_count_tracker_sample.slurm")
+
+    RECO0=$(sbatch --parsable --dependency="afterok:$SAMPLE0" --array=0-0 \
+      --export=ALL,CONDITIONS="$CONDITIONS",CONSTRUCTION=norm1_mother_direct,SPLIT=test,SIGNAL="$SIGNAL",COUNT_SAMPLES="$COUNT_SAMPLES",GEOMAP="$GEOMAP",EVENTS_OUT="$EVENTS_OUT",CT_DIR="$CT_DIR",IMAGE="$IMAGE",BENCHMARK_DIR="$BENCHMARK_DIR",GENBIB_DIR="$GENBIB_DIR",NEV=1 \
+      -o "$BASE/logs/reco0_%A_%a.out" -e "$BASE/logs/reco0_%A_%a.err" \
+      "$CT_DIR/submit_count_tracker_reco.slurm")
+
+    echo "sample checkpoint: $SAMPLE0  reco checkpoint: $RECO0"
+
+After both jobs finish, make the one-event survival and track-count report:
+
+    apptainer exec --bind /oscar:/oscar "$IMAGE" \
+      python "$CT_DIR/count_tracker_cohort_report.py" \
+      --conditions "$CONDITIONS" --events-root "$EVENTS_OUT" --split test \
+      --event-id "$EVENT0" --output "$BASE/reports/checkpoint.json"
+
+After inspecting the sampler manifest, input manifests, and checkpoint report,
+fill the remaining cohort. Both job scripts are resumable and skip event zero:
+
+    SAMPLE_ALL=$(sbatch --parsable --array=0-19%10 \
+      --export=ALL,CONDITIONS="$CONDITIONS",SPLIT=test,MODEL_ROOT="$MODEL_ROOT",OUTPUT="$COUNT_SAMPLES",CT_DIR="$CT_DIR",PAPER1_ROOT="$PAPER1_ROOT",MAX_ROUNDS=100,UNFILLED_POLICY=drop \
+      -o "$BASE/logs/sample_%A_%a.out" -e "$BASE/logs/sample_%A_%a.err" \
+      "$CT_DIR/submit_count_tracker_sample.slurm")
+
+    RECO_ALL=$(sbatch --parsable --dependency="afterok:$SAMPLE_ALL" --array=0-19%10 \
+      --export=ALL,CONDITIONS="$CONDITIONS",CONSTRUCTION=norm1_mother_direct,SPLIT=test,SIGNAL="$SIGNAL",COUNT_SAMPLES="$COUNT_SAMPLES",GEOMAP="$GEOMAP",EVENTS_OUT="$EVENTS_OUT",CT_DIR="$CT_DIR",IMAGE="$IMAGE",BENCHMARK_DIR="$BENCHMARK_DIR",GENBIB_DIR="$GENBIB_DIR" \
+      -o "$BASE/logs/reco_%A_%a.out" -e "$BASE/logs/reco_%A_%a.err" \
+      "$CT_DIR/submit_count_tracker_reco.slurm")
+
+    echo "full sampling: $SAMPLE_ALL  full reconstruction: $RECO_ALL"
+
+After reconstruction, aggregate digitization survival and track multiplicity,
+extract the agreed fitted-track observables, and make separate plots:
+
+    STORES="$BASE/track_stores"
+    mkdir -p "$BASE/reports" "$STORES"
+
+    apptainer exec --bind /oscar:/oscar "$IMAGE" \
+      python "$CT_DIR/count_tracker_cohort_report.py" \
+      --conditions "$CONDITIONS" --events-root "$EVENTS_OUT" \
+      --split test --output "$BASE/reports/cohort.json"
+
+    for SAMPLE in SIM COUNT; do
+      apptainer exec --bind /oscar:/oscar "$IMAGE" \
+        python "$CT_DIR/count_tracker_features.py" \
+        --conditions "$CONDITIONS" --events-root "$EVENTS_OUT" \
+        --sample "$SAMPLE" --split test \
+        --output "$STORES/norm1_mother_direct_${SAMPLE}_test"
+    done
+
+    apptainer exec --bind /oscar:/oscar "$IMAGE" \
+      python "$CT_DIR/plot_count_tracker_track_features.py" \
+      --store-dir "$STORES" --construction norm1_mother_direct --split test \
+      --output-dir "$BASE/reports/track_plots" \
+      --title "Direct norm1 mother-muon: SIM vs COUNT"
+
+The cohort report contains per-collection and total counts entering and
+surviving digitization, survival fractions, paired SiTrack multiplicities, and
+the total COUNT/SIM track ratio. The plotter writes separate pT, eta, phi, d0,
+z0, and event-level multiplicity plots. Shape histograms are normalized per
+arm; multiplicity is not normalized.
+
 Direct SIM-vs-COUNT cohorts use every stored SIM tracker hit when constructing
 per-sensor conditions. No timing selection is applied before digitization;
 the shared digitization configuration determines timing acceptance for both

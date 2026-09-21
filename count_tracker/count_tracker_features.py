@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Extract Kinematic-7 track features from reconstructed SIM/COUNT events.
+"""Extract paper-aligned track observables from reconstructed SIM/COUNT events.
 
 Reads each event's ``reco_output.edm4hep.root`` (one event per file), pulls the
-``SiTracks`` subset of ``AllTracks`` and its impact-parameter track state, and
+``SiTracks`` subset of ``AllTracks`` and its AtIP track state, and
 writes one store per (sample, split) as a padded ``.npz`` array plus a ``.json``
 manifest. Runs in the v3 container (uproot + numpy); no h5py needed. The trainer
 consumes ``<store-prefix>.npz``.
@@ -19,12 +19,12 @@ from count_tracker_track_features import RAW_FEATURES, track_row
 
 
 def choose_state(begin, end, locations):
-    """Index of the AtIP track state (location==1), else the first state."""
+    """Index of the AtIP track state (EDM4hep location==1), if present."""
     if begin < 0 or begin >= end or begin >= len(locations):
         return None
     end = min(end, len(locations))
     at_ip = np.flatnonzero(locations[begin:end] == 1)
-    return begin + int(at_ip[0]) if len(at_ip) else begin
+    return begin + int(at_ip[0]) if len(at_ip) else None
 
 
 def read_tracks(events):
@@ -50,13 +50,15 @@ def read_tracks(events):
         rows = []
         for track_index in sel:
             if track_index < 0 or track_index >= len(b):
-                continue
+                raise ValueError(f"event {i}: SiTracks index {track_index} is outside AllTracks")
             state = choose_state(int(b[track_index]), int(e[track_index]), lc)
             if state is None:
-                continue
-            row = track_row(*(column[state] for column in cols))
-            if row is not None:
-                rows.append(row)
+                raise ValueError(f"event {i}, AllTracks {track_index}: missing AtIP state")
+            try:
+                row = track_row(*(column[state] for column in cols))
+            except (IndexError, ValueError) as exc:
+                raise ValueError(f"event {i}, AllTracks {track_index}: invalid AtIP state") from exc
+            rows.append(row)
         per_event.append(np.asarray(rows, dtype=np.float32).reshape(-1, len(RAW_FEATURES)))
     return per_event
 
@@ -100,8 +102,8 @@ def build_store(args):
         raise SystemExit(f"No events for split={args.split} in {conditions_manifest}")
 
     output = Path(args.output)
-    if output.with_suffix(".npz").exists():
-        raise FileExistsError(f"Refusing to replace {output.with_suffix('.npz')}")
+    if output.with_suffix(".npz").exists() or output.with_suffix(".json").exists():
+        raise FileExistsError(f"Refusing to replace existing store at {output}")
 
     per_event, sources, missing = [], [], []
     for event_id in event_ids:
@@ -124,7 +126,23 @@ def build_store(args):
     np.savez(output.with_suffix(".npz"), tracks=tracks, n_tracks=counts)
     manifest = {
         "kind": "count_tracker_track_store",
+        "schema_version": 2,
+        "track_collection": "SiTracks",
+        "track_state": "AtIP",
+        "magnetic_field_T": 5.0,
+        "pt_conversion": "pT [GeV] = 0.0015 / |omega [1/mm]|",
         "construction": construction,
+        "source_domain": report["manifest"].get("source_domain"),
+        "generator_training_holdout": report["manifest"].get("generator_training_holdout"),
+        "model_split_used": report["manifest"].get("model_split_used"),
+        "analysis_split_used": report["manifest"].get("analysis_split_used"),
+        "classifier_ready": report["manifest"].get("classifier_ready"),
+        "physical_event_boundaries": report["manifest"].get("physical_event_boundaries"),
+        "hit_selection": report["manifest"].get("hit_selection"),
+        "source_cycle_pool": {
+            key: report["manifest"].get("source_cycle_pool", {}).get(key)
+            for key in ("kind", "count")
+        },
         "sample": args.sample,
         "split": args.split,
         "features": list(RAW_FEATURES),

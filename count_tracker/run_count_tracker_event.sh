@@ -23,7 +23,8 @@
 #    CT_DIR         this count_tracker directory               [default: script dir]
 #  Args:
 #    --conditions DIR    prepared conditions directory         [required]
-#    --construction C    norm1 | norm42 | norm42_reservoir     [required]
+#    --construction C    norm1 | norm42 | norm42_reservoir |
+#                        norm1_mother_direct                    [required]
 #    --split S           train | val | test                    [required]
 #    --event-id ID       event id within the split             [required]
 #    --signal FILE       neutrino signal SIM ROOT              [required]

@@ -20,7 +20,7 @@ from count_tracker_conditions import (
     decode_cell_ids, flight_corrected_time, sensor_counts, validate_manifest,
 )
 
-ARRAY_SIM_CONSTRUCTIONS = ("norm42_reservoir",)
+ARRAY_SIM_CONSTRUCTIONS = ("norm42_reservoir", "norm1_mother_direct")
 INPUT_CONSTRUCTIONS = (*CONSTRUCTIONS, *ARRAY_SIM_CONSTRUCTIONS)
 
 
@@ -121,6 +121,60 @@ def load_event(directory, split, event_id, construction):
             raise ValueError("Reservoir event has an invalid classifier split")
         if len(identities) != len(set(identities)) or len(template_ids) != len(set(template_ids)):
             raise ValueError("Reservoir template events must be unique across splits")
+    elif construction == "norm1_mother_direct":
+        if report.get("kind") != "count_tracker_norm1_mother_direct_conditions":
+            raise ValueError("Expected direct norm1 mother conditions")
+        if manifest.get("schema_version") != 2:
+            raise ValueError("Direct mother manifest must be schema_version 2")
+        if manifest.get("cell_id_encoding") != CELL_ID_ENCODING:
+            raise ValueError("Direct mother manifest has a different CellID encoding")
+        if manifest.get("generator_training_holdout") is not False:
+            raise ValueError("Direct mother sources must not claim to be a model holdout")
+        if manifest.get("model_split_used") is not False:
+            raise ValueError("Direct mother comparison must not use the model split")
+        if manifest.get("analysis_split_used") is not False:
+            raise ValueError("Direct mother comparison must not use an analysis split")
+        if manifest.get("classifier_ready") is not False:
+            raise ValueError("Direct mother diagnostic must not claim classifier readiness")
+        if manifest.get("physical_event_boundaries") is not True:
+            raise ValueError("Direct mother sources must preserve physical event boundaries")
+        if (manifest.get("n_files_per_polarity") != 420
+                or manifest.get("norm1_equivalents_per_polarity") != 420):
+            raise ValueError("Direct mother events require 420 cycles per polarity")
+        if (manifest.get("hit_selection") != "all-stored"
+                or report.get("hit_selection") != "all-stored"):
+            raise ValueError("Direct mother comparison must retain all stored hits")
+        pool = manifest.get("source_cycle_pool", {})
+        available = pool.get("cycles")
+        if (pool.get("kind") != "all complete cycles in files.npy"
+                or not isinstance(available, list)
+                or pool.get("count") != len(available)
+                or len(available) != len(set(available))):
+            raise ValueError("Direct mother manifest has an invalid all-cycle pool")
+        available = set(available)
+        events = manifest.get("events")
+        if not isinstance(events, list) or not events:
+            raise ValueError("Direct mother manifest must contain events")
+        identities = [(event.get("split"), event.get("event_id")) for event in events]
+        if len(identities) != len(set(identities)):
+            raise ValueError("Direct mother event identities are not unique")
+        for candidate in events:
+            if candidate.get("split") != "test":
+                raise ValueError("Direct mother diagnostic events must use the test label")
+            sources = candidate.get("sources", {})
+            if set(sources) != set(POLARITIES):
+                raise ValueError("Direct mother event must contain both polarities")
+            for polarity in POLARITIES:
+                if len(sources[polarity]) != 420:
+                    raise ValueError("Direct mother event needs 420 cycles per polarity")
+                for draw, source in enumerate(sources[polarity]):
+                    if source.get("draw") != draw:
+                        raise ValueError("Direct mother source draw indices are invalid")
+                    if source.get("entries") != "all":
+                        raise ValueError("Direct mother source must aggregate all mother entries")
+                    cycle = source.get("cycle")
+                    if cycle not in available:
+                        raise ValueError("Direct mother source is outside the all-cycle pool")
     else:
         manifest = validate_manifest(manifest, directory)
         hit_selection = report.get("hit_selection", "all-stored")
@@ -350,6 +404,20 @@ def write_input(args):
                 "physical_event_boundaries": False,
                 "event_correlation_policy": "independent empirical draw conditional on sensor",
                 "template_event_id": event["template_event_id"],
+            })
+        elif args.construction == "norm1_mother_direct":
+            report.update({
+                "source_domain": event.get("source_domain", manifest.get("source_domain")),
+                "generator_training_holdout": False,
+                "model_split_used": False,
+                "analysis_split_used": False,
+                "classifier_ready": False,
+                "physical_event_boundaries": True,
+                "hit_selection": "all-stored",
+                "source_cycle_pool": manifest["source_cycle_pool"],
+                "n_files_per_polarity": 420,
+                "file_normalization": 1,
+                "norm1_equivalents_per_polarity": 420,
             })
         else:
             report.update({
