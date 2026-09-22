@@ -76,7 +76,7 @@ def select_events(pools, counts, seed, cohort, construction):
     events = []
     for split in SPLITS:
         for index in range(counts[split]):
-            event_id = f"{construction}_{cohort}_{index:06d}"
+            event_id = f"{construction}_{cohort}_{split}_{index:06d}"
             sources = {}
             for polarity in POLARITIES:
                 available = pools[split][polarity]

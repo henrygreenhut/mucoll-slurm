@@ -65,12 +65,12 @@ def summarize(conditions, events_root, split, event_id=None):
         "model_split_used": source["manifest"].get("model_split_used"),
         "analysis_split_used": source["manifest"].get("analysis_split_used"),
         "classifier_ready": source["manifest"].get("classifier_ready"),
-        "hit_selection": source["manifest"].get("hit_selection"),
+        "hit_selection": source.get("hit_selection"),
         "source_cycle_pool": {
             key: source["manifest"].get("source_cycle_pool", {}).get(key)
             for key in ("kind", "count")
         },
-        "raw_time_selection": source["manifest"].get("raw_time_selection"),
+        "raw_time_selection": source.get("raw_time_selection"),
         "aggregate": aggregate,
         "count_over_sim_tracks": count_tracks / sim_tracks if sim_tracks else None,
         "paired": paired,

@@ -135,6 +135,15 @@ arms. `count_tracker_conditions.py` therefore defaults to `all-stored`.
 `flight-corrected` remains available only to reproduce the earlier selected
 control cohort and must be requested explicitly.
 
+The retrained norm42 model is a separate, training-domain-matched comparison.
+Its recorded data preparation retained raw SimTrackerHits satisfying
+``time < 1.0e7 ns`` before forming the model train/validation split. Request
+this exact, uncorrected-time selection with
+``--hit-selection raw-time-lt-1e7-ns``. The condition builder applies it while
+counting per-sensor occupancy, and the input writer applies it again while
+copying the paired SIM hits. It is not the flight-corrected detector timing
+window; normal digitization still runs identically on both arms afterward.
+
 Mother-muon diffusion checkpoint
 --------------------------------
 For the direct norm42 comparison, use the six conditional local-phi models in
@@ -147,6 +156,16 @@ resolved directory in its output manifest. These checkpoints use five
 2048-unit layers, DIM_T=1024, 1000 diffusion steps, and 200000 training steps.
 Their run configurations identify primary-muon training data and Paper 1
 commit 90bd576c619416dbd7889eb1900ec80ac687ab92.
+
+The corresponding retrained norm42 checkpoints are in
+
+  /oscar/data/mleblan6/mucoll/speng44/bib_gen_mother_muon/new_diffusion_norm42/paper1_training_20260921_012450/models
+
+They use the same generated features and sensor conditions, and record the
+same Paper 1 commit. For a controlled comparison, reuse the existing norm42
+source manifest but prepare a new conditions directory with
+``raw-time-lt-1e7-ns``; write all COUNT samples and reconstruction products to
+a new output root.
 
 The first controlled check reuses `norm42_cmp_000000` conditions, signal entry
 0, SIM result, geometry map, digitization, and reconstruction from the earlier

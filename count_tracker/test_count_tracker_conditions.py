@@ -103,6 +103,36 @@ class ConditionTests(unittest.TestCase):
             np.array([-0.5, 15.0, -0.51, 15.01]), np.zeros(4), np.zeros(4), np.zeros(4))
         np.testing.assert_array_equal(edge, [True, True, False, False])
 
+    def test_training_raw_time_cut_is_uncorrected_and_strict(self):
+        times = np.array([-10.0, 0.0, 9_999_999.0, 10_000_000.0, 1e12])
+        np.testing.assert_array_equal(
+            conditions.training_raw_time_mask(times),
+            [True, True, True, False, False],
+        )
+
+    def test_training_raw_time_selection_is_recorded(self):
+        data = manifest()
+        counts = {short: Counter() for short in conditions.COLLECTIONS}
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "input.json"
+            source.write_text(json.dumps(data))
+            output = Path(directory) / "conditions"
+            with patch.object(conditions, "read_source_counts", return_value=counts) as read:
+                conditions.prepare(
+                    source, output, conditions.TRAINING_RAW_TIME_SELECTION)
+            self.assertTrue(all(
+                call.args[2] == conditions.TRAINING_RAW_TIME_SELECTION
+                for call in read.call_args_list
+            ))
+            report = json.loads((output / "manifest.json").read_text())
+            self.assertEqual(report["hit_selection"], "raw-time-lt-1e7-ns")
+            self.assertEqual(report["raw_time_selection"], {
+                "field": "SimTrackerHit.time",
+                "operator": "<",
+                "threshold_ns": 1.0e7,
+                "flight_corrected": False,
+            })
+
     def test_equal_totals_do_not_hide_sensor_reassignment(self):
         expected = np.array([[1, 0, 0, 0, 0], [1, 0, 0, 1, 0]], dtype=np.int64)
         conditions.require_matching_counts(expected, expected[::-1])

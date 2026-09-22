@@ -16,7 +16,8 @@ import numpy as np
 
 from count_tracker_conditions import (
     CELL_ID_ENCODING, COLLECTIONS, CONSTRUCTIONS, HIT_SELECTIONS,
-    IN_TIME_WINDOW_NS, POLARITIES,
+    IN_TIME_WINDOW_NS, POLARITIES, TRAINING_RAW_TIME_MAX_NS,
+    TRAINING_RAW_TIME_SELECTION,
     decode_cell_ids, flight_corrected_time, sensor_counts, validate_manifest,
 )
 
@@ -180,6 +181,13 @@ def load_event(directory, split, event_id, construction):
         hit_selection = report.get("hit_selection", "all-stored")
         if hit_selection not in HIT_SELECTIONS:
             raise ValueError("Conditions manifest has an unknown hit selection")
+        expected_raw_selection = {
+            "field": "SimTrackerHit.time", "operator": "<",
+            "threshold_ns": TRAINING_RAW_TIME_MAX_NS, "flight_corrected": False,
+        }
+        if (hit_selection == TRAINING_RAW_TIME_SELECTION
+                and report.get("raw_time_selection") != expected_raw_selection):
+            raise ValueError("Conditions manifest has a different raw-time selection")
     if manifest["construction"] != construction:
         raise ValueError("Conditions belong to a different SIM construction")
     matches = [event for event in manifest["events"]
@@ -204,6 +212,7 @@ def load_event(directory, split, event_id, construction):
         event["_source_cycle_pool"] = manifest["source_cycle_pool"]
     if construction not in ARRAY_SIM_CONSTRUCTIONS:
         event["_hit_selection"] = hit_selection
+        event["_raw_time_selection"] = report.get("raw_time_selection")
     if construction in ARRAY_SIM_CONSTRUCTIONS:
         arrays = event.get("sim_arrays")
         if not isinstance(arrays, dict) or set(arrays) != set(COLLECTIONS):
@@ -246,6 +255,11 @@ def hit_in_time(hit, window=IN_TIME_WINDOW_NS):
     return window[0] <= tof <= window[1]
 
 
+def hit_in_training_raw_time_domain(hit):
+    """Apply the model-training cut to stored, uncorrected hit time."""
+    return hit.getTime() < TRAINING_RAW_TIME_MAX_NS
+
+
 def append_sim_hits(collections, event):
     """Copy the manifest-selected BIB hits while removing source relations."""
     hit_selection = event.get("_hit_selection", "all-stored")
@@ -257,6 +271,9 @@ def append_sim_hits(collections, event):
             for short, (_, name) in COLLECTIONS.items():
                 for hit in frame.get(name):
                     if hit_selection == "flight-corrected" and not hit_in_time(hit):
+                        continue
+                    if (hit_selection == TRAINING_RAW_TIME_SELECTION
+                            and not hit_in_training_raw_time_domain(hit)):
                         continue
                     copied = hit.clone(False)
                     copied.setOverlay(True)
@@ -397,6 +414,7 @@ def write_input(args):
             "count_arrays": count_provenance,
             "overlay_time_selection": False,
             "bib_input_selection": event.get("_hit_selection", "prepared-array"),
+            "raw_time_selection": event.get("_raw_time_selection"),
             "hits": {short: sum(counts.values()) for short, counts in targets.items()},
             "input_sha256": sha256_file(root_path),
         }

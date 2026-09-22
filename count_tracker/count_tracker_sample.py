@@ -499,12 +499,15 @@ def sample_events(args):
         "paper1_root": str(Path(paper1_root).resolve()), "model_dirs": model_dirs,
         "conditions_dir": str(conditions_dir),
         "conditions_manifest_sha256": sha256_file(conditions_dir / "manifest.json"),
+        "hit_selection": report.get("hit_selection"),
+        "raw_time_selection": report.get("raw_time_selection"),
         "shard": {"index": args.shard_index, "num": args.num_shards},
         "events": [{"event_id": eid, "split": args.split, "collections": records[eid]}
                    for eid in (s["event_id"] for s in wanted)],
     }
     tag = f".shard{args.shard_index}of{args.num_shards}" if args.num_shards > 1 else ""
-    (output / f"manifest{tag}.json").write_text(json.dumps(shard_manifest, indent=2) + "\n")
+    manifest_path = output / f"manifest.{args.split}{tag}.json"
+    manifest_path.write_text(json.dumps(shard_manifest, indent=2) + "\n")
     print(f"shard {args.shard_index}/{args.num_shards}: sampled {len(wanted)} event(s) -> {output}")
 
 

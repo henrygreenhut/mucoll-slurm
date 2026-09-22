@@ -27,15 +27,20 @@ export IMAGE="${IMAGE:?}" BENCHMARK_DIR="${BENCHMARK_DIR:?}" GENBIB_DIR="${GENBI
 NUM_SHARDS="${NUM_SHARDS:-${SLURM_ARRAY_TASK_COUNT:-1}}"
 SHARD="${SLURM_ARRAY_TASK_ID:-0}"
 
-# Read identities from the conditions manifest. This supports source-event IDs
-# such as training_domain_000123 and avoids reconstructing a guessed filename.
-mapfile -t EVENT_IDS < <(python3 -c '
+# Read identities and their global manifest indices. The global index gives
+# every train/validation/test event a distinct neutrino signal entry.
+EVENT_IDS=()
+SIGNAL_ENTRIES=()
+while IFS=$'\t' read -r signal_entry event_id; do
+    SIGNAL_ENTRIES+=("$signal_entry")
+    EVENT_IDS+=("$event_id")
+done < <(python3 -c '
 import json, sys
 manifest, split = sys.argv[1:]
 report = json.load(open(manifest))
-for event in report["events"]:
+for index, event in enumerate(report["events"]):
     if event["split"] == split:
-        print(event["event_id"])
+        print(f"{index}\t{event['"'"'event_id'"'"']}")
 ' "$CONDITIONS/manifest.json" "$SPLIT")
 
 TOTAL="${#EVENT_IDS[@]}"
@@ -48,17 +53,18 @@ fi
 i="$SHARD"
 while [ "$i" -lt "$TOTAL" ]; do
     eid="${EVENT_IDS[$i]}"
+    signal_entry="${SIGNAL_ENTRIES[$i]}"
     out="$EVENTS_OUT/$eid"
     if [ -f "$out/SIM/reco/reco_output.edm4hep.root" ] && \
        [ -f "$out/COUNT/reco/reco_output.edm4hep.root" ]; then
         echo "skip $eid (already reconstructed)"
     else
         [ -d "$out" ] && rm -rf "$out"   # clear any partial attempt; fully regenerable
-        echo "=== reco $eid (signal entry $i) ==="
+        echo "=== reco $eid (signal entry $signal_entry) ==="
         bash "$CT_DIR/run_count_tracker_event.sh" \
             --conditions "$CONDITIONS" --construction "$CONSTRUCTION" \
             --split "$SPLIT" --event-id "$eid" \
-            --signal "$SIGNAL" --signal-entry "$i" \
+            --signal "$SIGNAL" --signal-entry "$signal_entry" \
             --count-samples "$COUNT_SAMPLES" --geomap "$GEOMAP" \
             --output "$out"
     fi

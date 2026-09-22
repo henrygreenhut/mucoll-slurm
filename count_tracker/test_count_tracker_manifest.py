@@ -37,6 +37,13 @@ class SelectionTests(unittest.TestCase):
         for event in original:
             self.assertEqual(event, indexed[(event["split"], event["event_id"])])
 
+    def test_event_ids_are_unique_across_splits(self):
+        events = select_events(self.pools, self.counts, 17, "SIM_A", "norm42")
+        identities = [event["event_id"] for event in events]
+        self.assertEqual(len(identities), len(set(identities)))
+        for event in events:
+            self.assertIn(f"_{event['split']}_", event["event_id"])
+
     def test_cohort_name_changes_draws_even_with_same_seed(self):
         first = select_events(self.pools, self.counts, 17, "SIM_A", "norm1")
         second = select_events(self.pools, self.counts, 17, "SIM_B", "norm1")

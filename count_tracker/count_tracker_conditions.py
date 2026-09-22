@@ -38,7 +38,9 @@ CONSTRUCTIONS = {
 # establish this as a preprocessing timing cut.
 SPEED_OF_LIGHT_MM_NS = 299.792458
 IN_TIME_WINDOW_NS = (-0.5, 15.0)
-HIT_SELECTIONS = ("flight-corrected", "all-stored")
+TRAINING_RAW_TIME_MAX_NS = 1.0e7
+TRAINING_RAW_TIME_SELECTION = "raw-time-lt-1e7-ns"
+HIT_SELECTIONS = ("flight-corrected", "all-stored", TRAINING_RAW_TIME_SELECTION)
 
 
 def flight_corrected_time(time, x, y, z):
@@ -53,6 +55,11 @@ def in_time_mask(time, x, y, z, window=IN_TIME_WINDOW_NS):
         np.asarray(y, dtype=np.float64), np.asarray(z, dtype=np.float64),
     )
     return (tof >= window[0]) & (tof <= window[1])
+
+
+def training_raw_time_mask(time, maximum=TRAINING_RAW_TIME_MAX_NS):
+    """Reproduce the norm42 model's raw SimTrackerHit-time training cut."""
+    return np.asarray(time, dtype=np.float64) < maximum
 
 
 def decode_cell_ids(cell_ids, system):
@@ -177,10 +184,13 @@ def read_source_counts(path, entry, hit_selection="all-stored"):
                 return np.asarray(events[name][f"{name}.{field}"].array(
                     entry_start=entry, entry_stop=entry + 1, library="ak")[0])
             ids = branch("cellID")
-            if len(ids) and hit_selection == "flight-corrected":
-                keep = in_time_mask(branch("time"), branch("position.x"),
-                                    branch("position.y"), branch("position.z"))
-                ids = ids[keep]
+            if len(ids):
+                if hit_selection == "flight-corrected":
+                    keep = in_time_mask(branch("time"), branch("position.x"),
+                                        branch("position.y"), branch("position.z"))
+                    ids = ids[keep]
+                elif hit_selection == TRAINING_RAW_TIME_SELECTION:
+                    ids = ids[training_raw_time_mask(branch("time"))]
             result[short] = sensor_counts(decode_cell_ids(np.asarray(ids), system))
     return result
 
@@ -227,9 +237,13 @@ def prepare(manifest_path, output, hit_selection="all-stored"):
                 f"flight-corrected in-time BIB: {IN_TIME_WINDOW_NS[0]} <= "
                 f"t - |r|/c <= {IN_TIME_WINDOW_NS[1]} ns "
                 f"(c={SPEED_OF_LIGHT_MM_NS} mm/ns); no energy or spatial cut")
-        else:
+        elif hit_selection == "all-stored":
             selection_description = (
                 "all stored SIM tracker hits; no time, energy, or spatial cut")
+        else:
+            selection_description = (
+                f"raw SimTrackerHit time t < {TRAINING_RAW_TIME_MAX_NS:g} ns; "
+                "no flight correction, energy cut, or spatial cut")
         report = {
             "manifest": manifest, "input_manifest_sha256": hashlib.sha256(raw).hexdigest(),
             "hit_selection": hit_selection,
@@ -242,6 +256,13 @@ def prepare(manifest_path, output, hit_selection="all-stored"):
                 "time_window_ns": list(IN_TIME_WINDOW_NS),
                 "speed_of_light_mm_ns": SPEED_OF_LIGHT_MM_NS,
             })
+        elif hit_selection == TRAINING_RAW_TIME_SELECTION:
+            report["raw_time_selection"] = {
+                "field": "SimTrackerHit.time",
+                "operator": "<",
+                "threshold_ns": TRAINING_RAW_TIME_MAX_NS,
+                "flight_corrected": False,
+            }
         (work / "manifest.json").write_text(json.dumps(report, indent=2) + "\n")
         if output.exists():
             raise FileExistsError(f"Output appeared during preparation: {output}")

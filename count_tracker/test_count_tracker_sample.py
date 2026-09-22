@@ -242,7 +242,7 @@ class DriverTests(unittest.TestCase):
                     path = out_dir / "test" / event_id / f"tabddpm_{short}_samples.npy"
                     self.assertTrue(path.is_file(), path)
                     self.assertEqual(np.load(path).shape, (2, 9))
-            manifest = json.loads((out_dir / "manifest.json").read_text())
+            manifest = json.loads((out_dir / "manifest.test.json").read_text())
             self.assertEqual(manifest["construction"], "norm1")
             self.assertEqual(len(manifest["events"]), 2)
             self.assertEqual(set(manifest["events"][0]["collections"]), set(shorts))
@@ -331,7 +331,7 @@ class DriverTests(unittest.TestCase):
             self.assertEqual(len(np.load(event_dir / "tabddpm_VBC_samples.npy")), 1)
             self.assertEqual(
                 len(np.load(event_dir / "tabddpm_VBC_unfilled_conditions.npy")), 1)
-            manifest = json.loads((out_dir / "manifest.json").read_text())
+            manifest = json.loads((out_dir / "manifest.test.json").read_text())
             record = manifest["events"][0]["collections"]["VBC"]
             self.assertEqual(record["requested_hits"], 2)
             self.assertEqual(record["generated_hits"], 1)
