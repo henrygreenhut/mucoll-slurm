@@ -51,6 +51,36 @@ class MotherDirectTests(unittest.TestCase):
         self.assertLess(len(set(minus)), 420)
         self.assertNotEqual(plus, minus)
 
+    def test_classifier_cycle_pools_and_event_ids_are_split_isolated(self):
+        cycles = list(range(100))
+        pools = mother.split_cycle_pools(cycles, 42)
+        self.assertEqual({split: len(pool) for split, pool in pools.items()},
+                         {"train": 60, "val": 20, "test": 20})
+        self.assertEqual(set().union(*map(set, pools.values())), set(cycles))
+        self.assertEqual(sum(map(len, pools.values())), len(cycles))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            records = {}
+            for cycle in cycles:
+                for polarity, code in (("MUPLUS", 1), ("MUMINUS", -1)):
+                    path = root / polarity / f"bib_sim_{cycle}.edm4hep.root"
+                    path.parent.mkdir(exist_ok=True)
+                    path.touch()
+                    records[(cycle, code)] = {
+                        "mother_count": 1, "source_tracker_hits": 0,
+                        "mother_start": cycle, "row_start": cycle, "row_count": 1,
+                    }
+            events = []
+            for split in ("train", "val", "test"):
+                events.extend(mother.select_events(
+                    pools[split], 1, root, records, 42, "overnight", split))
+        self.assertEqual(len({event["event_id"] for event in events}), 3)
+        for event in events:
+            allowed = set(pools[event["split"]])
+            for sources in event["sources"].values():
+                self.assertTrue({source["cycle"] for source in sources} <= allowed)
+
     def test_all_stored_hits_are_retained_with_sensor_identity(self):
         labels = np.array([[1, 0, 0, 0, 3]] * 3, dtype=np.int64)
         cell_ids = writer.pack_cell_ids(labels)
@@ -66,6 +96,18 @@ class MotherDirectTests(unittest.TestCase):
         self.assertEqual(summary, {"all_stored": 3})
         np.testing.assert_array_equal(rows[:, 5:10], labels)
         np.testing.assert_array_equal(rows[:, 4], [-8.0, 1.0e7, 1.0e7 + 1.0])
+
+    def test_training_raw_time_cut_is_applied_before_conditions(self):
+        labels = np.array([[1, 0, 0, 0, 3]] * 3, dtype=np.int64)
+        values = [
+            np.ones(3), np.zeros(3), np.zeros(3), np.zeros(3),
+            np.array([-8.0, 1.0e7 - 1.0, 1.0e7]),
+            writer.pack_cell_ids(labels),
+        ]
+        rows, summary = mother.tracker_rows(
+            values, 1, mother.TRAINING_RAW_TIME_SELECTION)
+        self.assertEqual(summary, {"all_stored": 3, "selected": 2})
+        np.testing.assert_array_equal(rows[:, 4], [-8.0, 1.0e7 - 1.0])
 
     def test_prepared_manifest_is_accepted_by_input_writer(self):
         with tempfile.TemporaryDirectory() as tmp:

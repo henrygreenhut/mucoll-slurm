@@ -133,18 +133,28 @@ def load_event(directory, split, event_id, construction):
             raise ValueError("Direct mother sources must not claim to be a model holdout")
         if manifest.get("model_split_used") is not False:
             raise ValueError("Direct mother comparison must not use the model split")
-        if manifest.get("analysis_split_used") is not False:
-            raise ValueError("Direct mother comparison must not use an analysis split")
-        if manifest.get("classifier_ready") is not False:
-            raise ValueError("Direct mother diagnostic must not claim classifier readiness")
+        classifier_ready = manifest.get("classifier_ready")
+        if classifier_ready not in (True, False):
+            raise ValueError("Direct mother manifest must declare classifier readiness")
+        if manifest.get("analysis_split_used") is not classifier_ready:
+            raise ValueError("Direct mother analysis-split and classifier flags disagree")
         if manifest.get("physical_event_boundaries") is not True:
             raise ValueError("Direct mother sources must preserve physical event boundaries")
         if (manifest.get("n_files_per_polarity") != 420
                 or manifest.get("norm1_equivalents_per_polarity") != 420):
             raise ValueError("Direct mother events require 420 cycles per polarity")
-        if (manifest.get("hit_selection") != "all-stored"
-                or report.get("hit_selection") != "all-stored"):
-            raise ValueError("Direct mother comparison must retain all stored hits")
+        hit_selection = report.get("hit_selection")
+        if hit_selection not in ("all-stored", TRAINING_RAW_TIME_SELECTION):
+            raise ValueError("Direct mother comparison has an unknown hit selection")
+        if manifest.get("hit_selection") != hit_selection:
+            raise ValueError("Direct mother hit-selection records disagree")
+        expected_raw_selection = {
+            "field": "SimTrackerHit.time", "operator": "<",
+            "threshold_ns": TRAINING_RAW_TIME_MAX_NS, "flight_corrected": False,
+        }
+        if (hit_selection == TRAINING_RAW_TIME_SELECTION
+                and report.get("raw_time_selection") != expected_raw_selection):
+            raise ValueError("Direct mother manifest has a different raw-time selection")
         pool = manifest.get("source_cycle_pool", {})
         available = pool.get("cycles")
         if (pool.get("kind") != "all complete cycles in files.npy"
@@ -153,6 +163,22 @@ def load_event(directory, split, event_id, construction):
                 or len(available) != len(set(available))):
             raise ValueError("Direct mother manifest has an invalid all-cycle pool")
         available = set(available)
+        split_pools = None
+        if classifier_ready:
+            pool_report = manifest.get("analysis_cycle_pools", {})
+            raw_pools = pool_report.get("pools", {})
+            if set(raw_pools) != {"train", "val", "test"}:
+                raise ValueError("Classifier-ready direct mother manifest needs three pools")
+            split_pools = {}
+            for split, saved in raw_pools.items():
+                values = saved.get("cycles")
+                if (not isinstance(values, list) or saved.get("count") != len(values)
+                        or len(values) != len(set(values))):
+                    raise ValueError("Direct mother analysis cycle pool is invalid")
+                split_pools[split] = set(values)
+            if (set().union(*split_pools.values()) != available
+                    or sum(map(len, split_pools.values())) != len(available)):
+                raise ValueError("Direct mother analysis cycle pools overlap or lose cycles")
         events = manifest.get("events")
         if not isinstance(events, list) or not events:
             raise ValueError("Direct mother manifest must contain events")
@@ -160,7 +186,10 @@ def load_event(directory, split, event_id, construction):
         if len(identities) != len(set(identities)):
             raise ValueError("Direct mother event identities are not unique")
         for candidate in events:
-            if candidate.get("split") != "test":
+            candidate_split = candidate.get("split")
+            if classifier_ready and candidate_split not in split_pools:
+                raise ValueError("Direct mother classifier event has an invalid split")
+            if not classifier_ready and candidate_split != "test":
                 raise ValueError("Direct mother diagnostic events must use the test label")
             sources = candidate.get("sources", {})
             if set(sources) != set(POLARITIES):
@@ -174,7 +203,8 @@ def load_event(directory, split, event_id, construction):
                     if source.get("entries") != "all":
                         raise ValueError("Direct mother source must aggregate all mother entries")
                     cycle = source.get("cycle")
-                    if cycle not in available:
+                    allowed = split_pools[candidate_split] if classifier_ready else available
+                    if cycle not in allowed:
                         raise ValueError("Direct mother source is outside the all-cycle pool")
     else:
         manifest = validate_manifest(manifest, directory)
@@ -210,6 +240,15 @@ def load_event(directory, split, event_id, construction):
     if construction == "norm1_mother_direct":
         event["_source_domain"] = manifest.get("source_domain")
         event["_source_cycle_pool"] = manifest["source_cycle_pool"]
+        event["_direct_provenance"] = {
+            "generator_training_holdout": manifest["generator_training_holdout"],
+            "model_split_used": manifest["model_split_used"],
+            "analysis_split_used": manifest["analysis_split_used"],
+            "classifier_ready": manifest["classifier_ready"],
+            "hit_selection": manifest["hit_selection"],
+            "analysis_cycle_pools": manifest.get("analysis_cycle_pools"),
+        }
+        event["_raw_time_selection"] = report.get("raw_time_selection")
     if construction not in ARRAY_SIM_CONSTRUCTIONS:
         event["_hit_selection"] = hit_selection
         event["_raw_time_selection"] = report.get("raw_time_selection")
@@ -427,15 +466,17 @@ def write_input(args):
                 "template_event_id": event["template_event_id"],
             })
         elif args.construction == "norm1_mother_direct":
+            direct = event["_direct_provenance"]
             report.update({
                 "source_domain": event["_source_domain"],
-                "generator_training_holdout": False,
-                "model_split_used": False,
-                "analysis_split_used": False,
-                "classifier_ready": False,
+                "generator_training_holdout": direct["generator_training_holdout"],
+                "model_split_used": direct["model_split_used"],
+                "analysis_split_used": direct["analysis_split_used"],
+                "classifier_ready": direct["classifier_ready"],
                 "physical_event_boundaries": True,
-                "hit_selection": "all-stored",
+                "hit_selection": direct["hit_selection"],
                 "source_cycle_pool": event["_source_cycle_pool"],
+                "analysis_cycle_pools": direct["analysis_cycle_pools"],
                 "n_files_per_polarity": 420,
                 "file_normalization": 1,
                 "norm1_equivalents_per_polarity": 420,
