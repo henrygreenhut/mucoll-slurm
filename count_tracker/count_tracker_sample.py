@@ -39,6 +39,8 @@ from count_tracker_conditions import COLLECTIONS
 FEATURE_ORDER = [0, 4, 1, 2, 3, 6, 7, 8, 9]
 FEATURE_INDICES = {"r": 2, "phi": 3, "z": 4, "side": 5, "layer": 6,
                    "module": 7, "sensor": 8}
+MODEL_FEATURES = ["logE", "t", "r", "local_phi", "z"]
+MODEL_CONDITIONS = ["side", "layer", "module", "sensor"]
 
 
 def require_file(path, label):
@@ -53,6 +55,50 @@ def require_directory(path, label):
     if not path.is_dir():
         raise FileNotFoundError(f"Missing {label}: {path}")
     return path
+
+
+def normalize_sampling_config(config, dataset_info):
+    """Map the recorded legacy or current training config to sampler fields."""
+    if "features" in config:
+        if config.get("features") != MODEL_FEATURES:
+            raise ValueError("This interface requires the five local-phi features")
+        if config.get("conditions") != MODEL_CONDITIONS:
+            raise ValueError("This interface requires side/layer/module/sensor conditions")
+        values = {
+            "schema": "paper1_training_20260921",
+            "seed": config["seed"],
+            "normalization": config["normalization"],
+            "n_classes": dataset_info["n_classes"],
+            "is_y_cond": True,
+            "d_layers": config["layers"],
+            "dim_t": config["dim_t"],
+            "sample_batch_size": config.get("sample_batch_size", config["batch_size"]),
+            "num_timesteps": config["num_timesteps"],
+            "scheduler": config["scheduler"],
+        }
+    else:
+        if config.get("BASIS") != "local_phi" or config.get("Y_MODE") != "cond":
+            raise ValueError("This interface requires a local_phi, condition-trained model")
+        if config.get("FEATURES") != MODEL_FEATURES:
+            raise ValueError("Legacy model has an unexpected feature order")
+        if config.get("CONDITIONS") != MODEL_CONDITIONS:
+            raise ValueError("Legacy model has an unexpected condition order")
+        values = {
+            "schema": "legacy_uppercase",
+            "seed": config["SEED"],
+            "normalization": config["NORMALIZATION"],
+            "n_classes": config["n_classes"],
+            "is_y_cond": config["is_y_cond"],
+            "d_layers": [int(value) for value in config["D_LAYERS"].split(",")],
+            "dim_t": config["DIM_T"],
+            "sample_batch_size": config["SAMPLE_BATCH_SIZE"],
+            "num_timesteps": config["NUM_TIMESTEPS"],
+            "scheduler": config["SCHEDULER"],
+        }
+    if int(values["n_classes"]) != int(dataset_info["n_classes"]):
+        raise ValueError("run_config and dataset info disagree on class count")
+    values["d_layers"] = [int(value) for value in values["d_layers"]]
+    return values
 
 
 def resolve_device(spec):
@@ -161,39 +207,43 @@ class CollectionSampler:
             config = json.load(handle)
         with info_path.open(encoding="utf-8") as handle:
             dataset_info = json.load(handle)
-        if config["BASIS"] != "local_phi" or config["Y_MODE"] != "cond":
-            raise ValueError("This interface requires a local_phi, condition-trained model")
+        sampling_config = normalize_sampling_config(config, dataset_info)
 
         y_lookup = np.load(lookup_path).astype(np.int64)
         if y_lookup.ndim != 2 or y_lookup.shape[1] != 4:
             raise ValueError(f"Expected y_lookup.npy shape (N, 4); found {y_lookup.shape}")
         self.y_lookup = y_lookup
         self.num_features = int(dataset_info["n_num_features"])
+        if self.num_features != len(MODEL_FEATURES):
+            raise ValueError("Dataset has an unexpected numerical feature count")
+        if len(y_lookup) != int(sampling_config["n_classes"]):
+            raise ValueError("y_lookup and recorded class count differ")
+        self.config_schema = sampling_config["schema"]
 
         model_params = {
-            "num_classes": int(config["n_classes"]),
-            "is_y_cond": bool(config["is_y_cond"]),
+            "num_classes": int(sampling_config["n_classes"]),
+            "is_y_cond": bool(sampling_config["is_y_cond"]),
             "rtdl_params": {
-                "d_layers": [int(v) for v in config["D_LAYERS"].split(",")],
+                "d_layers": sampling_config["d_layers"],
                 "dropout": 0.0,
             },
-            "dim_t": int(config["DIM_T"]),
+            "dim_t": int(sampling_config["dim_t"]),
         }
         transform_config = {
-            "seed": int(config["SEED"]),
-            "normalization": config["NORMALIZATION"],
+            "seed": int(sampling_config["seed"]),
+            "normalization": sampling_config["normalization"],
             "num_nan_policy": None, "cat_nan_policy": None,
             "cat_min_frequency": None, "cat_encoding": None, "y_policy": "default",
         }
         self.sample_job_common = {
             "real_data_path": str(self.model_dir / "dataset"),
-            "batch_size": int(config["SAMPLE_BATCH_SIZE"]),
+            "batch_size": int(sampling_config["sample_batch_size"]),
             "model_type": "mlp",
             "model_params": model_params,
             "model_path": str(model_path),
-            "num_timesteps": int(config["NUM_TIMESTEPS"]),
+            "num_timesteps": int(sampling_config["num_timesteps"]),
             "gaussian_loss_type": "mse",
-            "scheduler": config["SCHEDULER"],
+            "scheduler": sampling_config["scheduler"],
             "T_dict": transform_config,
             "num_numerical_features": self.num_features,
             "disbalance": None,

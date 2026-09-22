@@ -182,6 +182,42 @@ class ModelResolutionTests(unittest.TestCase):
                 cts.resolve_model_dir(root, "VBC")
 
 
+class ModelConfigTests(unittest.TestCase):
+    def test_current_training_config_is_mapped_to_sampler_fields(self):
+        config = {
+            "features": cts.MODEL_FEATURES,
+            "conditions": cts.MODEL_CONDITIONS,
+            "seed": 42,
+            "normalization": "quantile",
+            "layers": [2048] * 5,
+            "dim_t": 1024,
+            "batch_size": 4096,
+            "num_timesteps": 1000,
+            "scheduler": "cosine",
+        }
+        result = cts.normalize_sampling_config(config, {"n_classes": 485})
+        self.assertEqual(result["schema"], "paper1_training_20260921")
+        self.assertEqual(result["n_classes"], 485)
+        self.assertEqual(result["sample_batch_size"], 4096)
+        self.assertEqual(result["d_layers"], [2048] * 5)
+        self.assertTrue(result["is_y_cond"])
+
+    def test_legacy_config_remains_supported(self):
+        config = {
+            "BASIS": "local_phi", "Y_MODE": "cond",
+            "FEATURES": cts.MODEL_FEATURES,
+            "CONDITIONS": cts.MODEL_CONDITIONS,
+            "SEED": 42, "NORMALIZATION": "quantile",
+            "n_classes": 485, "is_y_cond": True,
+            "D_LAYERS": "2048,2048", "DIM_T": 1024,
+            "SAMPLE_BATCH_SIZE": 4096, "NUM_TIMESTEPS": 1000,
+            "SCHEDULER": "cosine",
+        }
+        result = cts.normalize_sampling_config(config, {"n_classes": 485})
+        self.assertEqual(result["schema"], "legacy_uppercase")
+        self.assertEqual(result["d_layers"], [2048, 2048])
+
+
 class DriverTests(unittest.TestCase):
     def _make_conditions_dir(self, root, shorts, event_ids):
         report = {"manifest": {"schema_version": 2, "construction": "norm1",
