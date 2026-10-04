@@ -1,0 +1,111 @@
+Preliminary one-track PFN: norm42 reservoir, 2026-09-15
+=========================================================
+
+Question
+--------
+Can a PFN distinguish an individual reconstructed SiTrack from the empirical
+training-array reservoir from one reconstructed from COUNT hits? This is a
+conditional hit-value comparison. Sensor counts come from broad-time-selected
+norm42 templates; empirical SIM hits and COUNT hits share those counts.
+
+Data and split
+--------------
+Read-only export of the ten completed OSCAR reco pairs yielded 897 SIM tracks
+and 839 COUNT tracks. Each track uses the fitted EDM4hep AtIP state. Physical
+observables are pT [GeV], eta, phi [rad], d0 [mm], and z0 [mm]; omega [1/mm]
+is retained in stores for checking the 5 T momentum conversion. PFN inputs are
+ln(pT / GeV), eta, sin(phi), cos(phi), d0, and z0. There is no track-quality cut.
+
+The ten event pairs were permuted with seed 12345 and allocated 6/2/2; all
+tracks from both arms of a pair remain in one split. The assignments are:
+
+  train: 000004, 000008, 000001, 000003, 000007, 000009
+  val:   000006, 000000
+  test:  000002, 000005
+
+             SIM tracks   COUNT tracks
+  train          536           493
+  val            259           233
+  test           102           113
+
+Fit and held-out result
+-----------------------
+The existing EnergyFlow PFN with one track per example was trained locally.
+The Phi and F networks each have three 64-unit layers; F dropout is 0.1.
+Each nonempty event has equal total weight within its class, so events with
+many reconstructed tracks do not dominate the shape comparison. Validation
+loss selected epoch 20 of 40 run; its minimum was 0.7092.
+
+  Event-weighted test ROC AUC: 0.52098
+  Unweighted test ROC AUC:    0.52247
+  Test pair 000002 AUC:       0.49958
+  Test pair 000005 AUC:       0.54086
+
+The held-out ROC and scores show substantial overlap. This split gives no
+clear evidence that the selected single-track features distinguish SIM from
+COUNT. The test has only two event pairs, so its pair-bootstrap interval
+[0.4996, 0.5409] has only three possible event compositions and is not a
+reliable population uncertainty estimate.
+
+No-dropout check
+----------------
+The same stores, 6/2/2 event-pair split, seed, architecture, and learning-rate
+schedule were used again with F dropout changed from 0.1 to 0. Validation
+loss selected epoch 1 of 21 run: minimum 0.7317. Training loss continued to
+fall while validation loss rose, showing overfitting on this small cohort.
+Held-out event-weighted test AUC was 0.5576. The increase over 0.5210 in the
+dropout fit is not evidence of an improvement with only two test event pairs;
+the no-dropout fit has worse validation loss.
+
+Fixed 1e-3 Adam checks
+----------------------
+At the requested standard Adam learning rate, both fits used a constant 1e-3:
+zero warmup steps and zero decay steps. The event-pair split, stores, seed,
+architecture, weighting, and early-stopping rule remained the same. The two
+new fits differ only in F dropout. The older 1e-4 scheduled fits above remain
+available for comparison, but changing their learning-rate policy and rate
+means they are not a controlled dropout comparison with these new fits.
+
+                         F dropout  Selected epoch  Validation loss  Test AUC
+  fixed/no dropout            0.0          6              0.7249       0.5303
+  fixed/dropout               0.1          4              0.7194       0.5485
+
+Validation loss becomes large and erratic after these selected epochs, while
+training loss generally falls. The 1e-3 fits are unstable on this small pilot,
+and both selected validation losses exceed the balanced chance loss ln(2).
+Their two-pair held-out AUC difference is not evidence that dropout improves
+generalization. The paired-event bootstrap intervals are conditional on only
+two test pairs and should not be interpreted as population confidence bounds.
+
+Scope and provenance
+--------------------
+This is not the final two-sample experiment. The original reservoir cohort
+was prepared entirely as test; this pilot reallocated it after empirical
+sampling. Its row pool was not split-isolated for the classifier allocation.
+The reservoir audit records 54,310 empirical-row reuses across ten events
+(about 4.0% of requested hits), including only 36 within-event reuses. Rows
+can therefore recur across this pilot's classifier splits. The underlying
+COUNT model was trained on the same one-event source domain, and reservoir
+pseudo-events do not preserve physical shower correlations. No physical
+SIM-SIM or COUNT-COUNT null was run for this preliminary fit.
+
+Reviewable local artifacts (ignored by git):
+
+  stores_oscar/count_tracker_preliminary/pilot_split.json
+  stores_oscar/count_tracker_preliminary/source_export.json
+  pfn_results/count_tracker_preliminary/single_track_seed12345/summary.json
+  pfn_results/count_tracker_preliminary/single_track_seed12345/history.csv
+  pfn_results/count_tracker_preliminary/single_track_seed12345/test_predictions.npz
+  pfn_results/count_tracker_preliminary/single_track_seed12345/test_roc_scores.png
+  pfn_results/count_tracker_preliminary/single_track_no_dropout_seed12345/summary.json
+  pfn_results/count_tracker_preliminary/single_track_no_dropout_seed12345/loss_vs_epoch.pdf
+  pfn_results/count_tracker_preliminary/single_track_no_dropout_seed12345/test_roc_scores.png
+  pfn_results/count_tracker_preliminary/single_track_fixed1e3_no_dropout_seed12345/summary.json
+  pfn_results/count_tracker_preliminary/single_track_fixed1e3_no_dropout_seed12345/loss_vs_epoch.pdf
+  pfn_results/count_tracker_preliminary/single_track_fixed1e3_no_dropout_seed12345/test_roc_scores.png
+  pfn_results/count_tracker_preliminary/single_track_fixed1e3_dropout01_seed12345/summary.json
+  pfn_results/count_tracker_preliminary/single_track_fixed1e3_dropout01_seed12345/loss_vs_epoch.pdf
+  pfn_results/count_tracker_preliminary/single_track_fixed1e3_dropout01_seed12345/test_roc_scores.png
+
+The export read OSCAR reco files and made no changes there. Both fits and
+plots ran locally. No jobs were submitted, and no git commit or push was made.

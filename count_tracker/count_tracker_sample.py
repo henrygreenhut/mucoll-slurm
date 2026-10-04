@@ -23,6 +23,7 @@ import hashlib
 import importlib.util
 import json
 import os
+from dataclasses import dataclass
 from pathlib import Path
 import sys
 import tempfile
@@ -32,6 +33,7 @@ import numpy as np
 # The collection short -> (system_id, EDM4hep name) map is our repo's single
 # source of truth and matches GenBIB's COLLECTIONS exactly.
 from count_tracker_conditions import COLLECTIONS
+from paper1_data_cache import PreparedPaper1Sampler
 
 
 # --- Vendored from GenBIB-ML sample.py (unchanged numerics) ------------------
@@ -112,11 +114,24 @@ def resolve_device(spec):
     return device
 
 
+@dataclass(frozen=True)
+class Paper1Runtime:
+    """Imported Paper1 sampler and GenBIB geometry helpers."""
+
+    sample: object
+    module: object
+    sampler_path: Path
+    inverse_geometry_transform: object
+    build_xy_z_lookup: object
+    snap_z_to_detector_xy: object
+    apply_material_map_hybrid: object
+
+
 def load_paper1(paper1_root):
     """Import the Paper 1 TabDDPM inference code from the model root.
 
-    Returns ``(sample, inverse_geometry_transform, build_xy_z_lookup,
-    snap_z_to_detector_xy, apply_material_map_hybrid)``.
+    The module itself is retained so the optional data-only cache can invoke
+    the same model and diffusion primitives as its native ``sample`` function.
     """
     paper1_root = require_directory(paper1_root, "Paper 1 repository")
     tabddpm_root = paper1_root / "diffusion" / "tabddpm_official"
@@ -136,12 +151,14 @@ def load_paper1(paper1_root):
     from helpers.flow import build_xy_z_lookup, snap_z_to_detector_xy
     from helpers.material_map import apply_material_map_hybrid
 
-    return (
-        module.sample,
-        inverse_geometry_transform,
-        build_xy_z_lookup,
-        snap_z_to_detector_xy,
-        apply_material_map_hybrid,
+    return Paper1Runtime(
+        sample=module.sample,
+        module=module,
+        sampler_path=sampler_path,
+        inverse_geometry_transform=inverse_geometry_transform,
+        build_xy_z_lookup=build_xy_z_lookup,
+        snap_z_to_detector_xy=snap_z_to_detector_xy,
+        apply_material_map_hybrid=apply_material_map_hybrid,
     )
 
 
@@ -187,15 +204,22 @@ def build_endcap_z_lookup(model_dir, y_lookup, collection_name,
 
 
 class CollectionSampler:
-    """Load one collection's TabDDPM model once, then sample it repeatedly."""
+    """Configure one collection and sample it repeatedly."""
 
-    def __init__(self, short, model_dir, device, paper1):
+    def __init__(self, short, model_dir, device, paper1, inference_cache="off"):
         if short not in COLLECTIONS:
             raise ValueError(f"collection must be one of: {', '.join(COLLECTIONS)}")
         self.short = short
         self.system_id, self.collection_name = COLLECTIONS[short]
         self.device = device
         self.paper1 = paper1
+        self.inference_cache = inference_cache
+        if inference_cache == "off":
+            self.tabddpm_sample = paper1.sample
+        elif inference_cache == "data":
+            self.tabddpm_sample = PreparedPaper1Sampler(paper1.module)
+        else:
+            raise ValueError("inference_cache must be off or data")
         self.model_dir = Path(model_dir).resolve()
 
         model_path = require_file(self.model_dir / "model.pt", "model.pt")
@@ -254,7 +278,7 @@ class CollectionSampler:
         if "Endcap" in self.collection_name:
             self.z_lookup = build_endcap_z_lookup(
                 self.model_dir, y_lookup, self.collection_name,
-                paper1[1], paper1[2],  # inverse_geometry_transform, build_xy_z_lookup
+                paper1.inverse_geometry_transform, paper1.build_xy_z_lookup,
             )
 
     def sample(self, conditions, seed, **kwargs):
@@ -270,8 +294,10 @@ def run_rejection_loop(sampler, conditions, seed, *, oversample=1,
     ``(N * oversample, num_features + 4)`` float32 array whose trailing four
     columns are the requested side/layer/module/sensor.
     """
-    tabddpm_sample, inverse_geometry_transform, _build_xy_z_lookup, \
-        snap_z_to_detector_xy, apply_material_map_hybrid = sampler.paper1
+    tabddpm_sample = sampler.tabddpm_sample
+    inverse_geometry_transform = sampler.paper1.inverse_geometry_transform
+    snap_z_to_detector_xy = sampler.paper1.snap_z_to_detector_xy
+    apply_material_map_hybrid = sampler.paper1.apply_material_map_hybrid
 
     if unfilled_policy not in ("error", "drop"):
         raise ValueError("unfilled_policy must be error or drop")
@@ -458,8 +484,8 @@ def sample_events(args):
 
     model_dirs = {}
     records = {summary["event_id"]: {} for summary in wanted}
-    # Collection-outer, event-inner: load each model at most once; skip events
-    # whose output already exists so reruns and parallel shards are safe.
+    # Collection-outer, event-inner: prepare each collection at most once; skip
+    # existing output so reruns and parallel shards are safe.
     for short in shorts:
         model_dir = resolve_model_dir(args.model_root, short)
         model_dirs[short] = str(model_dir)
@@ -484,6 +510,7 @@ def sample_events(args):
                 "generated_hits": int(generated_hits),
                 "unfilled_hits": int(unfilled_hits),
                 "rejection_rounds": None,
+                "inference_cache": None,
                 "seed": int(event_seed(
                     args.seed_base, construction, cohort, event_id, short)),
                 "unfilled_conditions_path": (
@@ -497,7 +524,10 @@ def sample_events(args):
             continue
         if paper1 is None:
             paper1 = load_paper1(paper1_root)
-        sampler = CollectionSampler(short, model_dir, device, paper1)
+        sampler = CollectionSampler(
+            short, model_dir, device, paper1,
+            inference_cache=getattr(args, "inference_cache", "off"),
+        )
         print(f"[{short}] model {model_dir.name}: {len(pending)}/{len(wanted)} to sample",
               flush=True)
         for summary in pending:
@@ -536,17 +566,29 @@ def sample_events(args):
             records[event_id][short] = {
                 **sampling_report,
                 "seed": int(seed),
+                "inference_cache": getattr(args, "inference_cache", "off"),
                 "unfilled_conditions_path": (
                     str(unfilled_path.resolve()) if len(unfilled) else None),
             }
+        # The next CollectionSampler is constructed before assignment would
+        # otherwise release this one.  Drop the per-collection data cache now
+        # to avoid holding two large transformed datasets at once.
+        del sampler
+        gc.collect()
 
     shard_manifest = {
         "kind": "count_tracker_samples_shard",
         "construction": construction, "cohort": cohort, "split": args.split,
         "collections": shorts, "seed_base": args.seed_base, "max_rounds": args.max_rounds,
         "unfilled_policy": args.unfilled_policy,
+        "inference_cache": getattr(args, "inference_cache", "off"),
         "device": str(device), "vendored_from": "GenBIB-ML sample.py @ a483be7",
         "paper1_root": str(Path(paper1_root).resolve()), "model_dirs": model_dirs,
+        "paper1_sampler_sha256": (
+            sha256_file(paper1.sampler_path)
+            if paper1 is not None and hasattr(paper1, "sampler_path") else None),
+        "data_cache_sha256": sha256_file(
+            Path(__file__).with_name("paper1_data_cache.py")),
         "conditions_dir": str(conditions_dir),
         "conditions_manifest_sha256": sha256_file(conditions_dir / "manifest.json"),
         "hit_selection": report.get("hit_selection"),
@@ -582,6 +624,11 @@ def main():
         help="error, or publish accepted hits and record unresolved conditions",
     )
     parser.add_argument("--device", default="auto", help="auto, cuda, or cpu")
+    parser.add_argument(
+        "--inference-cache", choices=("off", "data"), default="off",
+        help=("data reuses only deterministic Paper1 dataset preparation within "
+              "each collection; off runs the unmodified Paper1 sample callable"),
+    )
     parser.add_argument("--num-shards", type=int, default=1,
                         help="split the event list across this many parallel GPU jobs")
     parser.add_argument("--shard-index", type=int, default=0,

@@ -9,6 +9,7 @@ pfn_results/
 variable_k_results/
 reco_pfn_results/
 stores_oscar/
+particle_gun_tutorial/
 *.out
 *.err
 *.md

@@ -45,8 +45,13 @@ def make_sampler(short, *, num_features=5, y_lookup=None, reject_rows=()):
         state["round"] += 1
         return mask
 
-    paper1 = (tabddpm_sample, inverse_geometry_transform, None, None,
-              apply_material_map_hybrid)
+    paper1 = types.SimpleNamespace(
+        sample=tabddpm_sample,
+        inverse_geometry_transform=inverse_geometry_transform,
+        build_xy_z_lookup=None,
+        snap_z_to_detector_xy=None,
+        apply_material_map_hybrid=apply_material_map_hybrid,
+    )
 
     sampler = types.SimpleNamespace()
     sampler.short = short
@@ -57,6 +62,7 @@ def make_sampler(short, *, num_features=5, y_lookup=None, reject_rows=()):
     sampler.device = types.SimpleNamespace(type="cpu")
     sampler.sample_job_common = {"num_numerical_features": num_features}
     sampler.paper1 = paper1
+    sampler.tabddpm_sample = tabddpm_sample
     sampler.y_lookup = y_lookup if y_lookup is not None else np.zeros((0, 4), dtype=np.int64)
     return sampler
 
@@ -267,6 +273,7 @@ class DriverTests(unittest.TestCase):
                     model_root=str(tmp / "models"), paper1_root=None,
                     collections=shorts, seed_base=0, max_rounds=10,
                     unfilled_policy="error",
+                    inference_cache="off",
                     device="cpu", num_shards=1, shard_index=0, output=str(out_dir))
                 cts.sample_events(args)
             finally:
@@ -316,6 +323,7 @@ class DriverTests(unittest.TestCase):
                 model_root=str(tmp / "models"), paper1_root=None, collections=shorts,
                 seed_base=0, max_rounds=10, device="cpu", num_shards=1, shard_index=0,
                 unfilled_policy="error",
+                inference_cache="off",
                 output=str(out_dir))
             for key, value in overrides.items():
                 setattr(args, key, value)

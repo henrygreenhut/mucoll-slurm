@@ -7,6 +7,7 @@
 #    mkdir -p "$OUTC/logs"
 #    CONDITIONS=$OUTC/norm42/conditions SPLIT=test MODEL_ROOT=$MODELS \
 #    OUTPUT=$OUTC/norm42/count_samples CT_DIR=$CT SEED_BASE=12345 \
+#    INFERENCE_CACHE=data \
 #    EVENT_ID=norm42_cmp_000000 PAPER1_ROOT=/path/to/paper1-inference \
 #      sbatch --array=0-5 -o "$OUTC/logs/sample_%A_%a.out" -e "$OUTC/logs/sample_%A_%a.err" \
 #      $CT/submit_count_tracker_sample.slurm
@@ -35,6 +36,7 @@ GENBIB_ENV="${GENBIB_ENV:-genbib}"
 PAPER1_ROOT="${PAPER1_ROOT:-$MODEL_ROOT/paper1-inference}"
 MAX_ROUNDS="${MAX_ROUNDS:-10000}"
 UNFILLED_POLICY="${UNFILLED_POLICY:-error}"
+INFERENCE_CACHE="${INFERENCE_CACHE:-off}"
 EVENT_ARGS=()
 [ -n "${EVENT_ID:-}" ] && EVENT_ARGS=(--event-id "$EVENT_ID")
 
@@ -52,6 +54,7 @@ cd "$CT_DIR"
 echo "=== count sample: shard ${SHARD_INDEX}/${NUM_SHARDS}  split=${SPLIT} ==="
 echo "conditions=${CONDITIONS}"
 echo "output=${OUTPUT}"
+echo "inference_cache=${INFERENCE_CACHE}"
 python -c "import torch; print('cuda', torch.cuda.is_available(),
           torch.cuda.get_device_name(0) if torch.cuda.is_available() else '')"
 
@@ -61,5 +64,6 @@ python count_tracker_sample.py \
     "${EVENT_ARGS[@]}" \
     --seed-base "$SEED_BASE" \
     --max-rounds "$MAX_ROUNDS" --unfilled-policy "$UNFILLED_POLICY" \
+    --inference-cache "$INFERENCE_CACHE" \
     --num-shards "$NUM_SHARDS" --shard-index "$SHARD_INDEX" \
     --output "$OUTPUT"

@@ -185,6 +185,32 @@ generated, and unfilled counts are recorded in the sampler manifest. The input
 writer separately records the resulting occupancy deficit after CellID
 assignment. This policy must remain fixed across compared COUNT cohorts.
 
+Paper1 data-preparation cache
+-----------------------------
+Paper1's native `sample()` rereads and transforms the complete model dataset,
+then rescans the raw training features, on every rejection round and event.
+For norm42 this repeated deterministic work dominates sampling time. Set
+`--inference-cache data` (or `INFERENCE_CACHE=data` in the SLURM wrapper) to
+prepare those inputs once per tracker collection. The cache does not retain a
+model, diffusion object, generated hit, requested condition, random seed,
+material-map decision, or rejection result. It is released before the next
+collection is constructed. `off` remains the default native path.
+
+Before using the cached path for a production cohort, compare it with the
+native path at two seeds, including a second call that actually reuses the
+cache:
+
+    python "$CT_DIR/validate_count_tracker_cache.py" \
+      --model-root "$MODEL_ROOT" --paper1-root "$PAPER1_ROOT" \
+      --collection VBC \
+      --conditions "$CONDITIONS/test/$EVENT0/VBC_conditions.npy" \
+      --hits 256 --max-rounds 100
+
+The command exits nonzero unless generated rows, rejection reports, and any
+unfilled conditions match exactly and the dataset was prepared only once.
+Sampler manifests record the selected cache mode and SHA-256 hashes of both
+the external Paper1 sampler and the local cache implementation.
+
 After that checkpoint, compare the unchanged prior SIM arm with the new COUNT
 arm using `count_tracker_checkpoint_report.py`. It reports the six collection
 counts before and after digitization, their survival fractions, and the number

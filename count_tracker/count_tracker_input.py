@@ -170,12 +170,12 @@ def load_event(directory, split, event_id, construction):
             if set(raw_pools) != {"train", "val", "test"}:
                 raise ValueError("Classifier-ready direct mother manifest needs three pools")
             split_pools = {}
-            for split, saved in raw_pools.items():
+            for pool_split, saved in raw_pools.items():
                 values = saved.get("cycles")
                 if (not isinstance(values, list) or saved.get("count") != len(values)
                         or len(values) != len(set(values))):
                     raise ValueError("Direct mother analysis cycle pool is invalid")
-                split_pools[split] = set(values)
+                split_pools[pool_split] = set(values)
             if (set().union(*split_pools.values()) != available
                     or sum(map(len, split_pools.values())) != len(available)):
                 raise ValueError("Direct mother analysis cycle pools overlap or lose cycles")

@@ -1,0 +1,2955 @@
+{
+  "manifest": {
+    "schema_version": 2,
+    "cell_id_encoding": "system:0:5,side:5:-2,layer:7:6,module:13:11,sensor:24:8",
+    "construction": "norm42",
+    "n_files_per_polarity": 10,
+    "file_normalization": 42,
+    "norm1_equivalents_per_polarity": 420,
+    "pool": {
+      "path": "/oscar/scratch/hgreenhu/mucoll/libtest/bib_pools_val25_cnt",
+      "manifest_sha256": "08a47ff9536fc0a9707090f1dc3b2b5983dc74ca9ebe0e7ac08d197a9ddcc2ac"
+    },
+    "sampling": {
+      "seed": 12345,
+      "cohort": "cmp",
+      "within_event": "without replacement, independently by polarity",
+      "across_events": "source reuse permitted within each split",
+      "stream": "random.Random(JSON([seed, construction, cohort, split, event_index, polarity]))"
+    },
+    "events": [
+      {
+        "event_id": "norm42_cmp_000000",
+        "split": "test",
+        "sources": {
+          "MUPLUS": [
+            {
+              "cycle": 2084,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2084.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6521,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_6521.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3043,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3043.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6383,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_6383.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2626,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2626.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2975,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2975.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6525,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_6525.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1224,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_1224.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6567,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_6567.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6176,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_6176.edm4hep.root",
+              "entry": 0
+            }
+          ],
+          "MUMINUS": [
+            {
+              "cycle": 3982,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3982.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2565,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2565.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4253,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_4253.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4591,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_4591.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6166,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_6166.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 257,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_257.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5022,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_5022.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4476,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_4476.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1093,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1093.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6474,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_6474.edm4hep.root",
+              "entry": 0
+            }
+          ]
+        }
+      },
+      {
+        "event_id": "norm42_cmp_000001",
+        "split": "test",
+        "sources": {
+          "MUPLUS": [
+            {
+              "cycle": 3068,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3068.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2783,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2783.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 740,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_740.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4835,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_4835.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6487,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_6487.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4876,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_4876.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2405,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2405.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 14,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_14.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 300,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_300.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 123,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_123.edm4hep.root",
+              "entry": 0
+            }
+          ],
+          "MUMINUS": [
+            {
+              "cycle": 269,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_269.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 14,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_14.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 784,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_784.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3702,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3702.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4749,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_4749.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 411,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_411.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 727,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_727.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 257,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_257.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2926,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2926.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3223,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3223.edm4hep.root",
+              "entry": 0
+            }
+          ]
+        }
+      },
+      {
+        "event_id": "norm42_cmp_000002",
+        "split": "test",
+        "sources": {
+          "MUPLUS": [
+            {
+              "cycle": 1587,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_1587.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3657,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3657.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4155,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_4155.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1318,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_1318.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1308,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_1308.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 417,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_417.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1759,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_1759.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4642,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_4642.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1784,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_1784.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6433,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_6433.edm4hep.root",
+              "entry": 0
+            }
+          ],
+          "MUMINUS": [
+            {
+              "cycle": 6423,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_6423.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2816,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2816.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3210,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3210.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1798,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1798.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3651,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3651.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4421,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_4421.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2077,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2077.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4334,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_4334.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4221,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_4221.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 477,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_477.edm4hep.root",
+              "entry": 0
+            }
+          ]
+        }
+      },
+      {
+        "event_id": "norm42_cmp_000003",
+        "split": "test",
+        "sources": {
+          "MUPLUS": [
+            {
+              "cycle": 2221,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2221.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6453,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_6453.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5805,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5805.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6077,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_6077.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5956,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5956.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3169,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3169.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4885,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_4885.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4243,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_4243.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5149,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5149.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 440,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_440.edm4hep.root",
+              "entry": 0
+            }
+          ],
+          "MUMINUS": [
+            {
+              "cycle": 4443,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_4443.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3629,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3629.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 902,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_902.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4298,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_4298.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5166,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_5166.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6014,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_6014.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4270,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_4270.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 925,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_925.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2539,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2539.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1894,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1894.edm4hep.root",
+              "entry": 0
+            }
+          ]
+        }
+      },
+      {
+        "event_id": "norm42_cmp_000004",
+        "split": "test",
+        "sources": {
+          "MUPLUS": [
+            {
+              "cycle": 6317,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_6317.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2405,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2405.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2182,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2182.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3643,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3643.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4601,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_4601.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6423,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_6423.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3344,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3344.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 809,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_809.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1300,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_1300.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3232,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3232.edm4hep.root",
+              "entry": 0
+            }
+          ],
+          "MUMINUS": [
+            {
+              "cycle": 5570,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_5570.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4298,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_4298.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4869,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_4869.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4946,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_4946.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1520,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1520.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3392,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3392.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6166,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_6166.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2791,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2791.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5581,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_5581.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6594,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_6594.edm4hep.root",
+              "entry": 0
+            }
+          ]
+        }
+      },
+      {
+        "event_id": "norm42_cmp_000005",
+        "split": "test",
+        "sources": {
+          "MUPLUS": [
+            {
+              "cycle": 5149,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5149.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2194,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2194.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4040,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_4040.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2292,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2292.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3235,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3235.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2875,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2875.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3486,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3486.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3657,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3657.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5572,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5572.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3171,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3171.edm4hep.root",
+              "entry": 0
+            }
+          ],
+          "MUMINUS": [
+            {
+              "cycle": 5313,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_5313.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5394,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_5394.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6187,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_6187.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1909,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1909.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2207,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2207.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5934,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_5934.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1142,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1142.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4459,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_4459.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1883,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1883.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3646,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3646.edm4hep.root",
+              "entry": 0
+            }
+          ]
+        }
+      },
+      {
+        "event_id": "norm42_cmp_000006",
+        "split": "test",
+        "sources": {
+          "MUPLUS": [
+            {
+              "cycle": 641,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_641.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2467,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2467.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5900,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5900.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2820,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2820.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1853,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_1853.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 671,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_671.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5733,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5733.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3722,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3722.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4693,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_4693.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4641,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_4641.edm4hep.root",
+              "entry": 0
+            }
+          ],
+          "MUMINUS": [
+            {
+              "cycle": 5260,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_5260.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2334,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2334.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2759,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2759.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3524,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3524.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 448,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_448.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6020,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_6020.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2077,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2077.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 420,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_420.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2804,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2804.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1344,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1344.edm4hep.root",
+              "entry": 0
+            }
+          ]
+        }
+      },
+      {
+        "event_id": "norm42_cmp_000007",
+        "split": "test",
+        "sources": {
+          "MUPLUS": [
+            {
+              "cycle": 3778,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3778.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6125,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_6125.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4983,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_4983.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6616,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_6616.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1248,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_1248.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1375,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_1375.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3181,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3181.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5979,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5979.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2870,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2870.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4928,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_4928.edm4hep.root",
+              "entry": 0
+            }
+          ],
+          "MUMINUS": [
+            {
+              "cycle": 1532,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1532.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 566,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_566.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3978,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3978.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6083,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_6083.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1602,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1602.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 603,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_603.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4016,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_4016.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2353,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2353.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2456,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2456.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6101,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_6101.edm4hep.root",
+              "entry": 0
+            }
+          ]
+        }
+      },
+      {
+        "event_id": "norm42_cmp_000008",
+        "split": "test",
+        "sources": {
+          "MUPLUS": [
+            {
+              "cycle": 4424,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_4424.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5603,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5603.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1429,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_1429.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4556,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_4556.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1314,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_1314.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 653,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_653.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2457,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2457.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4682,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_4682.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6433,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_6433.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 216,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_216.edm4hep.root",
+              "entry": 0
+            }
+          ],
+          "MUMINUS": [
+            {
+              "cycle": 6036,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_6036.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 122,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_122.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6197,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_6197.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5252,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_5252.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3775,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3775.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2712,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2712.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1602,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1602.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 805,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_805.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2163,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2163.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6524,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_6524.edm4hep.root",
+              "entry": 0
+            }
+          ]
+        }
+      },
+      {
+        "event_id": "norm42_cmp_000009",
+        "split": "test",
+        "sources": {
+          "MUPLUS": [
+            {
+              "cycle": 395,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_395.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5036,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5036.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 16,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_16.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5650,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5650.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 241,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_241.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1352,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_1352.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2652,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2652.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1974,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_1974.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6086,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_6086.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 954,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_954.edm4hep.root",
+              "entry": 0
+            }
+          ],
+          "MUMINUS": [
+            {
+              "cycle": 3423,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3423.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1256,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1256.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3722,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3722.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2457,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2457.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 440,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_440.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3424,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3424.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3485,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3485.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5913,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_5913.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6007,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_6007.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6462,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_6462.edm4hep.root",
+              "entry": 0
+            }
+          ]
+        }
+      },
+      {
+        "event_id": "norm42_cmp_000010",
+        "split": "test",
+        "sources": {
+          "MUPLUS": [
+            {
+              "cycle": 666,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_666.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6588,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_6588.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 762,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_762.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3464,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3464.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1028,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_1028.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5438,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5438.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2814,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2814.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6626,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_6626.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1700,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_1700.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3946,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3946.edm4hep.root",
+              "entry": 0
+            }
+          ],
+          "MUMINUS": [
+            {
+              "cycle": 6229,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_6229.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2652,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2652.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5678,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_5678.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5852,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_5852.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5086,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_5086.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6250,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_6250.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4799,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_4799.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5146,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_5146.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 83,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_83.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1239,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1239.edm4hep.root",
+              "entry": 0
+            }
+          ]
+        }
+      },
+      {
+        "event_id": "norm42_cmp_000011",
+        "split": "test",
+        "sources": {
+          "MUPLUS": [
+            {
+              "cycle": 565,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_565.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3501,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3501.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1772,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_1772.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2735,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2735.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 319,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_319.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1095,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_1095.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1062,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_1062.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5341,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5341.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2037,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2037.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2238,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2238.edm4hep.root",
+              "entry": 0
+            }
+          ],
+          "MUMINUS": [
+            {
+              "cycle": 4110,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_4110.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5110,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_5110.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4876,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_4876.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4427,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_4427.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2092,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2092.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 957,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_957.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 703,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_703.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1038,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1038.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6391,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_6391.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3521,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3521.edm4hep.root",
+              "entry": 0
+            }
+          ]
+        }
+      },
+      {
+        "event_id": "norm42_cmp_000012",
+        "split": "test",
+        "sources": {
+          "MUPLUS": [
+            {
+              "cycle": 3328,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3328.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5209,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5209.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2792,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2792.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 234,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_234.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2698,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2698.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 25,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_25.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3455,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3455.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3309,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3309.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3981,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3981.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2687,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2687.edm4hep.root",
+              "entry": 0
+            }
+          ],
+          "MUMINUS": [
+            {
+              "cycle": 699,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_699.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6257,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_6257.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6005,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_6005.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 862,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_862.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1250,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1250.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 231,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_231.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2526,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2526.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 807,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_807.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3203,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3203.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4218,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_4218.edm4hep.root",
+              "entry": 0
+            }
+          ]
+        }
+      },
+      {
+        "event_id": "norm42_cmp_000013",
+        "split": "test",
+        "sources": {
+          "MUPLUS": [
+            {
+              "cycle": 3651,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3651.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5901,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5901.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4201,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_4201.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4270,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_4270.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 692,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_692.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 630,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_630.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3874,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3874.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 273,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_273.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4893,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_4893.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4809,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_4809.edm4hep.root",
+              "entry": 0
+            }
+          ],
+          "MUMINUS": [
+            {
+              "cycle": 6157,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_6157.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4647,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_4647.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 493,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_493.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6007,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_6007.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1142,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1142.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5475,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_5475.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4705,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_4705.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1350,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1350.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 235,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_235.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2071,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2071.edm4hep.root",
+              "entry": 0
+            }
+          ]
+        }
+      },
+      {
+        "event_id": "norm42_cmp_000014",
+        "split": "test",
+        "sources": {
+          "MUPLUS": [
+            {
+              "cycle": 1839,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_1839.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2150,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2150.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3145,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3145.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 565,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_565.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 346,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_346.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5398,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5398.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1968,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_1968.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5223,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5223.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5287,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5287.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5263,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5263.edm4hep.root",
+              "entry": 0
+            }
+          ],
+          "MUMINUS": [
+            {
+              "cycle": 700,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_700.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 310,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_310.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1587,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1587.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 417,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_417.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6128,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_6128.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 920,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_920.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1965,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1965.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3153,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3153.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5522,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_5522.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1275,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1275.edm4hep.root",
+              "entry": 0
+            }
+          ]
+        }
+      },
+      {
+        "event_id": "norm42_cmp_000015",
+        "split": "test",
+        "sources": {
+          "MUPLUS": [
+            {
+              "cycle": 141,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_141.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 28,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_28.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3560,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3560.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1541,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_1541.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1045,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_1045.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2626,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2626.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2698,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2698.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6486,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_6486.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3594,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3594.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6160,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_6160.edm4hep.root",
+              "entry": 0
+            }
+          ],
+          "MUMINUS": [
+            {
+              "cycle": 3298,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3298.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3504,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3504.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2541,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2541.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5999,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_5999.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1028,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1028.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3381,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3381.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1541,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1541.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4561,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_4561.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2885,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2885.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3173,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3173.edm4hep.root",
+              "entry": 0
+            }
+          ]
+        }
+      },
+      {
+        "event_id": "norm42_cmp_000016",
+        "split": "test",
+        "sources": {
+          "MUPLUS": [
+            {
+              "cycle": 1103,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_1103.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4803,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_4803.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5694,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5694.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 796,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_796.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4215,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_4215.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1092,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_1092.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2792,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2792.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5669,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5669.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5509,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5509.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5676,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5676.edm4hep.root",
+              "entry": 0
+            }
+          ],
+          "MUMINUS": [
+            {
+              "cycle": 1235,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1235.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3596,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3596.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4579,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_4579.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 793,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_793.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 363,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_363.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5449,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_5449.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1234,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1234.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2698,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2698.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 341,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_341.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 94,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_94.edm4hep.root",
+              "entry": 0
+            }
+          ]
+        }
+      },
+      {
+        "event_id": "norm42_cmp_000017",
+        "split": "test",
+        "sources": {
+          "MUPLUS": [
+            {
+              "cycle": 6024,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_6024.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3643,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3643.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3245,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3245.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3150,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3150.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2791,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2791.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2938,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2938.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4270,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_4270.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4869,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_4869.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5152,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5152.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5560,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5560.edm4hep.root",
+              "entry": 0
+            }
+          ],
+          "MUMINUS": [
+            {
+              "cycle": 3182,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3182.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2769,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2769.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3043,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3043.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1455,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1455.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3160,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3160.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2807,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2807.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4705,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_4705.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3832,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3832.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 869,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_869.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6115,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_6115.edm4hep.root",
+              "entry": 0
+            }
+          ]
+        }
+      },
+      {
+        "event_id": "norm42_cmp_000018",
+        "split": "test",
+        "sources": {
+          "MUPLUS": [
+            {
+              "cycle": 5095,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5095.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1280,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_1280.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2701,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2701.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5956,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5956.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3351,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3351.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3850,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3850.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3233,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3233.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2903,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2903.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3204,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3204.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 214,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_214.edm4hep.root",
+              "entry": 0
+            }
+          ],
+          "MUMINUS": [
+            {
+              "cycle": 4411,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_4411.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 97,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_97.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 4253,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_4253.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2037,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2037.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5086,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_5086.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2783,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2783.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1096,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1096.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 699,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_699.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3612,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_3612.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5522,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_5522.edm4hep.root",
+              "entry": 0
+            }
+          ]
+        }
+      },
+      {
+        "event_id": "norm42_cmp_000019",
+        "split": "test",
+        "sources": {
+          "MUPLUS": [
+            {
+              "cycle": 691,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_691.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3761,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3761.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3898,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3898.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5915,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5915.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 6336,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_6336.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5086,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_5086.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2737,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_2737.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3400,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3400.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 3554,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_3554.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 971,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUPLUS/bib_sim_971.edm4hep.root",
+              "entry": 0
+            }
+          ],
+          "MUMINUS": [
+            {
+              "cycle": 141,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_141.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1872,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1872.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1894,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1894.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 10,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_10.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 180,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_180.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2149,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2149.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 1188,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_1188.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 2624,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_2624.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 568,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_568.edm4hep.root",
+              "entry": 0
+            },
+            {
+              "cycle": 5846,
+              "path": "/oscar/data/mleblan6/mucoll/bib/SIM/MUMINUS/bib_sim_5846.edm4hep.root",
+              "entry": 0
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "input_manifest_sha256": "2c66f9c83e5e17a0c9af7664be42e99c096ae14c1cb0f7acf59dc83dc14c3932",
+  "hit_selection": "all-stored",
+  "selection": "all stored SIM tracker hits; no time, energy, or spatial cut",
+  "condition_columns": [
+    "system",
+    "side",
+    "layer",
+    "module",
+    "sensor"
+  ],
+  "events": [
+    {
+      "event_id": "norm42_cmp_000000",
+      "split": "test",
+      "collections": {
+        "VBC": {
+          "hits": 15793,
+          "occupied_sensors": 478,
+          "sha256": "6c8b1b70cb44be1804306ab2d704a55c4557395845bf65fe232e4f8d03d427b4"
+        },
+        "VEC": {
+          "hits": 28855,
+          "occupied_sensors": 256,
+          "sha256": "b2bd42a97f63dd90abf377b8ff008564f6517cb76ac24c5816dc345843e201a1"
+        },
+        "ITBC": {
+          "hits": 44613,
+          "occupied_sensors": 7900,
+          "sha256": "564cee88c13e44da36d33ff51077d4b53e725d66348462ffcfd1890f3dd6a25b"
+        },
+        "ITEC": {
+          "hits": 26738,
+          "occupied_sensors": 1187,
+          "sha256": "358b6e3424809e48aa837924ddf149a0446e7fe667e86d793e2e7a184163dba9"
+        },
+        "OTBC": {
+          "hits": 76445,
+          "occupied_sensors": 34843,
+          "sha256": "e444ff926908c76cf2507c5f9459c8d13abcae02ba9ad4603dd8389bd761157b"
+        },
+        "OTEC": {
+          "hits": 50005,
+          "occupied_sensors": 1152,
+          "sha256": "7f09075236c81dadd6889497eb27af50c74c1d13377e7509bd71b26781a9f1ea"
+        }
+      }
+    },
+    {
+      "event_id": "norm42_cmp_000001",
+      "split": "test",
+      "collections": {
+        "VBC": {
+          "hits": 14205,
+          "occupied_sensors": 482,
+          "sha256": "f90eafe168448e3d39072c2e3efc606da969da051991ed95b4b1ffa3e675eaf7"
+        },
+        "VEC": {
+          "hits": 31453,
+          "occupied_sensors": 256,
+          "sha256": "4087ab3cf9d7c847cf07d9b4674f551b02fe965efb357fa50f249a3a70328e38"
+        },
+        "ITBC": {
+          "hits": 51435,
+          "occupied_sensors": 8142,
+          "sha256": "58fa0a0cd8bfe863deea10f4354874ad3ca1f51b8052c4bbaef35552af9c1a34"
+        },
+        "ITEC": {
+          "hits": 27852,
+          "occupied_sensors": 1191,
+          "sha256": "f793c0bf4f6c700505eae70b9c7811e515a5e731c2c1eb81e077c79ab607598c"
+        },
+        "OTBC": {
+          "hits": 78651,
+          "occupied_sensors": 34891,
+          "sha256": "0a0c078db96d6e2532e03b69c47c6588f101d9125f874e14c54e9be2bc67018e"
+        },
+        "OTEC": {
+          "hits": 48180,
+          "occupied_sensors": 1152,
+          "sha256": "badefb46c0b25e53c85015530747982444ce2ef2f36882f8e8408df21d704fdb"
+        }
+      }
+    },
+    {
+      "event_id": "norm42_cmp_000002",
+      "split": "test",
+      "collections": {
+        "VBC": {
+          "hits": 9186,
+          "occupied_sensors": 482,
+          "sha256": "0496469663fb4d457534083bbc71799da24e915f980d8bfce95daccd859f148b"
+        },
+        "VEC": {
+          "hits": 26121,
+          "occupied_sensors": 256,
+          "sha256": "6699faf6a8e80336514d58009597dcd66604afd47b0b2c990b9f6c91535b6d48"
+        },
+        "ITBC": {
+          "hits": 39429,
+          "occupied_sensors": 7676,
+          "sha256": "bbfc31e6a9cc03654534a4446e29cac54902650c85f8698d932efb51f980f7b4"
+        },
+        "ITEC": {
+          "hits": 24976,
+          "occupied_sensors": 1186,
+          "sha256": "41067ee2e264843bbd8724b461f8f7855c2baf3838446c999f280c6ce44a51c8"
+        },
+        "OTBC": {
+          "hits": 67969,
+          "occupied_sensors": 32129,
+          "sha256": "569d8d6409b11a8c63169f352618cbad7c93773708505dbb6a2308a58d0e83fa"
+        },
+        "OTEC": {
+          "hits": 45538,
+          "occupied_sensors": 1152,
+          "sha256": "b66838a18f4039eaa6fe24d4cccf774fa380ad44ae0e51cc71dfb8a3f06ad326"
+        }
+      }
+    },
+    {
+      "event_id": "norm42_cmp_000003",
+      "split": "test",
+      "collections": {
+        "VBC": {
+          "hits": 12465,
+          "occupied_sensors": 481,
+          "sha256": "b655e2502ec3bbab0ee69050d43f50b991535af9b7917130e51e9a42bc5b224d"
+        },
+        "VEC": {
+          "hits": 25675,
+          "occupied_sensors": 256,
+          "sha256": "d0f8baa7a77c7010cf5c500f146d775f67186d7c59f802bced2717df44272120"
+        },
+        "ITBC": {
+          "hits": 42161,
+          "occupied_sensors": 7745,
+          "sha256": "1acc382c1934591ce35683f2a108cf67983f872cfbe3bfc463c56fb1c2d600e7"
+        },
+        "ITEC": {
+          "hits": 24508,
+          "occupied_sensors": 1180,
+          "sha256": "3ba6a54f4ec37f219876229d048d499386c0e6b18042edd91751f1a5e6c31a20"
+        },
+        "OTBC": {
+          "hits": 68645,
+          "occupied_sensors": 32154,
+          "sha256": "b8a411558f3afcf9adf19d4d5a3e8097d1dc428c689132964b8de2396104d4aa"
+        },
+        "OTEC": {
+          "hits": 42869,
+          "occupied_sensors": 1152,
+          "sha256": "5f4ea5732cbde97d85e79eb6f2408d917f74685654b69ff4161616ffe55f8aed"
+        }
+      }
+    },
+    {
+      "event_id": "norm42_cmp_000004",
+      "split": "test",
+      "collections": {
+        "VBC": {
+          "hits": 8740,
+          "occupied_sensors": 482,
+          "sha256": "022bf23a9d67feec27e46b3757474ab4b4d12074869525324e436f9edf83fe42"
+        },
+        "VEC": {
+          "hits": 23257,
+          "occupied_sensors": 256,
+          "sha256": "478559dc9fd3a6c3d23301f3005bf548ab455fbabbbfbd0b6991101dded14d43"
+        },
+        "ITBC": {
+          "hits": 39296,
+          "occupied_sensors": 7656,
+          "sha256": "7ca2d8849d81abb751e19821d4b6fc864d7832a4ab85907a416365dd410a3119"
+        },
+        "ITEC": {
+          "hits": 25914,
+          "occupied_sensors": 1187,
+          "sha256": "5743ea4dc914e00156e204c04446931faffc88bde35284343653965bed56efbb"
+        },
+        "OTBC": {
+          "hits": 67926,
+          "occupied_sensors": 32130,
+          "sha256": "4fa509f3cd123499087e6afc37a2a7e38d7ac8da7ca6e730d9f2718657024889"
+        },
+        "OTEC": {
+          "hits": 45653,
+          "occupied_sensors": 1152,
+          "sha256": "f94a10dbd7aa40f14dadc8361352dd062e5e3db774ee4372945c89af62a713cc"
+        }
+      }
+    },
+    {
+      "event_id": "norm42_cmp_000005",
+      "split": "test",
+      "collections": {
+        "VBC": {
+          "hits": 10728,
+          "occupied_sensors": 481,
+          "sha256": "83eec517e2c15459e4555507b34fe2842ede1d3e0f76e3c830cd0fcf4e254f3a"
+        },
+        "VEC": {
+          "hits": 24820,
+          "occupied_sensors": 256,
+          "sha256": "71e1dc8055a9d66c91f3b6c2f067982d522b48679ea2d935075f5dc886aa8dad"
+        },
+        "ITBC": {
+          "hits": 42721,
+          "occupied_sensors": 7883,
+          "sha256": "a2baad035fcba8992c62856bbec1f0ab79ffdceda003fa859a94bd88320c0d70"
+        },
+        "ITEC": {
+          "hits": 24315,
+          "occupied_sensors": 1180,
+          "sha256": "4422a2d484b5d7074436b73e0bf46e25315450256ef732a93eab2bb6ca4ee3ad"
+        },
+        "OTBC": {
+          "hits": 69856,
+          "occupied_sensors": 32673,
+          "sha256": "dabe40b730c18ae6f1c42cf0cad9da6c31bb1ec8e1438d8ef6b7782d15325472"
+        },
+        "OTEC": {
+          "hits": 43346,
+          "occupied_sensors": 1152,
+          "sha256": "24256f01cf2740aa6e18c0cfdd00a521ea5280abf9ab77d25eadd12f6581ef02"
+        }
+      }
+    },
+    {
+      "event_id": "norm42_cmp_000006",
+      "split": "test",
+      "collections": {
+        "VBC": {
+          "hits": 12993,
+          "occupied_sensors": 484,
+          "sha256": "d1f961353f53278c8998473960fd1e0d2718fb2dcb331a6032a879d19b68c8af"
+        },
+        "VEC": {
+          "hits": 37154,
+          "occupied_sensors": 256,
+          "sha256": "6154aa37acee25a7ac9b27436f4e2e79d5fa14ae1f59daf7bc10427106c47bae"
+        },
+        "ITBC": {
+          "hits": 60493,
+          "occupied_sensors": 8280,
+          "sha256": "a50e0aa676bcc40fe362ace3dfcc7645a52344498871a849b84894d7200be38b"
+        },
+        "ITEC": {
+          "hits": 26077,
+          "occupied_sensors": 1185,
+          "sha256": "4c70ffbd99640da44d0075006dd236da1e8992d3a283e2832f84605657457910"
+        },
+        "OTBC": {
+          "hits": 83991,
+          "occupied_sensors": 35831,
+          "sha256": "d790b5358880cf230ed50f479a94771aef9ca61ad34d26273339fc74b720ff5b"
+        },
+        "OTEC": {
+          "hits": 43839,
+          "occupied_sensors": 1152,
+          "sha256": "08e9279bb15938f5f792e20df8861332701f28989680b6f31e3c3e9b1eaca9f9"
+        }
+      }
+    },
+    {
+      "event_id": "norm42_cmp_000007",
+      "split": "test",
+      "collections": {
+        "VBC": {
+          "hits": 13067,
+          "occupied_sensors": 483,
+          "sha256": "d8f314ac144751e7e7988344fc64cace17eb2f6222fa4e6ee908be066c474bb2"
+        },
+        "VEC": {
+          "hits": 28315,
+          "occupied_sensors": 256,
+          "sha256": "08c31838d722d7a4d901adf713831d59ef52b146bc7f6b73163cc5a2b6e6c778"
+        },
+        "ITBC": {
+          "hits": 45885,
+          "occupied_sensors": 7808,
+          "sha256": "f440846c95bedbe5f3b75968df0cb93e7922e11e2aaabba8fb6e53847df296a4"
+        },
+        "ITEC": {
+          "hits": 23354,
+          "occupied_sensors": 1181,
+          "sha256": "b18b867151b7e95f61b3c042aac2f4f39c55bbfd5c4bc94468e3e5942665f042"
+        },
+        "OTBC": {
+          "hits": 68886,
+          "occupied_sensors": 31874,
+          "sha256": "cffc211d584e4b35cab1afe42eb1af1c3b1b9973a131fde69468f0c1eba48d67"
+        },
+        "OTEC": {
+          "hits": 42164,
+          "occupied_sensors": 1152,
+          "sha256": "d3dbaf8a51ee571a6d1d19f40469e0a19ca7d3b70cde413975ab26612ea50ad5"
+        }
+      }
+    },
+    {
+      "event_id": "norm42_cmp_000008",
+      "split": "test",
+      "collections": {
+        "VBC": {
+          "hits": 12865,
+          "occupied_sensors": 477,
+          "sha256": "9b4e4c346b82d0eb4510ea19d09e94b951177b7b53dd2d3fadbe36ec2f2120c2"
+        },
+        "VEC": {
+          "hits": 23917,
+          "occupied_sensors": 256,
+          "sha256": "dafb76c424fe383172f699b7477600534e22257a5e51fdd4eaba8ff4c1ace840"
+        },
+        "ITBC": {
+          "hits": 37849,
+          "occupied_sensors": 7487,
+          "sha256": "375db25f73a7b4f69be3442434a68fef80a294ea95e25f8dd17cbbc91fcd0bef"
+        },
+        "ITEC": {
+          "hits": 21301,
+          "occupied_sensors": 1182,
+          "sha256": "62942a8fb19ce7c3e422c3c783587350b6dc62d1064bb5f8620fefe2a4ef8a6a"
+        },
+        "OTBC": {
+          "hits": 60801,
+          "occupied_sensors": 29559,
+          "sha256": "f5d74936d2462026b59ffc1230364336086778087280f80b26f48113a3e3a35b"
+        },
+        "OTEC": {
+          "hits": 38765,
+          "occupied_sensors": 1152,
+          "sha256": "4f6f0c88e660fd0862c75edb86e6ea3824603c31a9e8a8017a2fdceca91a0add"
+        }
+      }
+    },
+    {
+      "event_id": "norm42_cmp_000009",
+      "split": "test",
+      "collections": {
+        "VBC": {
+          "hits": 11854,
+          "occupied_sensors": 482,
+          "sha256": "bc01c1db06a094d8d87ac4d9c06396a369488a99f839dee3e349f35c1a9478fd"
+        },
+        "VEC": {
+          "hits": 28815,
+          "occupied_sensors": 256,
+          "sha256": "59c6d498216082cf6db3d43fd3ecf51a6aeb2f984ec8b636243cb2936d35373f"
+        },
+        "ITBC": {
+          "hits": 44245,
+          "occupied_sensors": 7848,
+          "sha256": "49121ac45e3895e9f8fed8bfd754f28367f4d746ae4923350df4084a84474318"
+        },
+        "ITEC": {
+          "hits": 22486,
+          "occupied_sensors": 1182,
+          "sha256": "48e9b2394f621a903eacb086e72f1d5c680606e1e31517789e5f68e82bd25057"
+        },
+        "OTBC": {
+          "hits": 69225,
+          "occupied_sensors": 32070,
+          "sha256": "b9525c6b8f3f774b6804ff290976b38e01bb71fb46e5793caf03f5c34ebe854c"
+        },
+        "OTEC": {
+          "hits": 44100,
+          "occupied_sensors": 1152,
+          "sha256": "f9ec1c224bf6e8d8501ffa4b8178f074227f74613254ae2a763947799a55ac3f"
+        }
+      }
+    },
+    {
+      "event_id": "norm42_cmp_000010",
+      "split": "test",
+      "collections": {
+        "VBC": {
+          "hits": 13310,
+          "occupied_sensors": 484,
+          "sha256": "ad8c76695dda8ca66aac0506b6917961db5c40829158f500a379888611c5073b"
+        },
+        "VEC": {
+          "hits": 36103,
+          "occupied_sensors": 256,
+          "sha256": "ba16b8fcf60bf95ff98de09ecd9eb571b6fc785bc75387c86972e38c891ba458"
+        },
+        "ITBC": {
+          "hits": 56378,
+          "occupied_sensors": 8277,
+          "sha256": "8175d121542e48e1d8274ce84d79658141d09b804963cab6cab41aba6201044c"
+        },
+        "ITEC": {
+          "hits": 26675,
+          "occupied_sensors": 1183,
+          "sha256": "fcb2f1b8ab77371d5e2c0ba5497a959d60e37963b09bd58d12073a71d54dd14b"
+        },
+        "OTBC": {
+          "hits": 83930,
+          "occupied_sensors": 36288,
+          "sha256": "73772aa0c6a676c43a2c0083efab24d392519398621106ee632f695914a00a24"
+        },
+        "OTEC": {
+          "hits": 47187,
+          "occupied_sensors": 1152,
+          "sha256": "d6e6710ae85d43251fc9b69b438b566a6529d066c41619ee29d9f7b92784de8a"
+        }
+      }
+    },
+    {
+      "event_id": "norm42_cmp_000011",
+      "split": "test",
+      "collections": {
+        "VBC": {
+          "hits": 15488,
+          "occupied_sensors": 483,
+          "sha256": "3a218feb6202a5740e6f5d8b60b284c55e032bb4c242998cf3b8991bed81ad85"
+        },
+        "VEC": {
+          "hits": 35753,
+          "occupied_sensors": 256,
+          "sha256": "575af2a2cd962254d7a4073a871e3e0e409bd3d4a70cfd97848c98d6959b6b45"
+        },
+        "ITBC": {
+          "hits": 54548,
+          "occupied_sensors": 8174,
+          "sha256": "712fc5fcb905f5d997b756c924b7c669a2d56993cc3c20a5249b111116407a9b"
+        },
+        "ITEC": {
+          "hits": 25819,
+          "occupied_sensors": 1188,
+          "sha256": "657d2d468e01d7a92ef430b56995e860bb499475c4a0936ffeff0fd0149ece94"
+        },
+        "OTBC": {
+          "hits": 79133,
+          "occupied_sensors": 34604,
+          "sha256": "eb07426e91256030a80a2b116a45340167b7f75d854d93b67b560e394d5a96fd"
+        },
+        "OTEC": {
+          "hits": 45877,
+          "occupied_sensors": 1152,
+          "sha256": "61cb264292465111b173a18ba471759781d872522a687732254c7abd0feb7f51"
+        }
+      }
+    },
+    {
+      "event_id": "norm42_cmp_000012",
+      "split": "test",
+      "collections": {
+        "VBC": {
+          "hits": 11825,
+          "occupied_sensors": 484,
+          "sha256": "18eab1a134937539cbe3e231c1b1e7e14989ea48633a8bbce59622e9627c3338"
+        },
+        "VEC": {
+          "hits": 30933,
+          "occupied_sensors": 256,
+          "sha256": "58fd4d03bef2cf04da52070a8f919349d7fa061039c8d755448f0aca54d32a78"
+        },
+        "ITBC": {
+          "hits": 53060,
+          "occupied_sensors": 8107,
+          "sha256": "d824601bec8fb94b81acbf00f1ea09fce112cef243d76048011226be80f06047"
+        },
+        "ITEC": {
+          "hits": 24781,
+          "occupied_sensors": 1186,
+          "sha256": "c766b91e93e385c0f6886bde8f2fbb0899ec5101d34bf4ebf967c143ca98b6a5"
+        },
+        "OTBC": {
+          "hits": 77986,
+          "occupied_sensors": 34588,
+          "sha256": "dfc1846c1c2e8f3484272dbf92cb664926f369ee1124aef5bd0d824080ab5813"
+        },
+        "OTEC": {
+          "hits": 45315,
+          "occupied_sensors": 1152,
+          "sha256": "94840b9d298dee8c2a7f0f8c4c466aa52e16c9b3ec8d65360fc447c2f78a93e1"
+        }
+      }
+    },
+    {
+      "event_id": "norm42_cmp_000013",
+      "split": "test",
+      "collections": {
+        "VBC": {
+          "hits": 11019,
+          "occupied_sensors": 483,
+          "sha256": "1f924fe8fd399123049993c7217d537ac9488127a948f6b4b3ac0e7a75821117"
+        },
+        "VEC": {
+          "hits": 27864,
+          "occupied_sensors": 256,
+          "sha256": "9621a7275f6ef76fd18e16a1a8a464625d47679fc94d4da345d2a05e1ccdaa66"
+        },
+        "ITBC": {
+          "hits": 47050,
+          "occupied_sensors": 8014,
+          "sha256": "a1e50582d2bcd5f0df4c4c912e51d4b6e89e9588dc2938de3060878514e41018"
+        },
+        "ITEC": {
+          "hits": 25402,
+          "occupied_sensors": 1183,
+          "sha256": "7f85ed3935674faa1373a7edca0bb72aef5e88d0db1cc1386e9fa7dcb1f221ab"
+        },
+        "OTBC": {
+          "hits": 76230,
+          "occupied_sensors": 34505,
+          "sha256": "7ce443aee88eb65c4d6cd98f254be3258c2c183d92e9978e080fa035f17011fd"
+        },
+        "OTEC": {
+          "hits": 48525,
+          "occupied_sensors": 1152,
+          "sha256": "32831cfac5b588ff05b879018013585859668703e5f78eb17c893d2aa5f8b6a0"
+        }
+      }
+    },
+    {
+      "event_id": "norm42_cmp_000014",
+      "split": "test",
+      "collections": {
+        "VBC": {
+          "hits": 8070,
+          "occupied_sensors": 477,
+          "sha256": "4f511268f121b95e9b2454ece7cc28760bc1e02c6d178f871d46afa757724494"
+        },
+        "VEC": {
+          "hits": 20824,
+          "occupied_sensors": 256,
+          "sha256": "1c329ae1728d343af64797f7ba99fd737e83302f811d3499f7257671469c29f1"
+        },
+        "ITBC": {
+          "hits": 34928,
+          "occupied_sensors": 7244,
+          "sha256": "afcf08a01995379b6900a83271981760ac95353178cb942ca164388bbbbaf15a"
+        },
+        "ITEC": {
+          "hits": 19788,
+          "occupied_sensors": 1184,
+          "sha256": "75b0bdb44b2e3245be9bc6b3fcafd023cacf6716695700319571ee595d6ba616"
+        },
+        "OTBC": {
+          "hits": 56611,
+          "occupied_sensors": 28012,
+          "sha256": "c92e79099a56441b6f1f08775698f8002716d7d66f68c8117902fce697491e38"
+        },
+        "OTEC": {
+          "hits": 36087,
+          "occupied_sensors": 1152,
+          "sha256": "eb46becda84e989436b8a2b6b5e20cf0f82d30a60ad22f0c70c0f3a6d7db0e8a"
+        }
+      }
+    },
+    {
+      "event_id": "norm42_cmp_000015",
+      "split": "test",
+      "collections": {
+        "VBC": {
+          "hits": 11123,
+          "occupied_sensors": 482,
+          "sha256": "e1225635733ade0198fd5d292a89a83bf503e41253be2d3e50ac523d3155edde"
+        },
+        "VEC": {
+          "hits": 28642,
+          "occupied_sensors": 256,
+          "sha256": "76e22a9ef4473734780475aa9c9772d62f30b167961908f481391bec92941c23"
+        },
+        "ITBC": {
+          "hits": 45553,
+          "occupied_sensors": 7961,
+          "sha256": "8f67403cdc8a8b39fa4fe92ba1c2d75b73c613221d396583a061adfde2e58541"
+        },
+        "ITEC": {
+          "hits": 25020,
+          "occupied_sensors": 1188,
+          "sha256": "87301be6e5ffbf1188420739b189aa2bc95d17201b7089fd6dbf9db1f5142c6a"
+        },
+        "OTBC": {
+          "hits": 75935,
+          "occupied_sensors": 34355,
+          "sha256": "131eebb4595f6631c69016ed9f116de9c9b179bbb16d8c0cbea1a7e9e39fc93a"
+        },
+        "OTEC": {
+          "hits": 46623,
+          "occupied_sensors": 1152,
+          "sha256": "2de7b2bbbad688c78b9e2a6a98179aa03d56505f35f56545b699806d439d6b91"
+        }
+      }
+    },
+    {
+      "event_id": "norm42_cmp_000016",
+      "split": "test",
+      "collections": {
+        "VBC": {
+          "hits": 12853,
+          "occupied_sensors": 484,
+          "sha256": "c056da56e4e59cd25bfd1762fc6b41ff482d0e88d01c79ab02515c86cf322849"
+        },
+        "VEC": {
+          "hits": 35760,
+          "occupied_sensors": 256,
+          "sha256": "642736331fecdf36afe1bafff1884341475ad264f196c08b6a18051cd7f92d32"
+        },
+        "ITBC": {
+          "hits": 55232,
+          "occupied_sensors": 8178,
+          "sha256": "0fc09e7a00a7342ac727bb0c7c9f4096ecb12092e679b7f7fa8f161b9bb84148"
+        },
+        "ITEC": {
+          "hits": 27455,
+          "occupied_sensors": 1186,
+          "sha256": "79fe17dae8e2d8e35863cd0144c1e8d551d2f9ec5abc6030765196ea784bb0f0"
+        },
+        "OTBC": {
+          "hits": 80772,
+          "occupied_sensors": 35295,
+          "sha256": "72305e0de6681c0c644f9f535d29d1b29b54262b8750e0d07d474c1a68d1333d"
+        },
+        "OTEC": {
+          "hits": 48775,
+          "occupied_sensors": 1152,
+          "sha256": "cb00893a7ce18abe76ee6021e6e82d14b1c1dc972375948cdf9f7c91de39ec5d"
+        }
+      }
+    },
+    {
+      "event_id": "norm42_cmp_000017",
+      "split": "test",
+      "collections": {
+        "VBC": {
+          "hits": 18037,
+          "occupied_sensors": 485,
+          "sha256": "327af26b5bb7272b34c158bc37f062ec65a92306781d3a369e94ee139b5dadbe"
+        },
+        "VEC": {
+          "hits": 37168,
+          "occupied_sensors": 256,
+          "sha256": "083bdbf9691dd86ca3ffb43e86707aabcb78b924c13558ca356ac6138d52f9ba"
+        },
+        "ITBC": {
+          "hits": 59917,
+          "occupied_sensors": 8262,
+          "sha256": "5fce484d29727ae92ac639142ed6ecbbb25fc679db0c82a507e77e5fe690c546"
+        },
+        "ITEC": {
+          "hits": 27370,
+          "occupied_sensors": 1182,
+          "sha256": "76fd0bf150346d3b8b7ea3a4b34d92559788169e65f6ae1906c41c02b8192a0c"
+        },
+        "OTBC": {
+          "hits": 83120,
+          "occupied_sensors": 35726,
+          "sha256": "363899e2b0cd2cb704a76d3c686cd5ce56d928f6b9f3f11504c08ea0ae5dc35b"
+        },
+        "OTEC": {
+          "hits": 47197,
+          "occupied_sensors": 1152,
+          "sha256": "c3072afc421801f89254b5c52c2188c93d7e9e7c5f893f5f32da4e34b9678feb"
+        }
+      }
+    },
+    {
+      "event_id": "norm42_cmp_000018",
+      "split": "test",
+      "collections": {
+        "VBC": {
+          "hits": 10029,
+          "occupied_sensors": 480,
+          "sha256": "7132cda1e9347912009f0940c50007677172686e7c0b0aba7e9f65107824b60d"
+        },
+        "VEC": {
+          "hits": 27201,
+          "occupied_sensors": 256,
+          "sha256": "628a2e92b04b054a1f632eb4e250b3d00b8eb573076405e1698706e7418c0f96"
+        },
+        "ITBC": {
+          "hits": 46401,
+          "occupied_sensors": 7998,
+          "sha256": "402fbb17991f9d4c464a620cc37a1895f2293959fab08cbbf46890847e49bf37"
+        },
+        "ITEC": {
+          "hits": 25403,
+          "occupied_sensors": 1185,
+          "sha256": "779859cf221f820d31c6b07fc6fcb6f6a9e7eed40b34ff93a71aebcbe1c6c862"
+        },
+        "OTBC": {
+          "hits": 75704,
+          "occupied_sensors": 34353,
+          "sha256": "94582d7c655d20063a6658308b183dbfad97dfbf8ce42f0d2198efaf6817152a"
+        },
+        "OTEC": {
+          "hits": 46688,
+          "occupied_sensors": 1152,
+          "sha256": "8d19af0a795f255c94c79cb60f62cf5d3a5cc28489afc14c2ce431f82a75b65f"
+        }
+      }
+    },
+    {
+      "event_id": "norm42_cmp_000019",
+      "split": "test",
+      "collections": {
+        "VBC": {
+          "hits": 9328,
+          "occupied_sensors": 482,
+          "sha256": "21032fe800a41e8ce4af4194625f993c496a14b876383e2f102411f8d16bfb85"
+        },
+        "VEC": {
+          "hits": 21877,
+          "occupied_sensors": 256,
+          "sha256": "36a89d19b04ed4f1d9b7335571ecab9404ad6901c53aca1ddb843327477bd3e6"
+        },
+        "ITBC": {
+          "hits": 35007,
+          "occupied_sensors": 7296,
+          "sha256": "5fe0e22cec8e4ffdc4a8ce7cf220f575d4300e3d73216356e04fd2c715b3f457"
+        },
+        "ITEC": {
+          "hits": 18886,
+          "occupied_sensors": 1179,
+          "sha256": "dadfa442d6c8dca4f4d470eb12acb6ebabf839277fbe22f78b8be3a1a46bd058"
+        },
+        "OTBC": {
+          "hits": 55352,
+          "occupied_sensors": 27527,
+          "sha256": "2d4b594ad8a546efead2655624d56126b2cb6a870a142d48268dccb01702b012"
+        },
+        "OTEC": {
+          "hits": 34517,
+          "occupied_sensors": 1152,
+          "sha256": "c1784f09fb3b8ce0c70588a700c5fd45d0e65d4ae120f30e61782ea643f74c6a"
+        }
+      }
+    }
+  ]
+}

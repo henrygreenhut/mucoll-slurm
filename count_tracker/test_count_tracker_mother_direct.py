@@ -173,6 +173,74 @@ class MotherDirectTests(unittest.TestCase):
             self.assertEqual(loaded["_source_cycle_pool"]["count"], 10)
             self.assertTrue(all(sum(counts.values()) == 1 for counts in expected.values()))
 
+    def test_classifier_train_event_lookup_preserves_requested_split(self):
+        """Cycle-pool validation must not overwrite the requested event split."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            event_id = "norm1_mother_direct_overnight_train_000000"
+            event_dir = root / "train" / event_id
+            event_dir.mkdir(parents=True)
+            arrays, summaries = {}, {}
+            for short, (system, _) in writer.COLLECTIONS.items():
+                labels = np.array([[system, 0, 0, 0, 1]], dtype=np.int64)
+                cell_id = writer.pack_cell_ids(labels).astype(np.float64)
+                rows = np.column_stack((np.ones((1, 5)), labels, cell_id))
+                sim_path = event_dir / f"{short}_sim_hits.npy"
+                np.save(sim_path, rows)
+                conditions_path = event_dir / f"{short}_conditions.npy"
+                np.save(conditions_path, labels)
+                arrays[short] = {
+                    "path": str(Path("train") / event_id / sim_path.name),
+                    "sha256": writer.sha256_file(sim_path), "hits": 1,
+                }
+                summaries[short] = {
+                    "hits": 1, "occupied_sensors": 1,
+                    "sha256": writer.sha256_file(conditions_path), "all_stored": 1,
+                }
+            sources = {
+                polarity: [{"draw": draw, "cycle": 0,
+                            "path": f"/{polarity}/0.root", "entries": "all",
+                            "mother_count": 1, "source_tracker_hits": 1}
+                           for draw in range(420)]
+                for polarity in writer.POLARITIES
+            }
+            event = {"event_id": event_id, "split": "train", "sources": sources,
+                     "sim_arrays": arrays}
+            report = {
+                "kind": "count_tracker_norm1_mother_direct_conditions",
+                "hit_selection": "all-stored",
+                "manifest": {
+                    "schema_version": 2,
+                    "construction": mother.CONSTRUCTION,
+                    "cell_id_encoding": writer.CELL_ID_ENCODING,
+                    "generator_training_holdout": False,
+                    "model_split_used": False,
+                    "analysis_split_used": True,
+                    "classifier_ready": True,
+                    "physical_event_boundaries": True,
+                    "n_files_per_polarity": 420,
+                    "norm1_equivalents_per_polarity": 420,
+                    "hit_selection": "all-stored",
+                    "source_cycle_pool": {
+                        "kind": "all complete cycles in files.npy",
+                        "count": 3, "cycles": [0, 1, 2]},
+                    "analysis_cycle_pools": {
+                        "pools": {
+                            "train": {"count": 1, "cycles": [0]},
+                            "val": {"count": 1, "cycles": [1]},
+                            "test": {"count": 1, "cycles": [2]},
+                        }},
+                    "events": [event],
+                },
+                "events": [{"event_id": event_id, "split": "train",
+                            "collections": summaries}],
+            }
+            (root / "manifest.json").write_text(json.dumps(report))
+            loaded, expected = writer.load_event(
+                root, "train", event_id, mother.CONSTRUCTION)
+            self.assertEqual(loaded["split"], "train")
+            self.assertTrue(all(sum(counts.values()) == 1 for counts in expected.values()))
+
 
 if __name__ == "__main__":
     unittest.main()
