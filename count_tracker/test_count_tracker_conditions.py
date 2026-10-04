@@ -153,6 +153,20 @@ class ConditionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "crosses dataset splits"):
             conditions.validate_manifest(data, Path("/tmp"))
 
+    def test_all_source_pool_allows_cycles_across_classifier_partitions(self):
+        data = manifest()
+        data["source_pool"] = "all"
+        second = copy.deepcopy(data["events"][0])
+        second.update(event_id="event_1", split="test")
+        data["events"].append(second)
+        conditions.validate_manifest(data, Path("/tmp"))
+
+    def test_invalid_source_pool_is_rejected(self):
+        data = manifest()
+        data["source_pool"] = "ambiguous"
+        with self.assertRaisesRegex(ValueError, "source_pool must be split or all"):
+            conditions.validate_manifest(data, Path("/tmp"))
+
     def test_duplicate_and_aliased_sources_are_rejected(self):
         data = manifest()
         data["events"][0]["sources"]["MUPLUS"][1] = copy.deepcopy(

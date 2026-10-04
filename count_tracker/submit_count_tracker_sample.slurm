@@ -22,7 +22,7 @@
 #SBATCH --exclude=gpu3005
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
-#SBATCH --time=08:00:00
+#SBATCH --time=12:00:00
 set -euo pipefail
 
 : "${CONDITIONS:?set CONDITIONS to the prepared conditions dir}"

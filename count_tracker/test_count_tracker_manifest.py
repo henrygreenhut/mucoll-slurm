@@ -5,7 +5,9 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from count_tracker_manifest import POLARITIES, SPLITS, read_pools, select_events
+from count_tracker_manifest import (
+    POLARITIES, SPLITS, combined_pool, read_pools, select_events,
+)
 
 
 class SelectionTests(unittest.TestCase):
@@ -64,6 +66,25 @@ class SelectionTests(unittest.TestCase):
                 self.assertEqual(len(cycles), 10)
                 self.assertTrue(cycles <= self.pools[right["split"]][polarity].keys())
             self.assertNotEqual(right["sources"]["MUPLUS"], right["sources"]["MUMINUS"])
+
+    def test_all_source_pool_uses_union_for_every_event_partition(self):
+        events = select_events(
+            self.pools, self.counts, 17, "closure", "norm42", source_pool="all")
+        full = combined_pool(self.pools)
+        for event in events:
+            original_split = self.pools[event["split"]]
+            for polarity in POLARITIES:
+                selected = {source["cycle"] for source in event["sources"][polarity]}
+                self.assertEqual(len(selected), 10)
+                self.assertTrue(selected <= full[polarity].keys())
+                # With this deterministic fixture, every partition draws at
+                # least one cycle outside its same-named source subset.
+                self.assertFalse(selected <= original_split[polarity].keys())
+
+    def test_combined_pool_rejects_overlapping_declared_splits(self):
+        self.pools["val"]["MUPLUS"][0] = self.pools["train"]["MUPLUS"][0]
+        with self.assertRaisesRegex(ValueError, "multiple pool splits"):
+            combined_pool(self.pools)
 
     def test_both_libraries_must_follow_the_shared_pool_split(self):
         with tempfile.TemporaryDirectory() as directory:

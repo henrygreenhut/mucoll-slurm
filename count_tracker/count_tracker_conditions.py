@@ -112,6 +112,9 @@ def validate_manifest(manifest, base):
         raise ValueError("Expected manifest schema_version 2 with explicit construction")
     if manifest.get("cell_id_encoding") != CELL_ID_ENCODING:
         raise ValueError("Manifest must declare the supported MAIA CellID encoding")
+    source_pool = manifest.get("source_pool", "split")
+    if source_pool not in ("split", "all"):
+        raise ValueError("source_pool must be split or all")
     construction = manifest.get("construction")
     if construction not in CONSTRUCTIONS:
         raise ValueError("construction must be norm1 or norm42")
@@ -157,7 +160,8 @@ def validate_manifest(manifest, base):
                 if cycle in used:
                     raise ValueError(f"Repeated cycle in {event_id}/{polarity}: {cycle}")
                 used.add(cycle)
-                if cycle_splits.setdefault(cycle, split) != split:
+                if (source_pool == "split"
+                        and cycle_splits.setdefault(cycle, split) != split):
                     raise ValueError(f"Source cycle {cycle} crosses dataset splits")
                 if path_identity.setdefault(str(path), (polarity, cycle)) != (polarity, cycle):
                     raise ValueError(f"Conflicting identities for source file {path}")

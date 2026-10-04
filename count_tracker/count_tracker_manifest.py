@@ -60,7 +60,19 @@ def read_pools(root, construction):
     return pools, provenance
 
 
-def select_events(pools, counts, seed, cohort, construction):
+def combined_pool(pools):
+    """Return the union of the declared cycle splits for each polarity."""
+    combined = {polarity: {} for polarity in POLARITIES}
+    for split in SPLITS:
+        for polarity in POLARITIES:
+            overlap = set(combined[polarity]).intersection(pools[split][polarity])
+            if overlap:
+                raise ValueError(f"Cycle appears in multiple pool splits: {sorted(overlap)[:10]}")
+            combined[polarity].update(pools[split][polarity])
+    return combined
+
+
+def select_events(pools, counts, seed, cohort, construction, source_pool="split"):
     """Use a separate deterministic stream for each event and polarity."""
     if type(seed) is not int or seed < 0:
         raise ValueError("Source seed must be a nonnegative integer")
@@ -72,17 +84,24 @@ def select_events(pools, counts, seed, cohort, construction):
         raise ValueError("At least one event is required")
     if construction not in CONSTRUCTIONS:
         raise ValueError("construction must be norm1 or norm42")
+    if source_pool not in ("split", "all"):
+        raise ValueError("source_pool must be split or all")
     n_files = CONSTRUCTIONS[construction]["n_files_per_polarity"]
+    all_cycles = combined_pool(pools) if source_pool == "all" else None
     events = []
     for split in SPLITS:
         for index in range(counts[split]):
             event_id = f"{construction}_{cohort}_{split}_{index:06d}"
             sources = {}
             for polarity in POLARITIES:
-                available = pools[split][polarity]
+                available = (all_cycles[polarity] if source_pool == "all"
+                             else pools[split][polarity])
                 if len(available) < n_files:
                     raise ValueError(f"Fewer than {n_files} source files in {split}/{polarity}")
-                stream = json.dumps([seed, construction, cohort, split, index, polarity], separators=(",", ":"))
+                stream_values = [seed, construction, cohort, split, index, polarity]
+                if source_pool == "all":
+                    stream_values.append("all-source-cycles")
+                stream = json.dumps(stream_values, separators=(",", ":"))
                 selected = random.Random(stream).sample(sorted(available), n_files)
                 sources[polarity] = [dict(available[cycle]) for cycle in selected]
             events.append({"event_id": event_id, "split": split, "sources": sources})
@@ -95,6 +114,11 @@ def main():
     parser.add_argument("--construction", choices=tuple(CONSTRUCTIONS), required=True)
     parser.add_argument("--cohort", required=True, help="Distinct label for each independent SIM cohort")
     parser.add_argument("--seed", required=True, type=int)
+    parser.add_argument(
+        "--source-pool", choices=("split", "all"), default="split",
+        help=("split restricts sources by event split; all draws every event "
+              "from the union of declared cycles (default: %(default)s)"),
+    )
     for split in SPLITS:
         parser.add_argument(f"--{split}-events", required=True, type=int)
     parser.add_argument("--output", required=True)
@@ -106,14 +130,28 @@ def main():
         "construction": args.construction,
         **CONSTRUCTIONS[args.construction],
         "norm1_equivalents_per_polarity": 420,
+        "source_pool": args.source_pool,
         "pool": provenance,
         "sampling": {
             "seed": args.seed, "cohort": args.cohort,
             "within_event": "without replacement, independently by polarity",
-            "across_events": "source reuse permitted within each split",
-            "stream": "random.Random(JSON([seed, construction, cohort, split, event_index, polarity]))",
+            "across_events": (
+                "source reuse permitted across all classifier event partitions"
+                if args.source_pool == "all"
+                else "source reuse permitted within each split"),
+            "classifier_split": (
+                "event partition only; source cycles may recur across partitions"
+                if args.source_pool == "all"
+                else "event partition and disjoint source-cycle pool"),
+            "stream": (
+                "random.Random(JSON([seed, construction, cohort, split, "
+                "event_index, polarity, all-source-cycles]))"
+                if args.source_pool == "all"
+                else "random.Random(JSON([seed, construction, cohort, split, "
+                "event_index, polarity]))"),
         },
-        "events": select_events(pools, counts, args.seed, args.cohort, args.construction),
+        "events": select_events(
+            pools, counts, args.seed, args.cohort, args.construction, args.source_pool),
     }
     output = Path(args.output).resolve()
     validate_manifest(manifest, output.parent)
