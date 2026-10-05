@@ -67,7 +67,9 @@ class StoreTests(unittest.TestCase):
         m = {
             "SiTracks_objIdx": G({"SiTracks_objIdx.index": B([[0, 1]])}),
             "AllTracks": G({"AllTracks.trackStates_begin": B([[0, 2]]),
-                            "AllTracks.trackStates_end": B([[2, 4]])}),
+                            "AllTracks.trackStates_end": B([[2, 4]]),
+                            "AllTracks.chi2": B([[6.0, 8.0]]),
+                            "AllTracks.ndf": B([[3, 4]])}),
             "_AllTracks_trackStates": G({
                 "_AllTracks_trackStates.location": B([[1, 0, 1, 0]]),
                 "_AllTracks_trackStates.phi": B([[0.5, 9, 0.7, 9]]),
@@ -88,6 +90,9 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(rows.shape, (2, 6))
         np.testing.assert_allclose(rows[0], [5.0, np.arcsinh(1.0), 0.5, 0.1, 2.0, 0.0003], rtol=1e-5)
         np.testing.assert_allclose(rows[1], [2.5, 0.0, 0.7, 0.2, 3.0, -0.0006], rtol=1e-5)
+
+        rows, chi2_ndf = store.read_track_data(Events())
+        np.testing.assert_allclose(chi2_ndf[0], [2.0, 2.0])
 
 
 class TrainDataTests(unittest.TestCase):

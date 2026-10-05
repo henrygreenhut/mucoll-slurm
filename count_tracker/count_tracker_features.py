@@ -27,11 +27,14 @@ def choose_state(begin, end, locations):
     return begin + int(at_ip[0]) if len(at_ip) else None
 
 
-def read_tracks(events):
-    """Per-event (n_tracks, len(RAW_FEATURES)) arrays for the SiTracks subset."""
+def read_track_data(events):
+    """Per-event physical features and fit quality for the SiTracks subset."""
     idx = events["SiTracks_objIdx"]["SiTracks_objIdx.index"].array()
-    begin = events["AllTracks"]["AllTracks.trackStates_begin"].array()
-    end = events["AllTracks"]["AllTracks.trackStates_end"].array()
+    all_tracks = events["AllTracks"]
+    begin = all_tracks["AllTracks.trackStates_begin"].array()
+    end = all_tracks["AllTracks.trackStates_end"].array()
+    chi2 = all_tracks["AllTracks.chi2"].array()
+    ndf = all_tracks["AllTracks.ndf"].array()
     states = events["_AllTracks_trackStates"]
     loc = states["_AllTracks_trackStates.location"].array()
     phi = states["_AllTracks_trackStates.phi"].array()
@@ -40,14 +43,16 @@ def read_tracks(events):
     d0 = states["_AllTracks_trackStates.D0"].array()
     z0 = states["_AllTracks_trackStates.Z0"].array()
 
-    per_event = []
+    per_event, per_event_chi2_ndf = [], []
     for i in range(events.num_entries):
         sel = np.asarray(idx[i], dtype=np.int64)
         b = np.asarray(begin[i], dtype=np.int64)
         e = np.asarray(end[i], dtype=np.int64)
+        event_chi2 = np.asarray(chi2[i], dtype=np.float64)
+        event_ndf = np.asarray(ndf[i], dtype=np.float64)
         lc = np.asarray(loc[i], dtype=np.int64)
         cols = [np.asarray(c[i], dtype=np.float64) for c in (phi, omega, tanl, d0, z0)]
-        rows = []
+        rows, reduced_chi2 = [], []
         for track_index in sel:
             if track_index < 0 or track_index >= len(b):
                 raise ValueError(f"event {i}: SiTracks index {track_index} is outside AllTracks")
@@ -59,8 +64,20 @@ def read_tracks(events):
             except (IndexError, ValueError) as exc:
                 raise ValueError(f"event {i}, AllTracks {track_index}: invalid AtIP state") from exc
             rows.append(row)
+            if (track_index >= len(event_chi2) or track_index >= len(event_ndf)
+                    or not np.isfinite(event_chi2[track_index])
+                    or not np.isfinite(event_ndf[track_index])
+                    or event_ndf[track_index] <= 0):
+                raise ValueError(f"event {i}, AllTracks {track_index}: invalid chi2/ndf")
+            reduced_chi2.append(event_chi2[track_index] / event_ndf[track_index])
         per_event.append(np.asarray(rows, dtype=np.float32).reshape(-1, len(RAW_FEATURES)))
-    return per_event
+        per_event_chi2_ndf.append(np.asarray(reduced_chi2, dtype=np.float32))
+    return per_event, per_event_chi2_ndf
+
+
+def read_tracks(events):
+    """Per-event (n_tracks, len(RAW_FEATURES)) arrays for the SiTracks subset."""
+    return read_track_data(events)[0]
 
 
 def pack_store(per_event):
@@ -72,6 +89,14 @@ def pack_store(per_event):
         if len(event_tracks):
             tracks[index, :len(event_tracks)] = event_tracks
     return tracks, counts
+
+
+def pack_scalar(per_event, width):
+    """Zero-pad one scalar diagnostic per selected track."""
+    values = np.zeros((len(per_event), width), dtype=np.float32)
+    for index, event_values in enumerate(per_event):
+        values[index, :len(event_values)] = event_values
+    return values
 
 
 def sha256_bytes(data):
@@ -96,34 +121,38 @@ def build_store(args):
     conditions_manifest = Path(args.conditions) / "manifest.json"
     report = json.loads(conditions_manifest.read_text())
     construction = report["manifest"]["construction"]
-    event_ids = [event["event_id"] for event in report["events"]
-                 if event["split"] == args.split]
-    if not event_ids:
+    selected = [event for event in report["events"]
+                if args.split == "all" or event["split"] == args.split]
+    if not selected:
         raise SystemExit(f"No events for split={args.split} in {conditions_manifest}")
 
     output = Path(args.output)
     if output.with_suffix(".npz").exists() or output.with_suffix(".json").exists():
         raise FileExistsError(f"Refusing to replace existing store at {output}")
 
-    per_event, sources, missing = [], [], []
-    for event_id in event_ids:
-        reco = locate_reco(args.events_root, args.split, event_id, args.sample)
+    per_event, per_event_chi2_ndf, sources, missing = [], [], [], []
+    for event in selected:
+        event_id = event["event_id"]
+        reco = locate_reco(args.events_root, event["split"], event_id, args.sample)
         if reco is None:
             missing.append(event_id)
             continue
         with uproot.open(reco) as handle:
-            tracks = read_tracks(handle["events"])
+            tracks, chi2_ndf = read_track_data(handle["events"])
         if len(tracks) != 1:
             raise SystemExit(f"{reco}: expected 1 event, found {len(tracks)}")
         per_event.append(tracks[0])
+        per_event_chi2_ndf.append(chi2_ndf[0])
         sources.append({"event_id": event_id, "path": str(reco.resolve()),
                         "n_tracks": int(len(tracks[0]))})
     if missing:
         raise SystemExit(f"Missing {len(missing)} reco outputs: {missing[:10]}")
 
     tracks, counts = pack_store(per_event)
+    chi2_ndf = pack_scalar(per_event_chi2_ndf, tracks.shape[1])
     output.parent.mkdir(parents=True, exist_ok=True)
-    np.savez(output.with_suffix(".npz"), tracks=tracks, n_tracks=counts)
+    np.savez(output.with_suffix(".npz"), tracks=tracks, n_tracks=counts,
+             chi2_ndf=chi2_ndf)
     manifest = {
         "kind": "count_tracker_track_store",
         "schema_version": 2,
@@ -146,6 +175,7 @@ def build_store(args):
         "sample": args.sample,
         "split": args.split,
         "features": list(RAW_FEATURES),
+        "diagnostic_features": ["chi2_ndf"],
         "n_events": len(per_event),
         "max_tracks": int(tracks.shape[1]),
         "total_tracks": int(counts.sum()),
@@ -163,7 +193,7 @@ def main():
     parser.add_argument("--conditions", required=True, help="Prepared conditions dir (event/split list)")
     parser.add_argument("--events-root", required=True, help="Root of per-event reco outputs")
     parser.add_argument("--sample", choices=("SIM", "COUNT"), required=True)
-    parser.add_argument("--split", choices=("train", "val", "test"), required=True)
+    parser.add_argument("--split", choices=("train", "val", "test", "all"), required=True)
     parser.add_argument("--output", required=True, help="Store prefix (writes .npz + .json)")
     args = parser.parse_args()
     build_store(args)

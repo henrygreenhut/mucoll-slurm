@@ -14,7 +14,8 @@ def summarize(conditions, events_root, split, event_id=None):
     conditions = Path(conditions).resolve()
     events_root = Path(events_root).resolve()
     source = json.loads((conditions / "manifest.json").read_text())
-    events = [event for event in source["events"] if event["split"] == split]
+    events = [event for event in source["events"]
+              if split == "all" or event["split"] == split]
     if event_id is not None:
         events = [event for event in events if event["event_id"] == event_id]
     if not events:
@@ -81,7 +82,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--conditions", required=True)
     parser.add_argument("--events-root", required=True)
-    parser.add_argument("--split", choices=("train", "val", "test"), required=True)
+    parser.add_argument("--split", choices=("train", "val", "test", "all"), required=True)
     parser.add_argument("--event-id", help="report only this manifest event (checkpoint mode)")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
