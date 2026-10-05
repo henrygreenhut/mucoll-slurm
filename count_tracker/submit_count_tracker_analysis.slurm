@@ -21,6 +21,11 @@ EVENTS_PER_SAMPLE_TASK="${EVENTS_PER_SAMPLE_TASK:-5}"
 
 mkdir -p "$ANALYSIS/reports" "$ANALYSIS/track_stores" "$ANALYSIS/plots"
 
+container_python() {
+    apptainer exec --bind /oscar:/oscar "$IMAGE" \
+        bash -lc 'source /opt/setup_mucoll.sh; exec python3 "$@"' _ "$@"
+}
+
 IFS=',' read -r -a sampling_jobs <<< "$SAMPLING_JOBS"
 sampling_args=()
 for job in "${sampling_jobs[@]}"; do
@@ -35,8 +40,7 @@ fi
 
 for split in all train val test; do
     if [[ ! -f "$ANALYSIS/reports/cohort_${split}.json" ]]; then
-        apptainer exec --bind /oscar:/oscar "$IMAGE" \
-            python3 "$CT_DIR/count_tracker_cohort_report.py" \
+        container_python "$CT_DIR/count_tracker_cohort_report.py" \
             --conditions "$CONDITIONS" --events-root "$EVENTS_ROOT" \
             --split "$split" --output "$ANALYSIS/reports/cohort_${split}.json"
     fi
@@ -44,8 +48,7 @@ for split in all train val test; do
     for sample in SIM COUNT; do
         prefix="$ANALYSIS/track_stores/${CONSTRUCTION}_${sample}_${split}"
         if [[ ! -f "${prefix}.npz" || ! -f "${prefix}.json" ]]; then
-            apptainer exec --bind /oscar:/oscar "$IMAGE" \
-                python3 "$CT_DIR/count_tracker_features.py" \
+            container_python "$CT_DIR/count_tracker_features.py" \
                 --conditions "$CONDITIONS" --events-root "$EVENTS_ROOT" \
                 --sample "$sample" --split "$split" \
                 --output "$prefix"
@@ -53,8 +56,7 @@ for split in all train val test; do
     done
 
     if [[ ! -f "$ANALYSIS/plots/$split/summary.json" ]]; then
-        apptainer exec --bind /oscar:/oscar "$IMAGE" \
-            python3 "$CT_DIR/plot_count_tracker_track_features.py" \
+        container_python "$CT_DIR/plot_count_tracker_track_features.py" \
             --store-dir "$ANALYSIS/track_stores" \
             --construction "$CONSTRUCTION" --split "$split" \
             --output-dir "$ANALYSIS/plots/$split" \
