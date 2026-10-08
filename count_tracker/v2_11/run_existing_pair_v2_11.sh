@@ -1,7 +1,5 @@
 #!/bin/bash
 # Reconstruct an existing, already assembled SIM/COUNT input pair with v2.11.
-# This is the narrowest software-version diagnostic: the pre-digitization ROOT
-# files are byte-for-byte the same inputs used by the v3 reconstruction.
 set -euo pipefail
 
 IMAGE_V2_11="${IMAGE_V2_11:-/oscar/data/mleblan6/mucoll/mucoll-sim-ubuntu24_v2.11-amd64.sif}"
@@ -42,7 +40,7 @@ for sample in SIM COUNT; do
 done
 
 cat > "$OUTPUT/comparison_provenance.txt" <<EOF
-purpose=software-version diagnostic using identical pre-digitization inputs
+purpose=v2.11 reconstruction of an existing paired input
 source_event=$INPUT_EVENT
 image=$IMAGE_V2_11
 sim_input=$INPUT_EVENT/SIM/input/input.edm4hep.root

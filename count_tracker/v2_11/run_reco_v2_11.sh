@@ -51,7 +51,7 @@ apptainer exec \
         export V2_OUTPUT_FILE=/work/output/digi_output.edm4hep.root
         k4run /work/count-tracker-v2/tracker_reco_override_v2_11.py
         [ -s "$V2_OUTPUT_FILE" ] || {
-            echo "v2.11 digitization produced no output; the input may be incompatible with the old podio runtime" >&2
+            echo "v2.11 digitization produced no output; no input event was processed" >&2
             exit 1
         }
 

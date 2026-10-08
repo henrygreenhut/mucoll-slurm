@@ -13,11 +13,13 @@ import sys
 from Gaudi.Configuration import INFO, WARNING
 from Configurables import (
     EDM4hep2LcioTool,
-    EventDataSvc,
     Lcio2EDM4hepTool,
     MarlinProcessorWrapper,
+    PodioInput,
+    PodioOutput,
+    k4DataSvc,
 )
-from k4FWCore import ApplicationMgr, IOSvc
+from k4FWCore import ApplicationMgr
 
 
 TRACKER_COLLECTIONS = (
@@ -271,20 +273,24 @@ def main():
     if missing:
         raise RuntimeError(f"Missing required environment: {', '.join(missing)}")
 
-    services = [EventDataSvc("EventDataSvc")]
-    io_service = IOSvc()
-    io_service.Input = os.environ["V2_INPUT_FILE"]
-    io_service.Output = os.environ["V2_OUTPUT_FILE"]
-    io_service.outputCommands = ["keep *"]
+    event_service = k4DataSvc("EventDataSvc")
+    event_service.input = os.environ["V2_INPUT_FILE"]
 
-    algorithms = [input_converter(), dd4hep_initializer()]
+    input_reader = PodioInput("InputReader")
+    output_writer = PodioOutput(
+        "PodioOutput", filename=os.environ["V2_OUTPUT_FILE"]
+    )
+    output_writer.outputCommands = ["keep *"]
+
+    algorithms = [input_reader, input_converter(), dd4hep_initializer()]
     algorithms += tracker_digi_algs() if stage == "digi" else tracker_reco_algs()
+    algorithms.append(output_writer)
 
     ApplicationMgr(
         TopAlg=algorithms,
         EvtSel="NONE",
         EvtMax=int(os.environ.get("V2_NUM_EVENTS", "1")),
-        ExtSvc=services,
+        ExtSvc=[event_service],
         OutputLevel=INFO,
     )
 
