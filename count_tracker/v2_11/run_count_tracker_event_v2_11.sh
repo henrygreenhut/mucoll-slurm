@@ -9,7 +9,7 @@ V2_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ASSIGN_PYTHON="${ASSIGN_PYTHON:-python3}"
 
 CONDITIONS=""; CONSTRUCTION=""; SPLIT=""; EVENT_ID=""
-SIGNAL=""; SIGNAL_ENTRY=""; COUNT_SAMPLES=""; GEOMAP=""; ONLY=""; OUTPUT=""
+COUNT_SAMPLES=""; GEOMAP=""; ONLY=""; OUTPUT=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -17,8 +17,6 @@ while [ $# -gt 0 ]; do
         --construction) CONSTRUCTION="$2"; shift 2 ;;
         --split) SPLIT="$2"; shift 2 ;;
         --event-id) EVENT_ID="$2"; shift 2 ;;
-        --signal) SIGNAL="$2"; shift 2 ;;
-        --signal-entry) SIGNAL_ENTRY="$2"; shift 2 ;;
         --count-samples) COUNT_SAMPLES="$2"; shift 2 ;;
         --geomap) GEOMAP="$2"; shift 2 ;;
         --only) ONLY="$2"; shift 2 ;;
@@ -27,11 +25,12 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-for name in GENBIB_DIR CONDITIONS CONSTRUCTION SPLIT EVENT_ID SIGNAL SIGNAL_ENTRY OUTPUT; do
+for name in GENBIB_DIR CONDITIONS CONSTRUCTION SPLIT EVENT_ID OUTPUT; do
     [ -n "${!name}" ] || { echo "Missing required argument/environment: $name" >&2; exit 1; }
 done
 for path in "$IMAGE_V2_11" "$GENBIB_DIR/reco/assign_actual_cellid.py" \
-            "$CT_DIR/count_tracker_input.py" "$V2_DIR/run_reco_v2_11.sh"; do
+            "$V2_DIR/extract_sim_hits_v2_11.py" \
+            "$V2_DIR/write_bib_only_input_v2_11.py" "$V2_DIR/run_reco_v2_11.sh"; do
     [ -e "$path" ] || { echo "Missing required path: $path" >&2; exit 1; }
 done
 
@@ -45,24 +44,46 @@ esac
 
 if [ "$DO_COUNT" -eq 1 ]; then
     [ -n "$COUNT_SAMPLES" ] || { echo "COUNT needs --count-samples" >&2; exit 1; }
-    [ -n "$GEOMAP" ] || { echo "COUNT needs --geomap" >&2; exit 1; }
     COUNT_EVENT_DIR="$COUNT_SAMPLES/$SPLIT/$EVENT_ID"
     [ -d "$COUNT_EVENT_DIR" ] || { echo "Missing COUNT samples: $COUNT_EVENT_DIR" >&2; exit 1; }
+fi
+if [ "$DO_SIM" -eq 1 ] || [ "$DO_COUNT" -eq 1 ]; then
+    [ -n "$GEOMAP" ] || { echo "SIM/COUNT geometry assignment needs --geomap" >&2; exit 1; }
     if [ ! -f "$GEOMAP" ]; then
         IMAGE_V2_11="$IMAGE_V2_11" bash "$V2_DIR/build_geomap_v2_11.sh" "$GEOMAP"
     fi
     "$ASSIGN_PYTHON" -c 'import numpy, scipy' >/dev/null 2>&1 || {
-        echo "ASSIGN_PYTHON must provide NumPy and SciPy (use the count-hdf Python)" >&2
+        echo "ASSIGN_PYTHON must provide NumPy and SciPy (use the genbib Python)" >&2
         exit 1
     }
 fi
+[ -n "${EXTRACT_PYTHON:-}" ] || { echo "EXTRACT_PYTHON is required" >&2; exit 1; }
+"$EXTRACT_PYTHON" -c 'import numpy, uproot, awkward' >/dev/null 2>&1 || {
+    echo "EXTRACT_PYTHON must provide NumPy, uproot, and awkward" >&2
+    exit 1
+}
 
 mkdir -p "$OUTPUT"
 OUTPUT="$(cd "$OUTPUT" && pwd)"
 echo "=== v2.11 event $CONSTRUCTION/$SPLIT/$EVENT_ID (SIM=$DO_SIM COUNT=$DO_COUNT) ==="
 
+if [ "$DO_SIM" -eq 1 ]; then
+    echo "--- extract SIM BIB numerically (no podio) ---"
+    "$EXTRACT_PYTHON" "$V2_DIR/extract_sim_hits_v2_11.py" \
+        --conditions "$CONDITIONS" --construction "$CONSTRUCTION" \
+        --split "$SPLIT" --event-id "$EVENT_ID" \
+        --output "$OUTPUT/SIM/extracted"
+
+    echo "--- assign v2.11 CellIDs (SIM) ---"
+    "$ASSIGN_PYTHON" "$GENBIB_DIR/reco/assign_actual_cellid.py" \
+        --input-dir "$OUTPUT/SIM/extracted" \
+        --output-dir "$OUTPUT/SIM/assigned" \
+        --input-format 10col \
+        --geomap-path "$GEOMAP"
+fi
+
 # CellID assignment is geometry dependent but not software-stack dependent once
-# the v2.11 map exists.  Run it with count-hdf because the v2.11 image lacks
+# the v2.11 map exists.  Run it with genbib because the v2.11 image lacks
 # SciPy; no v3 geometry or reconstruction code is used here.
 if [ "$DO_COUNT" -eq 1 ]; then
     echo "--- assign v2.11 CellIDs (COUNT) ---"
@@ -73,10 +94,10 @@ if [ "$DO_COUNT" -eq 1 ]; then
         --geomap-path "$GEOMAP"
 fi
 
-# Write both paired input records with the v2.11 podio/EDM4hep runtime.
+# Write BIB-only paired input records with the v2.11 podio/EDM4hep runtime.
 export CTS_CT_DIR="$CT_DIR" CTS_CONDITIONS="$CONDITIONS"
 export CTS_CONSTRUCTION="$CONSTRUCTION" CTS_SPLIT="$SPLIT" CTS_EVENT_ID="$EVENT_ID"
-export CTS_SIGNAL="$SIGNAL" CTS_SIGNAL_ENTRY="$SIGNAL_ENTRY" CTS_OUTPUT="$OUTPUT"
+export CTS_V2_DIR="$V2_DIR" CTS_OUTPUT="$OUTPUT"
 export CTS_DO_SIM="$DO_SIM" CTS_DO_COUNT="$DO_COUNT"
 
 apptainer exec --pwd /tmp --bind /oscar:/oscar,"$CT_DIR:$CT_DIR:ro" "$IMAGE_V2_11" bash -lc '
@@ -84,19 +105,17 @@ apptainer exec --pwd /tmp --bind /oscar:/oscar,"$CT_DIR:$CT_DIR:ro" "$IMAGE_V2_1
     source /opt/setup_mucoll.sh
     set -u
     if [ "$CTS_DO_COUNT" -eq 1 ]; then
-        python3 "$CTS_CT_DIR/count_tracker_input.py" \
+        python3 "$CTS_V2_DIR/write_bib_only_input_v2_11.py" \
             --conditions "$CTS_CONDITIONS" --construction "$CTS_CONSTRUCTION" \
             --split "$CTS_SPLIT" --event-id "$CTS_EVENT_ID" \
-            --sample COUNT --count-arrays "$CTS_OUTPUT/COUNT/assigned" \
-            --signal "$CTS_SIGNAL" --signal-entry "$CTS_SIGNAL_ENTRY" \
+            --sample COUNT --arrays "$CTS_OUTPUT/COUNT/assigned" \
             --output "$CTS_OUTPUT/COUNT/input"
     fi
     if [ "$CTS_DO_SIM" -eq 1 ]; then
-        python3 "$CTS_CT_DIR/count_tracker_input.py" \
+        python3 "$CTS_V2_DIR/write_bib_only_input_v2_11.py" \
             --conditions "$CTS_CONDITIONS" --construction "$CTS_CONSTRUCTION" \
             --split "$CTS_SPLIT" --event-id "$CTS_EVENT_ID" \
-            --sample SIM \
-            --signal "$CTS_SIGNAL" --signal-entry "$CTS_SIGNAL_ENTRY" \
+            --sample SIM --arrays "$CTS_OUTPUT/SIM/assigned" \
             --output "$CTS_OUTPUT/SIM/input"
     fi
 '

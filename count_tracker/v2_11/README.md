@@ -4,16 +4,16 @@ This directory is a separate compatibility path for repeating one prepared
 SIM/COUNT tracker event with the Muon Collider v2.11 image.  It does not alter
 the v3 workflow in `../run_count_tracker_event.sh` or any GenBIB-ML file.
 
-The intended first use is a one-event software-version diagnostic using the
-**exact existing pre-digitization SIM and COUNT ROOT files**.  This holds all
-upstream choices fixed and changes only the image and tracker implementation.
-A second wrapper can rebuild the event with a v2.11 CellID map if the narrow
-test shows that a fully geometry-coherent v2 study is useful.
+The v2.11 podio runtime cannot read the newer ROOT files directly.  The usable
+one-event diagnostic therefore extracts the numerical BIB hit fields with
+uproot, writes BIB-only inputs with v2.11, and runs the old digitization and
+tracking.  No neutrino signal is needed because it contributes no tracker
+hits.
 
 ## What remains the same
 
 - The same six tracker SimTrackerHit collections enter digitization.
-- SIM and COUNT use the same prepared event and signal record.
+- SIM and COUNT use the same prepared BIB event, with no signal record.
 - Vertex resolutions are 5 micrometres in `u` and `v`, with 30 ps timing.
 - Inner/outer resolutions are 7 micrometres in `u`, 90 micrometres in `v`,
   with 60 ps timing.
@@ -42,9 +42,9 @@ test shows that a fully geometry-coherent v2 study is useful.
 5. Branch-stopper, outlier-cutoff, and native merged-hit options in the v3 CKF
    API do not exist in the v2.11 Marlin processor.  The v2 processor receives
    the six hit collections directly.
-6. COUNT CellIDs use a map built from the v2.11 MAIA geometry.  The v2.11
+6. SIM and COUNT CellIDs use a map built from the v2.11 MAIA geometry.  The
    image lacks SciPy, so map construction runs in the image and the unchanged
-   GenBIB assignment algorithm runs with the existing `count-hdf` Python.
+   GenBIB assignment algorithm runs with the existing `genbib` Python.
 
 The v0.9 benchmark tag remains the reference for the older Marlin workflow
 and timing configuration, but it cannot be executed unchanged: its hard-coded
@@ -52,11 +52,12 @@ release-2.8 `MuColl_v1` ACTS paths are replaced by the native v2.11 MAIA files.
 The later MAIA-specific seeding list is taken from commit `1b702ec` rather
 than guessed.
 
-## Recommended one-event command: change only reconstruction
+## Unsupported exact-file diagnostic
 
-Point `V3_EVENT` at one completed event from the cached norm42 cohort.  It must
-contain both `SIM/input/input.edm4hep.root` and
-`COUNT/input/input.edm4hep.root`.
+`run_existing_pair_v2_11.sh` records the attempted byte-for-byte test, but the
+old podio runtime sees zero events in these newer files.  Do not use or queue
+this path for physics results.  `run_reco_v2_11.sh` now rejects the missing
+output rather than reporting a false success.
 
 ```bash
 export REPO="$(git rev-parse --show-toplevel)"
@@ -83,10 +84,8 @@ sbatch \
   "$CT_DIR/v2_11/submit_existing_pair_v2_11.slurm"
 ```
 
-This command does not build a new signal, reassign CellIDs, or rewrite either
-input record.  If v2.11 cannot read the newer EDM4hep file schema, it will fail
-before reconstruction; do not silently convert the file because that would add
-another changed axis.
+This command is retained only as documentation of the failed compatibility
+check.
 
 ## Full v2.11 input rebuild
 
@@ -103,51 +102,51 @@ export CT_DIR="$REPO/count_tracker"
 export GENBIB_DIR=/path/to/GenBIB-ML
 export IMAGE_V2_11=/oscar/data/mleblan6/mucoll/mucoll-sim-ubuntu24_v2.11-amd64.sif
 export ASSIGN_PYTHON="$(command -v python)"
+conda deactivate
+conda activate count-hdf
+export EXTRACT_PYTHON="$(command -v python)"
 
 bash "$CT_DIR/v2_11/run_count_tracker_event_v2_11.sh" \
   --conditions /path/to/conditions \
   --construction norm42 \
   --split test \
   --event-id norm42_cached_closure100_test_000000 \
-  --signal /path/to/neutrino_sim.edm4hep.root \
-  --signal-entry 0 \
   --count-samples /path/to/count_samples \
   --geomap /oscar/scratch/$USER/mucoll/count_tracker_v2_11/maia_v2_11_sensor_geometry.npz \
   --output /oscar/scratch/$USER/mucoll/count_tracker_v2_11/event_000000
 ```
 
-If the geometry map does not exist, the event wrapper creates it once.  This
-full rebuild changes COUNT CellID assignment to the v2.11 geometry and writes
-both input records with the old EDM4hep runtime.  Existing SIM hits retain
-their stored CellIDs, so their compatibility with the v2.11 MAIA map must be
-audited before treating this as a production comparison.  Keep this output
-directory separate from both the v3 event and the exact-input v2 diagnostic.
+If the geometry map does not exist, the event wrapper creates it once.  The
+newer podio files cannot be read by v2.11, so the wrapper reads only numerical
+BIB hit branches through uproot, saves them as NumPy arrays, and writes fresh
+BIB-only records with the v2.11 runtime.  No neutrino signal is included; it
+has no tracker hits and is irrelevant to this diagnostic.  Both SIM and COUNT
+hits are assigned CellIDs from their XYZ positions with the same v2.11 map and
+the same assignment algorithm.  Any assignment losses are recorded for each
+arm.  Keep this output directory separate from both the v3 event and the
+failed exact-input v2 diagnostic.
 
-It can be queued alongside the exact-input job with a distinct output and a
-dedicated v2.11 geometry map:
+Queue the BIB-only rebuild with a dedicated v2.11 geometry map:
 
 ```bash
 export CONDITIONS=/oscar/scratch/$USER/mucoll/count_tracker_cmp/norm42_cached_closure100/conditions
 export COUNT_SAMPLES=/oscar/scratch/$USER/mucoll/count_tracker_cmp/norm42_cached_closure100/count_samples
-export SIGNAL=/oscar/scratch/$USER/mucoll/count_tracker_cmp/norm42_cached_closure100/signal/signal.root
 export GEOMAP=/oscar/scratch/$USER/mucoll/count_tracker_cmp/v2_11_input_rebuild/maia_v2_11_sensor_geometry.npz
 export REBUILD_EVENT=/oscar/scratch/$USER/mucoll/count_tracker_cmp/v2_11_input_rebuild/$EVENT_ID
 mkdir -p "$(dirname "$REBUILD_EVENT")/logs"
 
 sbatch \
-  --export=ALL,CT_DIR="$CT_DIR",GENBIB_DIR="$GENBIB_DIR",CONDITIONS="$CONDITIONS",CONSTRUCTION=norm42,SPLIT=test,EVENT_ID="$EVENT_ID",SIGNAL="$SIGNAL",SIGNAL_ENTRY=80,COUNT_SAMPLES="$COUNT_SAMPLES",GEOMAP="$GEOMAP",OUTPUT="$REBUILD_EVENT",IMAGE_V2_11="$IMAGE_V2_11" \
+  --export=ALL,CT_DIR="$CT_DIR",GENBIB_DIR="$GENBIB_DIR",CONDITIONS="$CONDITIONS",CONSTRUCTION=norm42,SPLIT=test,EVENT_ID="$EVENT_ID",COUNT_SAMPLES="$COUNT_SAMPLES",GEOMAP="$GEOMAP",OUTPUT="$REBUILD_EVENT",IMAGE_V2_11="$IMAGE_V2_11" \
   -o "$(dirname "$REBUILD_EVENT")/logs/v2_11_rebuild_%j.out" \
   -e "$(dirname "$REBUILD_EVENT")/logs/v2_11_rebuild_%j.err" \
   "$CT_DIR/v2_11/submit_input_rebuild_v2_11.slurm"
 ```
 
-Use the exact signal file and entry recorded for the original event.  Although
-this is test event zero, its recorded signal entry is 80 because the signal
-file also contains the preceding train and validation records.  This job is
-intentionally not called a fully re-simulated v2 event: the SIM hits were
-produced previously and their stored CellIDs are preserved.
+This is not a new Geant4 simulation: the hit values come from the existing SIM
+and COUNT samples.  It is a symmetric v2.11 geometry assignment followed by a
+BIB-only digitization/reconstruction comparison under the old stack.
 
-For either test, compare entering tracker hits, digitized tracker hits and
-survival by collection, `AllTracks`, and deduplicated `SiTracks` for the same
-event.  The exact-input test is the clean answer to whether the software
-version changes the multiplicity ratio.
+Compare entering tracker hits, digitized tracker hits and survival by
+collection, `AllTracks`, and deduplicated `SiTracks` for the same BIB event.
+Record the SIM and COUNT losses from v2.11 CellID assignment alongside those
+reconstruction results.

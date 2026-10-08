@@ -13,28 +13,28 @@ set -euo pipefail
 : "${CONSTRUCTION:?set CONSTRUCTION to the conditions construction}"
 : "${SPLIT:?set SPLIT to train, val, or test}"
 : "${EVENT_ID:?set EVENT_ID to the prepared event ID}"
-: "${SIGNAL:?set SIGNAL to the neutrino SIM file}"
-: "${SIGNAL_ENTRY:?set SIGNAL_ENTRY to the paired signal entry}"
 : "${COUNT_SAMPLES:?set COUNT_SAMPLES to the generated arrays root}"
 : "${GEOMAP:?set GEOMAP to a dedicated v2.11 geometry map}"
 : "${OUTPUT:?set OUTPUT to a new v2.11 event directory}"
 
 CONDA_MODULE="${CONDA_MODULE:-miniforge3/25.3.0-3-a6hh}"
 ASSIGN_ENV="${ASSIGN_ENV:-genbib}"
+EXTRACT_ENV="${EXTRACT_ENV:-count-hdf}"
 export IMAGE_V2_11="${IMAGE_V2_11:-/oscar/data/mleblan6/mucoll/mucoll-sim-ubuntu24_v2.11-amd64.sif}"
 
 module load "$CONDA_MODULE"
 eval "$(conda shell.bash hook)"
 conda activate "$ASSIGN_ENV"
 export ASSIGN_PYTHON="$(command -v python)"
+conda deactivate
+conda activate "$EXTRACT_ENV"
+export EXTRACT_PYTHON="$(command -v python)"
 
 bash "$CT_DIR/v2_11/run_count_tracker_event_v2_11.sh" \
     --conditions "$CONDITIONS" \
     --construction "$CONSTRUCTION" \
     --split "$SPLIT" \
     --event-id "$EVENT_ID" \
-    --signal "$SIGNAL" \
-    --signal-entry "$SIGNAL_ENTRY" \
     --count-samples "$COUNT_SAMPLES" \
     --geomap "$GEOMAP" \
     --output "$OUTPUT"
