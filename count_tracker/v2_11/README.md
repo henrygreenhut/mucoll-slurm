@@ -171,3 +171,77 @@ This catches missing processors or assets, a missing `EventHeader`, a steering
 file that is not loaded, and incorrect algorithm ordering.  It cannot catch
 failures that occur only while processing the event; the one-event batch
 checkpoint remains necessary for those.
+
+## Interactive integration smoke
+
+Use the smoke harness while developing so changes can be tested before they
+are committed.  From the laptop, copy the complete `count_tracker` directory
+to an isolated OSCAR scratch directory:
+
+```bash
+export DEV_ROOT=/oscar/scratch/hgreenhu/mucoll/count_tracker_v2_11_dev
+ssh oscar "mkdir -p '$DEV_ROOT/count_tracker'"
+rsync -a mucoll-slurm/count_tracker/ oscar:"$DEV_ROOT/count_tracker/"
+```
+
+On OSCAR, request one interactive CPU node and prepare fresh v2-native inputs
+without starting digitization:
+
+```bash
+srun --partition=batch --cpus-per-task=4 --mem=16G --time=02:00:00 --pty bash
+
+module load miniforge3/25.3.0-3-a6hh
+eval "$(conda shell.bash hook)"
+
+export DEV_ROOT=/oscar/scratch/$USER/mucoll/count_tracker_v2_11_dev
+export CT_DIR="$DEV_ROOT/count_tracker"
+export GENBIB_DIR=/oscar/data/mleblan6/mucoll/hgreenhu/mucoll/GenBIB-ML
+export IMAGE_V2_11=/oscar/data/mleblan6/mucoll/mucoll-sim-ubuntu24_v2.11-amd64.sif
+export EVENT_ID=norm42_cached_closure100_test_000000
+export CONDITIONS=/oscar/scratch/$USER/mucoll/count_tracker_cmp/norm42_cached_closure100/conditions
+export COUNT_SAMPLES=/oscar/scratch/$USER/mucoll/count_tracker_cmp/norm42_cached_closure100/count_samples
+export GEOMAP=/oscar/scratch/$USER/mucoll/count_tracker_cmp/v2_11_input_rebuild/maia_v2_11_sensor_geometry.npz
+export PREPARED=/oscar/scratch/$USER/mucoll/count_tracker_cmp/v2_11_smoke_prepared/$EVENT_ID
+export SMOKE=/oscar/scratch/$USER/mucoll/count_tracker_cmp/v2_11_smoke_run/$EVENT_ID
+
+conda activate genbib
+export ASSIGN_PYTHON="$(command -v python)"
+conda deactivate
+conda activate count-hdf
+export EXTRACT_PYTHON="$(command -v python)"
+
+bash "$CT_DIR/v2_11/run_count_tracker_event_v2_11.sh" \
+  --conditions "$CONDITIONS" \
+  --construction norm42 \
+  --split test \
+  --event-id "$EVENT_ID" \
+  --count-samples "$COUNT_SAMPLES" \
+  --geomap "$GEOMAP" \
+  --output "$PREPARED" \
+  --stop-after input
+```
+
+Run the actual digitization and CKF stages on 128 deterministic hits from each
+tracker collection.  Start with SIM; use `--sample both` after the SIM smoke
+passes:
+
+```bash
+bash "$CT_DIR/v2_11/run_smoke_v2_11.sh" \
+  --input-event "$PREPARED" \
+  --output "$SMOKE" \
+  --sample SIM \
+  --hits-per-collection 128
+```
+
+The harness validates the input, digitized output, and reconstruction output
+after each stage.  `run_reco_v2_11.sh --stage digi` and `--stage reco` can also
+be called separately to resume at the failed stage.  Each output directory is
+write-once; use a new directory for another attempt so partial files cannot be
+mistaken for successful output.
+
+The installed v2.11 stack can terminate successfully and finalize a readable
+podio file, then abort in allocator cleanup.  The reconstruction wrapper
+handles only that narrow case: Bash status 134 (`SIGABRT`; SLURM reports the
+same signal as `6:0`) is accepted only after a fresh podio reader verifies the
+`EventHeader` and all required collections and types for that stage.  Any
+other nonzero status, or any output that fails validation, remains fatal.

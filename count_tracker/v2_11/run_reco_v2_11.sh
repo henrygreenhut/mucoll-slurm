@@ -3,22 +3,48 @@ set -euo pipefail
 
 IMAGE_V2_11="${IMAGE_V2_11:-/oscar/data/mleblan6/mucoll/mucoll-sim-ubuntu24_v2.11-amd64.sif}"
 INPUT_FILE="${INPUT_FILE:-}"
+DIGI_FILE="${DIGI_FILE:-}"
 OUTPUT_DIR="${OUTPUT_DIR:-}"
 NUM_EVENTS="${NUM_EVENTS:-1}"
+RUN_STAGE="${RUN_STAGE:-both}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-for name in INPUT_FILE OUTPUT_DIR; do
-    [ -n "${!name}" ] || { echo "Missing required environment: $name" >&2; exit 1; }
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --stage) RUN_STAGE="$2"; shift 2 ;;
+        *) echo "Unknown argument: $1" >&2; exit 1 ;;
+    esac
 done
-for path in "$IMAGE_V2_11" "$INPUT_FILE" "$SCRIPT_DIR/tracker_reco_override_v2_11.py"; do
+
+case "$RUN_STAGE" in
+    digi|reco|both) : ;;
+    *) echo "--stage must be digi, reco, or both" >&2; exit 1 ;;
+esac
+
+[ -n "$OUTPUT_DIR" ] || { echo "Missing required environment: OUTPUT_DIR" >&2; exit 1; }
+if [ "$RUN_STAGE" = reco ]; then
+    DIGI_FILE="${DIGI_FILE:-$OUTPUT_DIR/digi_output.edm4hep.root}"
+    SOURCE_FILE="$DIGI_FILE"
+else
+    [ -n "$INPUT_FILE" ] || { echo "Missing required environment: INPUT_FILE" >&2; exit 1; }
+    SOURCE_FILE="$INPUT_FILE"
+fi
+for path in "$IMAGE_V2_11" "$SOURCE_FILE" \
+        "$SCRIPT_DIR/tracker_reco_override_v2_11.py" \
+        "$SCRIPT_DIR/validate_v2_11_output.py"; do
     [ -e "$path" ] || { echo "Missing required path: $path" >&2; exit 1; }
 done
 
-INPUT_DIR="$(cd "$(dirname "$INPUT_FILE")" && pwd)"
-INPUT_NAME="$(basename "$INPUT_FILE")"
+INPUT_DIR="$(cd "$(dirname "$SOURCE_FILE")" && pwd)"
+INPUT_NAME="$(basename "$SOURCE_FILE")"
 mkdir -p "$OUTPUT_DIR"
 OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd)"
-for output in digi_output.edm4hep.root reco_output.edm4hep.root; do
+case "$RUN_STAGE" in
+    digi) outputs=(digi_output.edm4hep.root) ;;
+    reco) outputs=(reco_output.edm4hep.root) ;;
+    both) outputs=(digi_output.edm4hep.root reco_output.edm4hep.root) ;;
+esac
+for output in "${outputs[@]}"; do
     [ ! -e "$OUTPUT_DIR/$output" ] || {
         echo "Refusing to overwrite existing output: $OUTPUT_DIR/$output" >&2
         exit 1
@@ -45,25 +71,51 @@ apptainer exec \
             [ -f "$path" ] || { echo "Missing v2.11 detector asset: $path" >&2; exit 1; }
         done
 
+        run_stage() {
+            stage="$1"
+            set +e
+            k4run /work/count-tracker-v2/tracker_reco_override_v2_11.py
+            status=$?
+            set -e
+
+            # This v2.11 image can abort in allocator cleanup after Gaudi has
+            # terminated and podio has finalized the file.  Preserve every
+            # other failure.  For the cleanup abort, continue only if a new
+            # reader independently verifies the complete stage schema.
+            if [ "$status" -ne 0 ] && [ "$status" -ne 134 ]; then
+                echo "v2.11 $stage failed with exit status $status" >&2
+                return "$status"
+            fi
+            python3 /work/count-tracker-v2/validate_v2_11_output.py \
+                --stage "$stage" --input "$V2_OUTPUT_FILE"
+            if [ "$status" -ne 0 ]; then
+                echo "WARNING: accepting v2.11 $stage cleanup abort (status $status); independently validated $V2_OUTPUT_FILE" >&2
+            fi
+        }
+
         export V2_NUM_EVENTS="$3"
-        export V2_STAGE=digi
-        export V2_INPUT_FILE="/work/input/$1"
-        export V2_OUTPUT_FILE=/work/output/digi_output.edm4hep.root
-        k4run /work/count-tracker-v2/tracker_reco_override_v2_11.py
-        [ -s "$V2_OUTPUT_FILE" ] || {
-            echo "v2.11 digitization produced no output; no input event was processed" >&2
-            exit 1
-        }
+        if [ "$4" = digi ] || [ "$4" = both ]; then
+            export V2_STAGE=digi
+            export V2_INPUT_FILE="/work/input/$1"
+            export V2_OUTPUT_FILE=/work/output/digi_output.edm4hep.root
+            run_stage digi
+        fi
 
-        export V2_STAGE=reco
-        export V2_INPUT_FILE=/work/output/digi_output.edm4hep.root
-        export V2_OUTPUT_FILE=/work/output/reco_output.edm4hep.root
-        k4run /work/count-tracker-v2/tracker_reco_override_v2_11.py
-        [ -s "$V2_OUTPUT_FILE" ] || {
-            echo "v2.11 reconstruction produced no output" >&2
-            exit 1
-        }
-    ' _ "$INPUT_NAME" "$OUTPUT_DIR" "$NUM_EVENTS"
+        if [ "$4" = reco ] || [ "$4" = both ]; then
+            export V2_STAGE=reco
+            if [ "$4" = reco ]; then
+                export V2_INPUT_FILE="/work/input/$1"
+            else
+                export V2_INPUT_FILE=/work/output/digi_output.edm4hep.root
+            fi
+            export V2_OUTPUT_FILE=/work/output/reco_output.edm4hep.root
+            run_stage reco
+        fi
+    ' _ "$INPUT_NAME" "$OUTPUT_DIR" "$NUM_EVENTS" "$RUN_STAGE"
 
-echo "v2.11 digitization: $OUTPUT_DIR/digi_output.edm4hep.root"
-echo "v2.11 reconstruction: $OUTPUT_DIR/reco_output.edm4hep.root"
+if [ "$RUN_STAGE" = digi ] || [ "$RUN_STAGE" = both ]; then
+    echo "v2.11 digitization: $OUTPUT_DIR/digi_output.edm4hep.root"
+fi
+if [ "$RUN_STAGE" = reco ] || [ "$RUN_STAGE" = both ]; then
+    echo "v2.11 reconstruction: $OUTPUT_DIR/reco_output.edm4hep.root"
+fi

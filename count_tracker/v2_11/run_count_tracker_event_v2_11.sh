@@ -9,7 +9,7 @@ V2_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ASSIGN_PYTHON="${ASSIGN_PYTHON:-python3}"
 
 CONDITIONS=""; CONSTRUCTION=""; SPLIT=""; EVENT_ID=""
-COUNT_SAMPLES=""; GEOMAP=""; ONLY=""; OUTPUT=""
+COUNT_SAMPLES=""; GEOMAP=""; ONLY=""; OUTPUT=""; STOP_AFTER=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -20,6 +20,7 @@ while [ $# -gt 0 ]; do
         --count-samples) COUNT_SAMPLES="$2"; shift 2 ;;
         --geomap) GEOMAP="$2"; shift 2 ;;
         --only) ONLY="$2"; shift 2 ;;
+        --stop-after) STOP_AFTER="$2"; shift 2 ;;
         --output) OUTPUT="$2"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 1 ;;
     esac
@@ -40,6 +41,10 @@ case "$ONLY" in
     COUNT) DO_SIM=0 ;;
     "") : ;;
     *) echo "--only must be SIM or COUNT" >&2; exit 1 ;;
+esac
+case "$STOP_AFTER" in
+    input|"") : ;;
+    *) echo "--stop-after currently supports only input" >&2; exit 1 ;;
 esac
 
 if [ "$DO_COUNT" -eq 1 ]; then
@@ -119,6 +124,11 @@ apptainer exec --pwd /tmp --bind /oscar:/oscar,"$CT_DIR:$CT_DIR:ro" "$IMAGE_V2_1
             --output "$CTS_OUTPUT/SIM/input"
     fi
 '
+
+if [ "$STOP_AFTER" = input ]; then
+    echo "=== v2.11 inputs prepared: $OUTPUT ==="
+    exit 0
+fi
 
 run_one_reco() {
     local sample="$1"
