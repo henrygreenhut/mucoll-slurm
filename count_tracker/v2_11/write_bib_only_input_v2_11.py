@@ -39,6 +39,13 @@ def write(args):
         raise FileExistsError(f"Refusing to replace {destination}")
 
     frame = podio.Frame()
+    event_headers = edm4hep.EventHeaderCollection()
+    event_header = event_headers.create()
+    event_header.setEventNumber(0)
+    event_header.setRunNumber(0)
+    event_header.setTimeStamp(0)
+    frame.put(event_headers, "EventHeader")
+
     collections = {short: edm4hep.SimTrackerHitCollection() for short in COLLECTIONS}
     provenance, targets = append_count_hits(
         collections, args.arrays, expected, args.count_tolerance
@@ -68,6 +75,12 @@ def write(args):
         if len(frames) != 1:
             raise ValueError("BIB-only output must contain exactly one event")
         check = frames[0]
+        headers = check.get("EventHeader")
+        if len(headers) != 1:
+            raise ValueError("BIB-only output must contain one EventHeader")
+        header = headers[0]
+        if header.getEventNumber() != 0 or header.getRunNumber() != 0:
+            raise ValueError("Serialized EventHeader changed")
         for short, (system, name) in COLLECTIONS.items():
             if hit_counts(check.get(name), system) != targets[short]:
                 raise ValueError(f"Serialized {short} occupancy changed")
@@ -79,6 +92,7 @@ def write(args):
             "construction": args.construction,
             "bib_only": True,
             "signal": None,
+            "event_header": {"run": 0, "event": 0, "timestamp": 0},
             "arrays": str(args.arrays.resolve()),
             "hits": {short: sum(counts.values()) for short, counts in targets.items()},
             "input_sha256": sha256_file(root_path),

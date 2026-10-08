@@ -122,12 +122,14 @@ bash "$CT_DIR/v2_11/run_count_tracker_event_v2_11.sh" \
 If the geometry map does not exist, the event wrapper creates it once.  The
 newer podio files cannot be read by v2.11, so the wrapper reads only numerical
 BIB hit branches through uproot, saves them as NumPy arrays, and writes fresh
-BIB-only records with the v2.11 runtime.  No neutrino signal is included; it
-has no tracker hits and is irrelevant to this diagnostic.  Both SIM and COUNT
-hits are assigned CellIDs from their XYZ positions with the same v2.11 map and
-the same assignment algorithm.  Any assignment losses are recorded for each
-arm.  Keep this output directory separate from both the v3 event and the
-failed exact-input v2 diagnostic.
+BIB-only records with the v2.11 runtime.  Each record contains one neutral
+`EventHeader` (`run=0`, `event=0`, `timestamp=0`) required by the v2.11
+EDM4hep-to-LCIO converter.  No neutrino signal is included; it has no tracker
+hits and is irrelevant to this diagnostic.  Both SIM and COUNT hits are
+assigned CellIDs from their XYZ positions with the same v2.11 map and the same
+assignment algorithm.  Any assignment losses are recorded for each arm.  Keep
+this output directory separate from both the v3 event and the failed
+exact-input v2 diagnostic.
 
 Queue the BIB-only rebuild with a dedicated v2.11 geometry map:
 
@@ -153,3 +155,19 @@ Compare entering tracker hits, digitized tracker hits and survival by
 collection, `AllTracks`, and deduplicated `SiTracks` for the same BIB event.
 Record the SIM and COUNT losses from v2.11 CellID assignment alongside those
 reconstruction results.
+
+## Read-only preflight
+
+From an allocated OSCAR CPU node, check the image, detector assets, installed
+Marlin processors, and both `k4run` configurations without creating output or
+processing an event:
+
+```bash
+export INPUT_FILE=/oscar/scratch/$USER/mucoll/count_tracker_cmp/v2_11_input_rebuild/norm42_cached_closure100_test_000000/SIM/input/input.edm4hep.root
+bash "$CT_DIR/v2_11/preflight_v2_11.sh"
+```
+
+This catches missing processors or assets, a missing `EventHeader`, a steering
+file that is not loaded, and incorrect algorithm ordering.  It cannot catch
+failures that occur only while processing the event; the one-event batch
+checkpoint remains necessary for those.
