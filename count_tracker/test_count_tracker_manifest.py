@@ -81,6 +81,28 @@ class SelectionTests(unittest.TestCase):
                 # least one cycle outside its same-named source subset.
                 self.assertFalse(selected <= original_split[polarity].keys())
 
+    def test_full_bx_draws_1666_unique_files_per_polarity(self):
+        events = select_events(
+            self.pools,
+            {"train": 0, "val": 0, "test": 1},
+            17,
+            "fullbx",
+            "norm42",
+            source_pool="all",
+            n_files_per_polarity=1666,
+        )
+        self.assertEqual(len(events), 1)
+        full = combined_pool(self.pools)
+        for polarity in POLARITIES:
+            selected = [source["cycle"] for source in events[0]["sources"][polarity]]
+            self.assertEqual(len(selected), 1666)
+            self.assertEqual(len(set(selected)), 1666)
+            self.assertTrue(set(selected) <= full[polarity].keys())
+        self.assertNotEqual(
+            events[0]["sources"]["MUPLUS"],
+            events[0]["sources"]["MUMINUS"],
+        )
+
     def test_combined_pool_rejects_overlapping_declared_splits(self):
         self.pools["val"]["MUPLUS"][0] = self.pools["train"]["MUPLUS"][0]
         with self.assertRaisesRegex(ValueError, "multiple pool splits"):

@@ -32,6 +32,15 @@ CONSTRUCTIONS = {
     "norm1": {"n_files_per_polarity": 420, "file_normalization": 1},
     "norm42": {"n_files_per_polarity": 10, "file_normalization": 42},
 }
+NORM42_FULL_BX = {
+    "name": "norm42-full-bx",
+    "convention": "floor(6667 / 4) norm42 files per polarity",
+    "library_files_per_polarity": 6667,
+    "nominal_bunch_crossings_in_library": 4,
+    "exact_files_per_polarity": 1666.75,
+    "rounding": "floor",
+    "selected_files_per_polarity": 1666,
+}
 
 # Inferred from the observed support of the COUNT training arrays and retained
 # only to reproduce the earlier direct cohorts. Producer provenance did not
@@ -120,9 +129,30 @@ def validate_manifest(manifest, base):
         raise ValueError("construction must be norm1 or norm42")
     definition = CONSTRUCTIONS[construction]
     n_files = manifest.get("n_files_per_polarity")
-    for key, value in {**definition, "norm1_equivalents_per_polarity": 420}.items():
-        if type(manifest.get(key)) is not int or manifest[key] != value:
-            raise ValueError(f"{construction} requires {key}={value}")
+    if type(n_files) is not int or n_files < 1:
+        raise ValueError("n_files_per_polarity must be a positive integer")
+    if manifest.get("file_normalization") != definition["file_normalization"]:
+        raise ValueError(
+            f"{construction} requires file_normalization={definition['file_normalization']}"
+        )
+    normalization = manifest.get("overlay_normalization")
+    if normalization is None:
+        expected_files = definition["n_files_per_polarity"]
+        if n_files != expected_files:
+            raise ValueError(
+                f"{construction} requires n_files_per_polarity={expected_files} "
+                "unless a supported overlay_normalization is declared"
+            )
+    elif normalization != NORM42_FULL_BX:
+        raise ValueError("Unsupported overlay_normalization")
+    elif construction != "norm42" or n_files != NORM42_FULL_BX["selected_files_per_polarity"]:
+        raise ValueError("norm42-full-bx requires norm42 with 1666 files per polarity")
+    expected_equivalents = n_files * definition["file_normalization"]
+    if manifest.get("norm1_equivalents_per_polarity") != expected_equivalents:
+        raise ValueError(
+            "norm1_equivalents_per_polarity must equal "
+            "n_files_per_polarity * file_normalization"
+        )
     if not isinstance(manifest.get("events"), list) or not manifest["events"]:
         raise ValueError("Manifest must contain a nonempty events list")
     identities = set()
@@ -234,8 +264,15 @@ def prepare(manifest_path, output, hit_selection="all-stored"):
                     "hits": len(conditions), "occupied_sensors": len(sensors),
                     "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
                 }
+            summary["total_hits"] = sum(
+                collection["hits"] for collection in summary["collections"].values()
+            )
             summaries.append(summary)
-            print(f"Prepared {event['split']}/{event['event_id']}", flush=True)
+            print(
+                f"Prepared {event['split']}/{event['event_id']}: "
+                f"{summary['total_hits']:,} selected tracker hits",
+                flush=True,
+            )
         if hit_selection == "flight-corrected":
             selection_description = (
                 f"flight-corrected in-time BIB: {IN_TIME_WINDOW_NS[0]} <= "

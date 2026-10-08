@@ -13,7 +13,13 @@ from pathlib import Path
 import random
 import re
 
-from count_tracker_conditions import CELL_ID_ENCODING, CONSTRUCTIONS, POLARITIES, validate_manifest
+from count_tracker_conditions import (
+    CELL_ID_ENCODING,
+    CONSTRUCTIONS,
+    NORM42_FULL_BX,
+    POLARITIES,
+    validate_manifest,
+)
 
 
 SPLITS = ("train", "val", "test")
@@ -72,7 +78,9 @@ def combined_pool(pools):
     return combined
 
 
-def select_events(pools, counts, seed, cohort, construction, source_pool="split"):
+def select_events(
+        pools, counts, seed, cohort, construction, source_pool="split",
+        n_files_per_polarity=None):
     """Use a separate deterministic stream for each event and polarity."""
     if type(seed) is not int or seed < 0:
         raise ValueError("Source seed must be a nonnegative integer")
@@ -86,7 +94,10 @@ def select_events(pools, counts, seed, cohort, construction, source_pool="split"
         raise ValueError("construction must be norm1 or norm42")
     if source_pool not in ("split", "all"):
         raise ValueError("source_pool must be split or all")
-    n_files = CONSTRUCTIONS[construction]["n_files_per_polarity"]
+    n_files = (CONSTRUCTIONS[construction]["n_files_per_polarity"]
+               if n_files_per_polarity is None else n_files_per_polarity)
+    if type(n_files) is not int or n_files < 1:
+        raise ValueError("n_files_per_polarity must be a positive integer")
     all_cycles = combined_pool(pools) if source_pool == "all" else None
     events = []
     for split in SPLITS:
@@ -115,6 +126,11 @@ def main():
     parser.add_argument("--cohort", required=True, help="Distinct label for each independent SIM cohort")
     parser.add_argument("--seed", required=True, type=int)
     parser.add_argument(
+        "--norm42-full-bx", action="store_true",
+        help=("select floor(6667/4) = 1666 distinct norm42 files per polarity; "
+              "valid only with --construction norm42"),
+    )
+    parser.add_argument(
         "--source-pool", choices=("split", "all"), default="split",
         help=("split restricts sources by event split; all draws every event "
               "from the union of declared cycles (default: %(default)s)"),
@@ -123,13 +139,21 @@ def main():
         parser.add_argument(f"--{split}-events", required=True, type=int)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
+    if args.norm42_full_bx and args.construction != "norm42":
+        parser.error("--norm42-full-bx requires --construction norm42")
     pools, provenance = read_pools(args.pools, args.construction)
     counts = {split: getattr(args, f"{split}_events") for split in SPLITS}
+    overlay_normalization = NORM42_FULL_BX if args.norm42_full_bx else None
+    n_files = (overlay_normalization["selected_files_per_polarity"]
+               if overlay_normalization else
+               CONSTRUCTIONS[args.construction]["n_files_per_polarity"])
+    file_normalization = CONSTRUCTIONS[args.construction]["file_normalization"]
     manifest = {
         "schema_version": 2, "cell_id_encoding": CELL_ID_ENCODING,
         "construction": args.construction,
-        **CONSTRUCTIONS[args.construction],
-        "norm1_equivalents_per_polarity": 420,
+        "n_files_per_polarity": n_files,
+        "file_normalization": file_normalization,
+        "norm1_equivalents_per_polarity": n_files * file_normalization,
         "source_pool": args.source_pool,
         "pool": provenance,
         "sampling": {
@@ -151,8 +175,11 @@ def main():
                 "event_index, polarity]))"),
         },
         "events": select_events(
-            pools, counts, args.seed, args.cohort, args.construction, args.source_pool),
+            pools, counts, args.seed, args.cohort, args.construction,
+            args.source_pool, n_files),
     }
+    if overlay_normalization:
+        manifest["overlay_normalization"] = overlay_normalization
     output = Path(args.output).resolve()
     validate_manifest(manifest, output.parent)
     output.parent.mkdir(parents=True, exist_ok=True)

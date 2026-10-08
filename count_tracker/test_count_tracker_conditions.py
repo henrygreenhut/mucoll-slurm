@@ -44,6 +44,33 @@ class ConditionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "requires n_files_per_polarity=10"):
             conditions.validate_manifest(data, Path("/tmp"))
 
+    def test_norm42_full_bx_normalization_is_explicit_and_consistent(self):
+        data = manifest()
+        data.update(
+            construction="norm42",
+            file_normalization=42,
+            n_files_per_polarity=1666,
+            norm1_equivalents_per_polarity=1666 * 42,
+            source_pool="all",
+            overlay_normalization=copy.deepcopy(conditions.NORM42_FULL_BX),
+        )
+        for polarity in conditions.POLARITIES:
+            data["events"][0]["sources"][polarity] = [
+                {"path": f"{polarity}/{cycle}.root", "cycle": cycle, "entry": 0}
+                for cycle in range(1666)
+            ]
+        conditions.validate_manifest(data, Path("/tmp"))
+
+        inconsistent = copy.deepcopy(data)
+        inconsistent["overlay_normalization"]["selected_files_per_polarity"] = 1667
+        with self.assertRaisesRegex(ValueError, "Unsupported overlay_normalization"):
+            conditions.validate_manifest(inconsistent, Path("/tmp"))
+
+        missing_provenance = copy.deepcopy(data)
+        del missing_provenance["overlay_normalization"]
+        with self.assertRaisesRegex(ValueError, "supported overlay_normalization"):
+            conditions.validate_manifest(missing_provenance, Path("/tmp"))
+
     def test_ambiguous_old_manifest_is_rejected(self):
         data = manifest()
         data["schema_version"] = 1
@@ -76,6 +103,7 @@ class ConditionTests(unittest.TestCase):
             # norm42 file contents already include their normalization: do not
             # multiply their actual hit counts by 42 a second time.
             self.assertEqual(expected["VBC"], Counter({(1, 0, 0, 0, 0): 140}))
+            self.assertEqual(report["events"][0]["total_hits"], 140)
             self.assertEqual(len(event["sources"]["MUPLUS"]), 10)
             with self.assertRaisesRegex(ValueError, "different SIM construction"):
                 load_event(output, "train", "norm42_SIM_A_000000", "norm1")
