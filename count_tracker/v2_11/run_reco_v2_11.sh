@@ -50,11 +50,19 @@ apptainer exec \
         export V2_INPUT_FILE="/work/input/$1"
         export V2_OUTPUT_FILE=/work/output/digi_output.edm4hep.root
         k4run /work/count-tracker-v2/tracker_reco_override_v2_11.py
+        [ -s "$V2_OUTPUT_FILE" ] || {
+            echo "v2.11 digitization produced no output; the input may be incompatible with the old podio runtime" >&2
+            exit 1
+        }
 
         export V2_STAGE=reco
         export V2_INPUT_FILE=/work/output/digi_output.edm4hep.root
         export V2_OUTPUT_FILE=/work/output/reco_output.edm4hep.root
         k4run /work/count-tracker-v2/tracker_reco_override_v2_11.py
+        [ -s "$V2_OUTPUT_FILE" ] || {
+            echo "v2.11 reconstruction produced no output" >&2
+            exit 1
+        }
     ' _ "$INPUT_NAME" "$OUTPUT_DIR" "$NUM_EVENTS"
 
 echo "v2.11 digitization: $OUTPUT_DIR/digi_output.edm4hep.root"

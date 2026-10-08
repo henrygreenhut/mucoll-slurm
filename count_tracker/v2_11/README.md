@@ -91,12 +91,12 @@ another changed axis.
 ## Full v2.11 input rebuild
 
 Run from the `mucoll-slurm` repository on an allocated OSCAR CPU node after
-activating `count-hdf`:
+activating `genbib`, which provides NumPy and SciPy for CellID assignment:
 
 ```bash
 module load miniforge3/25.3.0-3-a6hh
 eval "$(conda shell.bash hook)"
-conda activate count-hdf
+conda activate genbib
 
 export REPO="$(git rev-parse --show-toplevel)"
 export CT_DIR="$REPO/count_tracker"

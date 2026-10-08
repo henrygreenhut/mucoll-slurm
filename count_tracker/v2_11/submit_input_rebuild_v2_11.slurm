@@ -20,12 +20,12 @@ set -euo pipefail
 : "${OUTPUT:?set OUTPUT to a new v2.11 event directory}"
 
 CONDA_MODULE="${CONDA_MODULE:-miniforge3/25.3.0-3-a6hh}"
-COUNT_ENV="${COUNT_ENV:-count-hdf}"
+ASSIGN_ENV="${ASSIGN_ENV:-genbib}"
 export IMAGE_V2_11="${IMAGE_V2_11:-/oscar/data/mleblan6/mucoll/mucoll-sim-ubuntu24_v2.11-amd64.sif}"
 
 module load "$CONDA_MODULE"
 eval "$(conda shell.bash hook)"
-conda activate "$COUNT_ENV"
+conda activate "$ASSIGN_ENV"
 export ASSIGN_PYTHON="$(command -v python)"
 
 bash "$CT_DIR/v2_11/run_count_tracker_event_v2_11.sh" \
