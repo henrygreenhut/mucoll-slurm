@@ -14,10 +14,12 @@ INPUT_DIR="$(cd "$(dirname "$INPUT_FILE")" && pwd)"
 INPUT_NAME="$(basename "$INPUT_FILE")"
 
 apptainer exec \
+    --pwd /tmp \
     --bind "$SCRIPT_DIR:/work/count-tracker-v2:ro,$INPUT_DIR:/work/input:ro" \
     "$IMAGE_V2_11" bash -lc '
-        set -euo pipefail
+        set -eo pipefail
         source /opt/setup_mucoll.sh
+        set -u
 
         export MUCOLL_GEO="$(find /opt/spack/opt/spack -type f \
             -path "*/k4geo*/share/k4geo/MuColl/MAIA/compact/MAIA_v0/MAIA_v0.xml" \
