@@ -29,9 +29,8 @@ hits.
    `/oscar/data/mleblan6/mucoll/mucoll-sim-ubuntu24_v2.11-amd64.sif`.
 2. v2.11 exposes digitization and CKF through `MarlinProcessorWrapper`, so
    explicit EDM4hep-to-LCIO and LCIO-to-EDM4hep converter tools surround the
-   same tracker stages.  It uses the release's explicit
-   `k4DataSvc`/`PodioInput`/`PodioOutput` route because `IOSvc` did not advance
-   the v2-native BIB-only event file.
+   same tracker stages.  The steering configures the application at module
+   scope because `k4run` loads it as a configuration file.
 3. CKF uses the v2.11 `ACTSSeededCKFTrackingProc` interface and the image's
    `MAIA_v0.root`, `MAIA_v0.json`, and `MAIA_v0_material.json`.
 4. MAIA seeding layers come from `mucoll-benchmarks` commit `1b702ec` (the
