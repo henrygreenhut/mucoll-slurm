@@ -203,6 +203,8 @@ export COUNT_SAMPLES=/oscar/scratch/$USER/mucoll/count_tracker_cmp/norm42_cached
 export GEOMAP=/oscar/scratch/$USER/mucoll/count_tracker_cmp/v2_11_input_rebuild/maia_v2_11_sensor_geometry.npz
 export PREPARED=/oscar/scratch/$USER/mucoll/count_tracker_cmp/v2_11_smoke_prepared/$EVENT_ID
 export SMOKE=/oscar/scratch/$USER/mucoll/count_tracker_cmp/v2_11_smoke_run/$EVENT_ID
+export SMOKE_LOG=/oscar/scratch/$USER/mucoll/count_tracker_cmp/v2_11_smoke_run/logs/$EVENT_ID.log
+mkdir -p "$(dirname "$SMOKE_LOG")"
 
 conda activate genbib
 export ASSIGN_PYTHON="$(command -v python)"
@@ -230,11 +232,14 @@ bash "$CT_DIR/v2_11/run_smoke_v2_11.sh" \
   --input-event "$PREPARED" \
   --output "$SMOKE" \
   --sample SIM \
-  --hits-per-collection 128
+  --hits-per-collection 128 \
+  2>&1 | tee "$SMOKE_LOG"
 ```
 
 The harness validates the input, digitized output, and reconstruction output
-after each stage.  `run_reco_v2_11.sh --stage digi` and `--stage reco` can also
+in a new process after each stage.  The reduced input writer copies numerical
+values into fresh EDM4hep objects rather than retaining objects owned by its
+source podio reader.  `run_reco_v2_11.sh --stage digi` and `--stage reco` can also
 be called separately to resume at the failed stage.  Each output directory is
 write-once; use a new directory for another attempt so partial files cannot be
 mistaken for successful output.

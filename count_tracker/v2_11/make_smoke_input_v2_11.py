@@ -46,22 +46,59 @@ def make_smoke_input(args):
     source_headers = source_frame.get("EventHeader")
     if len(source_headers) != 1:
         raise ValueError("Expected one EventHeader in the source event")
+    source_header = source_headers[0]
+    header_values = (
+        source_header.getEventNumber(),
+        source_header.getRunNumber(),
+        source_header.getTimeStamp(),
+    )
+
+    selected = {}
+    records = {}
+    for short, (_, name) in COLLECTIONS.items():
+        source_hits = source_frame.get(name)
+        indices = evenly_spaced_indices(len(source_hits), args.hits_per_collection)
+        records[short] = []
+        for index in indices:
+            hit = source_hits[index]
+            position = hit.getPosition()
+            momentum = hit.getMomentum()
+            records[short].append((
+                hit.getCellID(),
+                hit.getEDep(),
+                hit.getTime(),
+                hit.getPathLength(),
+                hit.getQuality(),
+                (position.x, position.y, position.z),
+                (momentum.x, momentum.y, momentum.z),
+            ))
+        selected[short] = len(records[short])
+        if not selected[short]:
+            raise ValueError(f"Source collection {name} is empty")
+
+    # Do not retain objects owned by the source Reader in the output Frame.
+    # Old podio releases can otherwise leave the serialized event invalid.
+    del source_header, source_headers, source_frame, frames, reader
 
     frame = podio.Frame()
     headers = edm4hep.EventHeaderCollection()
-    headers.push_back(source_headers[0].clone(False))
+    header = headers.create()
+    header.setEventNumber(header_values[0])
+    header.setRunNumber(header_values[1])
+    header.setTimeStamp(header_values[2])
     frame.put(headers, "EventHeader")
 
-    selected = {}
     for short, (_, name) in COLLECTIONS.items():
-        source_hits = source_frame.get(name)
         output_hits = edm4hep.SimTrackerHitCollection()
-        indices = evenly_spaced_indices(len(source_hits), args.hits_per_collection)
-        for index in indices:
-            output_hits.push_back(source_hits[index].clone(False))
-        selected[short] = len(output_hits)
-        if not selected[short]:
-            raise ValueError(f"Source collection {name} is empty")
+        for cell_id, edep, time, path_length, quality, position, momentum in records[short]:
+            hit = output_hits.create()
+            hit.setCellID(cell_id)
+            hit.setEDep(edep)
+            hit.setTime(time)
+            hit.setPathLength(path_length)
+            hit.setQuality(quality)
+            hit.setPosition(edm4hep.Vector3d(*position))
+            hit.setMomentum(edm4hep.Vector3f(*momentum))
         frame.put(output_hits, name)
 
     metadata = podio.Frame()
@@ -78,15 +115,6 @@ def make_smoke_input(args):
         writer._writer.finish()
         del writer
 
-        check_reader = Reader(str(root_path))
-        check_frames = check_reader.get("events")
-        if len(check_frames) != 1 or len(check_frames[0].get("EventHeader")) != 1:
-            raise ValueError("Serialized smoke event or EventHeader is invalid")
-        for short, (_, name) in COLLECTIONS.items():
-            if len(check_frames[0].get(name)) != selected[short]:
-                raise ValueError(f"Serialized {short} hit count changed")
-        del check_frames, check_reader
-
         report = {
             "source": str(source),
             "source_sha256": sha256_file(source),
@@ -98,7 +126,6 @@ def make_smoke_input(args):
         (work / "manifest.json").write_text(json.dumps(report, indent=2) + "\n")
         work.rename(destination)
 
-    del source_frame, frames, reader
     print(f"Prepared v2.11 smoke input -> {destination}")
 
 
