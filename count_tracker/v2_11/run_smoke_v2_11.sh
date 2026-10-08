@@ -53,7 +53,7 @@ OUTPUT="$(cd "$OUTPUT" && pwd)"
 INPUT_EVENT="$(cd "$INPUT_EVENT" && pwd)"
 
 run_v2_python() {
-    apptainer exec --pwd /tmp --bind /oscar:/oscar,"$CT_DIR:$CT_DIR:ro" \
+    apptainer exec --pwd "$CT_DIR" --bind /oscar:/oscar,"$CT_DIR:$CT_DIR:ro" \
         "$IMAGE_V2_11" bash -lc 'source /opt/setup_mucoll.sh; python3 "$@"' _ "$@"
 }
 

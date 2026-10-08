@@ -105,7 +105,7 @@ export CTS_CONSTRUCTION="$CONSTRUCTION" CTS_SPLIT="$SPLIT" CTS_EVENT_ID="$EVENT_
 export CTS_V2_DIR="$V2_DIR" CTS_OUTPUT="$OUTPUT"
 export CTS_DO_SIM="$DO_SIM" CTS_DO_COUNT="$DO_COUNT"
 
-apptainer exec --pwd /tmp --bind /oscar:/oscar,"$CT_DIR:$CT_DIR:ro" "$IMAGE_V2_11" bash -lc '
+apptainer exec --pwd "$CT_DIR" --bind /oscar:/oscar,"$CT_DIR:$CT_DIR:ro" "$IMAGE_V2_11" bash -lc '
     set -eo pipefail
     source /opt/setup_mucoll.sh
     set -u

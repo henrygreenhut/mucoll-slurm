@@ -14,7 +14,7 @@ INPUT_DIR="$(cd "$(dirname "$INPUT_FILE")" && pwd)"
 INPUT_NAME="$(basename "$INPUT_FILE")"
 
 apptainer exec \
-    --pwd /tmp \
+    --pwd /work/count-tracker-v2 \
     --bind "$SCRIPT_DIR:/work/count-tracker-v2:ro,$INPUT_DIR:/work/input:ro" \
     "$IMAGE_V2_11" bash -lc '
         set -eo pipefail
@@ -33,8 +33,8 @@ apptainer exec \
             [ -f "$path" ] || { echo "Missing v2.11 detector asset: $path" >&2; exit 1; }
         done
 
-        python -c "import sys; from podio.root_io import Reader; reader=Reader(sys.argv[1]); frames=reader.get(\"events\"); assert len(frames) == 1, \"expected one event\"; headers=frames[0].get(\"EventHeader\"); assert headers is not None and len(headers) == 1, \"expected one EventHeader\"" \
-            "/work/input/$1"
+        python3 /work/count-tracker-v2/validate_v2_11_output.py \
+            --stage input --input "/work/input/$1" >/dev/null
 
         # Marlin can abort during cleanup after printing its registry in this
         # image, so use the emitted XML but do not interpret that cleanup as a
