@@ -119,8 +119,13 @@ MAIA_SEEDING_LAYERS = (
 
 
 def pop_stage():
+    stage = os.environ.get("V2_STAGE")
+    if stage is not None:
+        if stage not in ("digi", "reco"):
+            raise RuntimeError("V2_STAGE must be digi or reco")
+        return stage
     if "--stage" not in sys.argv:
-        raise RuntimeError("Missing required argument: --stage digi|reco")
+        raise RuntimeError("Set V2_STAGE=digi|reco or pass --stage digi|reco")
     index = sys.argv.index("--stage")
     try:
         stage = sys.argv[index + 1]
