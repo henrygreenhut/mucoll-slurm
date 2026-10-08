@@ -315,3 +315,15 @@ training history, model weights, feature definitions, and store hashes.
 sanity control; it is not the physical SIM-SIM or COUNT-COUNT null. Those nulls
 require independently produced track stores from the same respective procedure.
 The current ten-event pilot cannot train a held-out PFN yet.
+
+V2.11 SOFTWARE-VERSION DIAGNOSTIC
+---------------------------------
+
+The isolated v2.11 compatibility path is documented in `v2_11/README.md`.
+Start with `v2_11/run_existing_pair_v2_11.sh`, which passes the exact existing
+SIM and COUNT pre-digitization ROOT files through the old image and therefore
+changes only the digitization/reconstruction software.  The existing
+`run_count_tracker_event.sh`, GenBIB-ML reconstruction files, and v3 outputs
+are unchanged.  A separate full v2.11 input-rebuild wrapper is retained for a
+later geometry-coherence study and must not be confused with the exact-input
+software-version diagnostic.
