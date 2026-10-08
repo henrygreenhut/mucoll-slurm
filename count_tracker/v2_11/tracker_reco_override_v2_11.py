@@ -160,11 +160,15 @@ def attach_edm4hep_output(processor, collection_names):
     processor.Lcio2EDM4hepTool = converter
 
 
-def input_converter():
+def aida_input_converter(stage):
     processor = marlin_processor(
-        "InputConverter",
-        "Statusmonitor",
-        {"HowOften": ["1"]},
+        "AIDAInputConverter",
+        "AIDAProcessor",
+        {
+            "Compress": ["1"],
+            "FileName": [f"v2_11_{stage}_histograms"],
+            "FileType": ["root"],
+        },
     )
     attach_edm4hep_input(processor)
     return processor
@@ -277,7 +281,10 @@ def main():
     io_service.Output = os.environ["V2_OUTPUT_FILE"]
     io_service.outputCommands = ["keep *"]
 
-    algorithms = [input_converter(), dd4hep_initializer()]
+    # Marlin's planar digitizers and ACTS processors require AIDA to be the
+    # first processor.  It also provides the event's EDM4hep-to-LCIO bridge,
+    # following the reconstruction example shipped in the v2.11 image.
+    algorithms = [aida_input_converter(stage), dd4hep_initializer()]
     algorithms += tracker_digi_algs() if stage == "digi" else tracker_reco_algs()
 
     ApplicationMgr(

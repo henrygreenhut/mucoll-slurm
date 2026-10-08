@@ -30,7 +30,9 @@ hits.
 2. v2.11 exposes digitization and CKF through `MarlinProcessorWrapper`, so
    explicit EDM4hep-to-LCIO and LCIO-to-EDM4hep converter tools surround the
    same tracker stages.  The steering configures the application at module
-   scope because `k4run` loads it as a configuration file.
+   scope because `k4run` loads it as a configuration file.  Its first Marlin
+   processor is `AIDAProcessor`, as required by this release; that processor
+   also hosts the EDM4hep-to-LCIO input converter.
 3. CKF uses the v2.11 `ACTSSeededCKFTrackingProc` interface and the image's
    `MAIA_v0.root`, `MAIA_v0.json`, and `MAIA_v0_material.json`.
 4. MAIA seeding layers come from `mucoll-benchmarks` commit `1b702ec` (the
