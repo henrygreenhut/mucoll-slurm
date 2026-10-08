@@ -79,9 +79,10 @@ export CTS_CONSTRUCTION="$CONSTRUCTION" CTS_SPLIT="$SPLIT" CTS_EVENT_ID="$EVENT_
 export CTS_SIGNAL="$SIGNAL" CTS_SIGNAL_ENTRY="$SIGNAL_ENTRY" CTS_OUTPUT="$OUTPUT"
 export CTS_DO_SIM="$DO_SIM" CTS_DO_COUNT="$DO_COUNT"
 
-apptainer exec --bind /oscar:/oscar,"$CT_DIR:$CT_DIR:ro" "$IMAGE_V2_11" bash -lc '
-    set -euo pipefail
+apptainer exec --pwd /tmp --bind /oscar:/oscar,"$CT_DIR:$CT_DIR:ro" "$IMAGE_V2_11" bash -lc '
+    set -eo pipefail
     source /opt/setup_mucoll.sh
+    set -u
     if [ "$CTS_DO_COUNT" -eq 1 ]; then
         python3 "$CTS_CT_DIR/count_tracker_input.py" \
             --conditions "$CTS_CONDITIONS" --construction "$CTS_CONSTRUCTION" \

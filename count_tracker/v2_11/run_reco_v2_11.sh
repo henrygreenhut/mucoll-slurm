@@ -26,10 +26,12 @@ for output in digi_output.edm4hep.root reco_output.edm4hep.root; do
 done
 
 apptainer exec \
+    --pwd /work/output \
     --bind "$SCRIPT_DIR:/work/count-tracker-v2:ro,$INPUT_DIR:/work/input:ro,$OUTPUT_DIR:/work/output" \
     "$IMAGE_V2_11" bash -lc '
-        set -euo pipefail
+        set -eo pipefail
         source /opt/setup_mucoll.sh
+        set -u
 
         export MUCOLL_GEO="$(find /opt/spack/opt/spack -type f \
             -path "*/k4geo*/share/k4geo/MuColl/MAIA/compact/MAIA_v0/MAIA_v0.xml" \
