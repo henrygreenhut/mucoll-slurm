@@ -597,7 +597,12 @@ def sample_events(args):
         "events": [{"event_id": eid, "split": args.split, "collections": records[eid]}
                    for eid in (s["event_id"] for s in wanted)],
     }
-    tag = f".shard{args.shard_index}of{args.num_shards}" if args.num_shards > 1 else ""
+    tags = []
+    if args.num_shards > 1:
+        tags.append(f"shard{args.shard_index}of{args.num_shards}")
+    if args.collections:
+        tags.append("collections-" + "-".join(shorts))
+    tag = "." + ".".join(tags) if tags else ""
     manifest_path = output / f"manifest.{args.split}{tag}.json"
     manifest_path.write_text(json.dumps(shard_manifest, indent=2) + "\n")
     print(f"shard {args.shard_index}/{args.num_shards}: sampled {len(wanted)} event(s) -> {output}")

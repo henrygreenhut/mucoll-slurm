@@ -39,6 +39,11 @@ UNFILLED_POLICY="${UNFILLED_POLICY:-error}"
 INFERENCE_CACHE="${INFERENCE_CACHE:-off}"
 EVENT_ARGS=()
 [ -n "${EVENT_ID:-}" ] && EVENT_ARGS=(--event-id "$EVENT_ID")
+COLLECTION_ARGS=()
+if [ -n "${COLLECTIONS:-}" ]; then
+    IFS=: read -r -a SELECTED_COLLECTIONS <<< "$COLLECTIONS"
+    COLLECTION_ARGS=(--collections "${SELECTED_COLLECTIONS[@]}")
+fi
 
 # Shards come from the array size (override with NUM_SHARDS if your Slurm does
 # not export SLURM_ARRAY_TASK_COUNT); a non-array run is a single shard.
@@ -55,6 +60,7 @@ echo "=== count sample: shard ${SHARD_INDEX}/${NUM_SHARDS}  split=${SPLIT} ==="
 echo "conditions=${CONDITIONS}"
 echo "output=${OUTPUT}"
 echo "inference_cache=${INFERENCE_CACHE}"
+echo "collections=${COLLECTIONS:-all}"
 python -c "import torch; print('cuda', torch.cuda.is_available(),
           torch.cuda.get_device_name(0) if torch.cuda.is_available() else '')"
 
@@ -62,6 +68,7 @@ python count_tracker_sample.py \
     --conditions "$CONDITIONS" --split "$SPLIT" --model-root "$MODEL_ROOT" \
     --paper1-root "$PAPER1_ROOT" \
     "${EVENT_ARGS[@]}" \
+    "${COLLECTION_ARGS[@]}" \
     --seed-base "$SEED_BASE" \
     --max-rounds "$MAX_ROUNDS" --unfilled-policy "$UNFILLED_POLICY" \
     --inference-cache "$INFERENCE_CACHE" \
