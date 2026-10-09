@@ -156,6 +156,122 @@ collection, `AllTracks`, and deduplicated `SiTracks` for the same BIB event.
 Record the SIM and COUNT losses from v2.11 CellID assignment alongside those
 reconstruction results.
 
+## Full-density five-region reconstruction
+
+For the full-density diagnostic, do not run all digitized hits through one CKF
+process.  Follow the Paper 1 procedure: digitize each arm once, then run CKF
+independently in the five documented polar-angle regions `[0,30)`, `[30,70)`,
+`[70,110)`, `[110,150)`, and `[150,180)` degrees.  The splitter acts on the
+digitized hit position and carries the matching simulated hits and relations
+into each regional process.
+
+The implementation follows `osg/steerBIBtracking.py` from
+`rmastand/fast_tracker_BIBgen_mucoll` at commit
+`984b45ed3e646dc6ba8f6795cc187c1005c08495`.  The installed v2.11 image's
+Marlin processor interface was checked directly before adding the steering.
+
+This path changes only the CKF input collections.  It retains the established
+v2.11 diagnostic's geometry, timing, seeding, CKF, and duplicate-removal
+settings so density and regional processing are not mixed with another
+configuration change.  The unsplit path remains the default when no theta
+bounds are supplied.
+
+Set the completed full-density paths on OSCAR:
+
+```bash
+export REPO="$(git rev-parse --show-toplevel)"
+export CT_DIR="$REPO/count_tracker"
+export GENBIB_DIR=/oscar/data/mleblan6/mucoll/hgreenhu/mucoll/GenBIB-ML
+export IMAGE_V2_11=/oscar/data/mleblan6/mucoll/mucoll-sim-ubuntu24_v2.11-amd64.sif
+
+export BASE=/oscar/scratch/$USER/mucoll/count_tracker_cmp/norm42_fullbx1666
+export CONDITIONS="$BASE/conditions"
+export COUNT_SAMPLES="$BASE/count_samples"
+export EVENT_ID=norm42_fullbx1666_test_000000
+export EVENT_ROOT="$BASE/v2_11_theta/$EVENT_ID"
+export GEOMAP=/oscar/scratch/$USER/mucoll/count_tracker_cmp/v2_11_input_rebuild/maia_v2_11_sensor_geometry.npz
+mkdir -p "$BASE/v2_11_theta/logs"
+```
+
+Before the production submission, exercise the complete regional path using
+an existing prepared v2.11 pair.  This digitizes only 128 hits per collection
+and then checks all five regional outputs:
+
+```bash
+export SMOKE_SOURCE=/oscar/scratch/$USER/mucoll/count_tracker_cmp/v2_11_cohort/events/norm42_cached_closure100_test_000000
+export THETA_SMOKE=/oscar/scratch/$USER/mucoll/count_tracker_cmp/v2_11_theta_smoke_01
+bash "$CT_DIR/v2_11/run_theta_smoke_v2_11.sh" \
+  --input-event "$SMOKE_SOURCE" \
+  --sample SIM \
+  --hits-per-collection 128 \
+  --output "$THETA_SMOKE"
+```
+
+Use a new smoke output directory for another attempt.  Proceed to the
+full-density jobs only after the smoke report says `exact count partition`.
+
+First prepare the two v2.11-native BIB inputs.  The command overrides the
+smaller cohort defaults because this event contains about 38 million hits:
+
+```bash
+PREP_JOB=$(sbatch --parsable \
+  --mem=64G --time=24:00:00 \
+  --export=ALL,CT_DIR="$CT_DIR",GENBIB_DIR="$GENBIB_DIR",CONDITIONS="$CONDITIONS",CONSTRUCTION=norm42,SPLIT=test,EVENT_ID="$EVENT_ID",COUNT_SAMPLES="$COUNT_SAMPLES",GEOMAP="$GEOMAP",OUTPUT="$EVENT_ROOT",IMAGE_V2_11="$IMAGE_V2_11",STOP_AFTER=input \
+  -o "$BASE/v2_11_theta/logs/prepare_%j.out" \
+  -e "$BASE/v2_11_theta/logs/prepare_%j.err" \
+  "$CT_DIR/v2_11/submit_input_rebuild_v2_11.slurm")
+echo "prepare=$PREP_JOB"
+```
+
+Digitize SIM and COUNT in parallel after input preparation succeeds:
+
+```bash
+DIGI_JOB=$(sbatch --parsable \
+  --dependency="afterok:$PREP_JOB" --array=0-1 \
+  --export=ALL,CT_DIR="$CT_DIR",EVENT_ROOT="$EVENT_ROOT",IMAGE_V2_11="$IMAGE_V2_11" \
+  -o "$BASE/v2_11_theta/logs/digi_%A_%a.out" \
+  -e "$BASE/v2_11_theta/logs/digi_%A_%a.err" \
+  "$CT_DIR/v2_11/submit_digi_pair_v2_11.slurm")
+echo "digitization=$DIGI_JOB"
+```
+
+After both digitization tasks succeed, run five SIM and five COUNT regional
+jobs.  The array mapping is fixed: tasks 0--4 are SIM in increasing theta and
+tasks 5--9 are COUNT in increasing theta.
+
+```bash
+THETA_JOB=$(sbatch --parsable \
+  --dependency="afterok:$DIGI_JOB" --array=0-9 \
+  --export=ALL,CT_DIR="$CT_DIR",EVENT_ROOT="$EVENT_ROOT",IMAGE_V2_11="$IMAGE_V2_11" \
+  -o "$BASE/v2_11_theta/logs/theta_%A_%a.out" \
+  -e "$BASE/v2_11_theta/logs/theta_%A_%a.err" \
+  "$CT_DIR/v2_11/submit_theta_reco_v2_11.slurm")
+echo "theta_reco=$THETA_JOB"
+```
+
+Each regional output is write-once and a completed output is skipped on
+resubmission.  Failed regions can therefore be retried with only their array
+indices.  The input and digitization stages are not repeated.
+
+After all ten regional jobs complete, run the partition and result check from
+an allocated node.  It verifies that the five regional hit counts sum exactly
+to every unsplit digitized collection and reports digitization survival and
+the summed `SiTracks` count:
+
+```bash
+for SAMPLE in SIM COUNT; do
+  apptainer exec \
+    --bind "$CT_DIR:$CT_DIR:ro,$EVENT_ROOT:$EVENT_ROOT" \
+    "$IMAGE_V2_11" bash -lc '
+      source /opt/setup_mucoll.sh
+      python3 "$1/v2_11/validate_theta_partition_v2_11.py" \
+        --digi-file "$2/$3/digi/digi_output.edm4hep.root" \
+        --regional-root "$2/$3/theta_reco" \
+        --output "$2/$3/theta_report.json"
+    ' _ "$CT_DIR" "$EVENT_ROOT" "$SAMPLE"
+done
+```
+
 ## Read-only preflight
 
 From an allocated OSCAR CPU node, check the image, detector assets, installed

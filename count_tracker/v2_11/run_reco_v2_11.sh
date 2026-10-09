@@ -7,11 +7,15 @@ DIGI_FILE="${DIGI_FILE:-}"
 OUTPUT_DIR="${OUTPUT_DIR:-}"
 NUM_EVENTS="${NUM_EVENTS:-1}"
 RUN_STAGE="${RUN_STAGE:-both}"
+THETA_MIN="${THETA_MIN:-}"
+THETA_MAX="${THETA_MAX:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --stage) RUN_STAGE="$2"; shift 2 ;;
+        --theta-min) THETA_MIN="$2"; shift 2 ;;
+        --theta-max) THETA_MAX="$2"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 1 ;;
     esac
 done
@@ -20,6 +24,14 @@ case "$RUN_STAGE" in
     digi|reco|both) : ;;
     *) echo "--stage must be digi, reco, or both" >&2; exit 1 ;;
 esac
+if [ -n "$THETA_MIN" ] || [ -n "$THETA_MAX" ]; then
+    [ -n "$THETA_MIN" ] && [ -n "$THETA_MAX" ] || {
+        echo "Set both --theta-min and --theta-max" >&2; exit 1;
+    }
+    [ "$RUN_STAGE" = reco ] || {
+        echo "Theta bounds are supported only with --stage reco" >&2; exit 1;
+    }
+fi
 
 [ -n "$OUTPUT_DIR" ] || { echo "Missing required environment: OUTPUT_DIR" >&2; exit 1; }
 if [ "$RUN_STAGE" = reco ]; then
@@ -96,6 +108,7 @@ apptainer exec \
         export V2_NUM_EVENTS="$3"
         if [ "$4" = digi ] || [ "$4" = both ]; then
             export V2_STAGE=digi
+            unset V2_THETA_MIN V2_THETA_MAX
             export V2_INPUT_FILE="/work/input/$1"
             export V2_OUTPUT_FILE=/work/output/digi_output.edm4hep.root
             run_stage digi
@@ -103,6 +116,12 @@ apptainer exec \
 
         if [ "$4" = reco ] || [ "$4" = both ]; then
             export V2_STAGE=reco
+            if [ -n "$5" ]; then
+                export V2_THETA_MIN="$5"
+                export V2_THETA_MAX="$6"
+            else
+                unset V2_THETA_MIN V2_THETA_MAX
+            fi
             if [ "$4" = reco ]; then
                 export V2_INPUT_FILE="/work/input/$1"
             else
@@ -111,7 +130,7 @@ apptainer exec \
             export V2_OUTPUT_FILE=/work/output/reco_output.edm4hep.root
             run_stage reco
         fi
-    ' _ "$INPUT_NAME" "$OUTPUT_DIR" "$NUM_EVENTS" "$RUN_STAGE"
+    ' _ "$INPUT_NAME" "$OUTPUT_DIR" "$NUM_EVENTS" "$RUN_STAGE" "$THETA_MIN" "$THETA_MAX"
 
 if [ "$RUN_STAGE" = digi ] || [ "$RUN_STAGE" = both ]; then
     echo "v2.11 digitization: $OUTPUT_DIR/digi_output.edm4hep.root"

@@ -21,6 +21,7 @@ CONDA_MODULE="${CONDA_MODULE:-miniforge3/25.3.0-3-a6hh}"
 ASSIGN_ENV="${ASSIGN_ENV:-genbib}"
 EXTRACT_ENV="${EXTRACT_ENV:-count-hdf}"
 export IMAGE_V2_11="${IMAGE_V2_11:-/oscar/data/mleblan6/mucoll/mucoll-sim-ubuntu24_v2.11-amd64.sif}"
+STOP_AFTER="${STOP_AFTER:-}"
 
 module load "$CONDA_MODULE"
 eval "$(conda shell.bash hook)"
@@ -30,6 +31,9 @@ conda deactivate
 conda activate "$EXTRACT_ENV"
 export EXTRACT_PYTHON="$(command -v python)"
 
+STOP_ARGS=()
+[ -n "$STOP_AFTER" ] && STOP_ARGS=(--stop-after "$STOP_AFTER")
+
 bash "$CT_DIR/v2_11/run_count_tracker_event_v2_11.sh" \
     --conditions "$CONDITIONS" \
     --construction "$CONSTRUCTION" \
@@ -37,4 +41,5 @@ bash "$CT_DIR/v2_11/run_count_tracker_event_v2_11.sh" \
     --event-id "$EVENT_ID" \
     --count-samples "$COUNT_SAMPLES" \
     --geomap "$GEOMAP" \
+    "${STOP_ARGS[@]}" \
     --output "$OUTPUT"

@@ -223,8 +223,51 @@ def tracker_digi_algs():
     return algorithms
 
 
-def tracker_reco_algs():
-    tracker_hits = [row[2] for row in TRACKER_COLLECTIONS]
+def theta_bounds():
+    """Return an optional polar-angle window supplied by the regional runner."""
+    lower = os.environ.get("V2_THETA_MIN")
+    upper = os.environ.get("V2_THETA_MAX")
+    if (lower is None) != (upper is None):
+        raise RuntimeError("Set both V2_THETA_MIN and V2_THETA_MAX, or neither")
+    if lower is None:
+        return None
+    lower, upper = float(lower), float(upper)
+    if not 0.0 <= lower < upper <= 180.0:
+        raise RuntimeError("Require 0 <= V2_THETA_MIN < V2_THETA_MAX <= 180")
+    return lower, upper
+
+
+def theta_split_algs(lower, upper):
+    """Split collections as in Paper 1 steering at repository commit 984b45e."""
+    algorithms = []
+    for short, simulated_hits, tracker_hits, relations, *_ in TRACKER_COLLECTIONS:
+        split_hits = f"{tracker_hits}Split"
+        split_simulated_hits = f"{simulated_hits}Split"
+        split_relations = f"{relations}Split"
+        processor = marlin_processor(
+            f"{short}ThetaSplitter",
+            "SplitCollectionByPolarAngle",
+            {
+                "FillHistograms": ["false"],
+                "PolarAngleLowerLimit": [str(lower)],
+                "PolarAngleUpperLimit": [str(upper)],
+                "TrackerHitInputCollections": [tracker_hits],
+                "TrackerHitInputRelations": [relations],
+                "TrackerHitOutputCollections": [split_hits],
+                "TrackerHitOutputRelations": [split_relations],
+                "TrackerSimHitInputCollections": [simulated_hits],
+                "TrackerSimHitOutputCollections": [split_simulated_hits],
+            },
+        )
+        attach_edm4hep_output(
+            processor, (split_hits, split_simulated_hits, split_relations)
+        )
+        algorithms.append(processor)
+    return algorithms
+
+
+def tracker_reco_algs(tracker_hits=None):
+    tracker_hits = tracker_hits or [row[2] for row in TRACKER_COLLECTIONS]
     ckf = marlin_processor(
         "CKFTracking",
         "ACTSSeededCKFTrackingProc",
@@ -264,6 +307,9 @@ def tracker_reco_algs():
 
 def main():
     stage = pop_stage()
+    bounds = theta_bounds()
+    if stage != "reco" and bounds is not None:
+        raise RuntimeError("Theta splitting is valid only for the reco stage")
     required = (
         "MUCOLL_GEO",
         "V2_INPUT_FILE",
@@ -285,7 +331,15 @@ def main():
     # first processor.  It also provides the event's EDM4hep-to-LCIO bridge,
     # following the reconstruction example shipped in the v2.11 image.
     algorithms = [aida_input_converter(stage), dd4hep_initializer()]
-    algorithms += tracker_digi_algs() if stage == "digi" else tracker_reco_algs()
+    if stage == "digi":
+        algorithms += tracker_digi_algs()
+    elif bounds is None:
+        algorithms += tracker_reco_algs()
+    else:
+        algorithms += theta_split_algs(*bounds)
+        algorithms += tracker_reco_algs(
+            [f"{row[2]}Split" for row in TRACKER_COLLECTIONS]
+        )
 
     ApplicationMgr(
         TopAlg=algorithms,
