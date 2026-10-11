@@ -7,6 +7,7 @@ GENBIB_DIR="${GENBIB_DIR:-}"
 CT_DIR="${CT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 V2_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ASSIGN_PYTHON="${ASSIGN_PYTHON:-python3}"
+CELLID_CHUNK_SIZE="${CELLID_CHUNK_SIZE:-200000}"
 
 CONDITIONS=""; CONSTRUCTION=""; SPLIT=""; EVENT_ID=""
 COUNT_SAMPLES=""; GEOMAP=""; ONLY=""; OUTPUT=""; STOP_AFTER=""
@@ -31,6 +32,7 @@ for name in GENBIB_DIR CONDITIONS CONSTRUCTION SPLIT EVENT_ID OUTPUT; do
 done
 for path in "$IMAGE_V2_11" "$GENBIB_DIR/reco/assign_actual_cellid.py" \
             "$V2_DIR/extract_sim_hits_v2_11.py" \
+            "$V2_DIR/assign_actual_cellid_chunked.py" \
             "$V2_DIR/write_bib_only_input_v2_11.py" "$V2_DIR/run_reco_v2_11.sh"; do
     [ -e "$path" ] || { echo "Missing required path: $path" >&2; exit 1; }
 done
@@ -80,10 +82,12 @@ if [ "$DO_SIM" -eq 1 ]; then
         --output "$OUTPUT/SIM/extracted"
 
     echo "--- assign v2.11 CellIDs (SIM) ---"
-    "$ASSIGN_PYTHON" "$GENBIB_DIR/reco/assign_actual_cellid.py" \
+    "$ASSIGN_PYTHON" "$V2_DIR/assign_actual_cellid_chunked.py" \
+        --native-script "$GENBIB_DIR/reco/assign_actual_cellid.py" \
         --input-dir "$OUTPUT/SIM/extracted" \
         --output-dir "$OUTPUT/SIM/assigned" \
         --input-format 10col \
+        --chunk-size "$CELLID_CHUNK_SIZE" \
         --geomap-path "$GEOMAP"
 fi
 
@@ -92,10 +96,12 @@ fi
 # SciPy; no v3 geometry or reconstruction code is used here.
 if [ "$DO_COUNT" -eq 1 ]; then
     echo "--- assign v2.11 CellIDs (COUNT) ---"
-    "$ASSIGN_PYTHON" "$GENBIB_DIR/reco/assign_actual_cellid.py" \
+    "$ASSIGN_PYTHON" "$V2_DIR/assign_actual_cellid_chunked.py" \
+        --native-script "$GENBIB_DIR/reco/assign_actual_cellid.py" \
         --input-dir "$COUNT_EVENT_DIR" \
         --output-dir "$OUTPUT/COUNT/assigned" \
         --input-format 9col \
+        --chunk-size "$CELLID_CHUNK_SIZE" \
         --geomap-path "$GEOMAP"
 fi
 

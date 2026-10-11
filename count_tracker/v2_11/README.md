@@ -49,6 +49,16 @@ hits.
    image lacks SciPy, so map construction runs in the image and the unchanged
    GenBIB assignment algorithm runs with the existing `genbib` Python.
 
+The native GenBIB CellID implementation constructs candidate-sensor tensors
+for an entire collection at once.  That is acceptable for the smaller cohort
+events but exceeded 64 GB for the 11.7-million-hit full-density OTBC
+collection.  `assign_actual_cellid_chunked.py` calls the same native
+`convert_rows` function on ordered blocks of 200,000 hits and publishes each
+completed collection atomically.  Sensor lookup, containment, output ordering,
+and unresolved-hit handling are unchanged; only the number of hits resident in
+temporary arrays is bounded.  Override the block size with
+`CELLID_CHUNK_SIZE` if required.
+
 The v0.9 benchmark tag remains the reference for the older Marlin workflow
 and timing configuration, but it cannot be executed unchanged: its hard-coded
 release-2.8 `MuColl_v1` ACTS paths are replaced by the native v2.11 MAIA files.
