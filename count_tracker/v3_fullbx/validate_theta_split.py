@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import math
 from pathlib import Path
 
 
@@ -19,7 +20,11 @@ COLLECTIONS = (
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, required=True)
+    parser.add_argument("--theta-min", type=float)
+    parser.add_argument("--theta-max", type=float)
     args = parser.parse_args()
+    if (args.theta_min is None) != (args.theta_max is None):
+        parser.error("pass both --theta-min and --theta-max, or neither")
 
     from podio.root_io import Reader
 
@@ -41,6 +46,18 @@ def main():
         counts[hits] = len(frame.get(hits))
         counts[relations] = len(frame.get(relations))
         counts[simulated_hits] = len(frame.get(simulated_hits))
+        if args.theta_min is not None:
+            for hit in frame.get(hits):
+                position = hit.getPosition()
+                theta = math.degrees(math.atan2(
+                    math.hypot(position.x, position.y), position.z))
+                inside = (args.theta_min <= theta <= args.theta_max
+                          if args.theta_max == 180.0 else
+                          args.theta_min <= theta < args.theta_max)
+                if not inside:
+                    raise ValueError(
+                        f"{hits} contains theta={theta} outside "
+                        f"[{args.theta_min}, {args.theta_max})")
 
     print(json.dumps({"status": "valid", "path": str(path), "counts": counts}, indent=2))
 
