@@ -51,6 +51,29 @@ class MotherDirectTests(unittest.TestCase):
         self.assertLess(len(set(minus)), 420)
         self.assertNotEqual(plus, minus)
 
+    def test_all_cycle_selection_uses_complete_pool_once_per_polarity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cycles = [0, 2, 7]
+            records = {}
+            for cycle in cycles:
+                for polarity, code in (("MUPLUS", 1), ("MUMINUS", -1)):
+                    path = root / polarity / f"bib_sim_{cycle}.edm4hep.root"
+                    path.parent.mkdir(exist_ok=True)
+                    path.touch()
+                    records[(cycle, code)] = {
+                        "mother_count": 2, "source_tracker_hits": 3,
+                        "mother_start": cycle, "row_start": cycle, "row_count": 2,
+                    }
+            events = mother.select_all_cycles_event(
+                cycles, root, records, "fullsample")
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["split"], "test")
+        for polarity in writer.POLARITIES:
+            sources = events[0]["sources"][polarity]
+            self.assertEqual([source["cycle"] for source in sources], cycles)
+            self.assertEqual([source["draw"] for source in sources], [0, 1, 2])
+
     def test_classifier_cycle_pools_and_event_ids_are_split_isolated(self):
         cycles = list(range(100))
         pools = mother.split_cycle_pools(cycles, 42)

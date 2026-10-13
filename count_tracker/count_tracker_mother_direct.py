@@ -101,6 +101,29 @@ def select_events(cycles, count, sim_root, records, seed, cohort, split=None):
     return events
 
 
+def select_all_cycles_event(cycles, sim_root, records, cohort):
+    """Use every complete source cycle exactly once for each polarity."""
+    if not cycles:
+        raise ValueError("source cycle pool is empty")
+    polarity_code = {"MUPLUS": 1, "MUMINUS": -1}
+    sources = {}
+    for polarity in POLARITIES:
+        sources[polarity] = []
+        for draw, cycle in enumerate(cycles):
+            path = sim_root / polarity / f"bib_sim_{cycle}.edm4hep.root"
+            if not path.is_file():
+                raise FileNotFoundError(path)
+            sources[polarity].append({
+                "draw": draw, "cycle": cycle, "path": str(path), "entries": "all",
+                **records[(cycle, polarity_code[polarity])],
+            })
+    return [{
+        "event_id": f"{CONSTRUCTION}_{cohort}_000000",
+        "split": "test",
+        "sources": sources,
+    }]
+
+
 def split_cycle_pools(cycles, seed, fractions=(0.6, 0.2, 0.2)):
     """Make deterministic, disjoint analysis pools from complete cycle IDs."""
     if len(fractions) != 3 or not np.isclose(sum(fractions), 1.0):
@@ -231,6 +254,8 @@ def prepare(args):
         split: getattr(args, f"{split}_events") for split in ("train", "val", "test")
     }
     classifier_mode = any(value is not None for value in classifier_counts.values())
+    if args.all_cycles and (classifier_mode or args.events is not None):
+        raise ValueError("--all-cycles cannot be combined with event-count options")
     if classifier_mode:
         if args.events is not None or any(value is None or value < 1
                                           for value in classifier_counts.values()):
@@ -242,6 +267,10 @@ def prepare(args):
             events.extend(select_events(
                 cycle_pools[split], classifier_counts[split], sim_root, records,
                 args.seed, args.cohort, split))
+    elif args.all_cycles:
+        cycle_pools = None
+        events = select_all_cycles_event(
+            cycles, sim_root, records, args.cohort)
     else:
         if args.events is None or args.events < 1:
             raise ValueError("diagnostic mode requires a positive --events")
@@ -267,6 +296,7 @@ def prepare(args):
             })
             print(f"Prepared {event['split']}/{event['event_id']}", flush=True)
 
+        files_per_polarity = len(cycles) if args.all_cycles else 420
         manifest = {
             "schema_version": 2,
             "construction": CONSTRUCTION,
@@ -278,8 +308,8 @@ def prepare(args):
             "classifier_ready": classifier_mode,
             "physical_event_boundaries": True,
             "file_normalization": 1,
-            "n_files_per_polarity": 420,
-            "norm1_equivalents_per_polarity": 420,
+            "n_files_per_polarity": files_per_polarity,
+            "norm1_equivalents_per_polarity": files_per_polarity,
             "hit_selection": args.hit_selection,
             "source_dataset": {
                 "path": str(sim_root),
@@ -293,11 +323,21 @@ def prepare(args):
             "sampling": {
                 "seed": args.seed,
                 "cohort": args.cohort,
-                "within_event": "420 draws with replacement independently by polarity",
+                "all_cycles_once": args.all_cycles,
+                "within_event": (
+                    "every complete cycle exactly once per polarity, ordered by cycle ID"
+                    if args.all_cycles else
+                    "420 draws with replacement independently by polarity"
+                ),
                 "across_events": (
                     "source reuse permitted within split; forbidden across splits"
-                    if classifier_mode else "source reuse permitted"),
-                "stream": "random.Random(JSON([seed, construction, cohort, split, event_index, polarity]))",
+                    if classifier_mode else
+                    "not applicable: one event containing the complete source pool"
+                    if args.all_cycles else "source reuse permitted"),
+                "stream": (
+                    None if args.all_cycles else
+                    "random.Random(JSON([seed, construction, cohort, split, event_index, polarity]))"
+                ),
             },
             "events": events,
         }
@@ -347,6 +387,9 @@ def main():
     parser.add_argument("--cohort", default="trackcmp")
     parser.add_argument("--seed", type=int, default=12345)
     parser.add_argument("--events", type=int)
+    parser.add_argument(
+        "--all-cycles", action="store_true",
+        help="prepare one test event with every complete cycle once per polarity")
     for split in ("train", "val", "test"):
         parser.add_argument(f"--{split}-events", type=int)
     parser.add_argument(

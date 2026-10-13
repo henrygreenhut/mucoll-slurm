@@ -140,9 +140,11 @@ def load_event(directory, split, event_id, construction):
             raise ValueError("Direct mother analysis-split and classifier flags disagree")
         if manifest.get("physical_event_boundaries") is not True:
             raise ValueError("Direct mother sources must preserve physical event boundaries")
-        if (manifest.get("n_files_per_polarity") != 420
-                or manifest.get("norm1_equivalents_per_polarity") != 420):
-            raise ValueError("Direct mother events require 420 cycles per polarity")
+        files_per_polarity = manifest.get("n_files_per_polarity")
+        if (not isinstance(files_per_polarity, int) or files_per_polarity < 1
+                or manifest.get("norm1_equivalents_per_polarity") != files_per_polarity):
+            raise ValueError(
+                "Direct mother file counts must be positive and equal their norm1 equivalents")
         hit_selection = report.get("hit_selection")
         if hit_selection not in ("all-stored", TRAINING_RAW_TIME_SELECTION):
             raise ValueError("Direct mother comparison has an unknown hit selection")
@@ -163,6 +165,11 @@ def load_event(directory, split, event_id, construction):
                 or len(available) != len(set(available))):
             raise ValueError("Direct mother manifest has an invalid all-cycle pool")
         available = set(available)
+        all_cycles_once = manifest.get("sampling", {}).get("all_cycles_once", False)
+        if all_cycles_once:
+            if classifier_ready or files_per_polarity != len(available):
+                raise ValueError(
+                    "All-cycle direct mother mode must use the complete pool in one diagnostic")
         split_pools = None
         if classifier_ready:
             pool_report = manifest.get("analysis_cycle_pools", {})
@@ -195,8 +202,14 @@ def load_event(directory, split, event_id, construction):
             if set(sources) != set(POLARITIES):
                 raise ValueError("Direct mother event must contain both polarities")
             for polarity in POLARITIES:
-                if len(sources[polarity]) != 420:
-                    raise ValueError("Direct mother event needs 420 cycles per polarity")
+                if len(sources[polarity]) != files_per_polarity:
+                    raise ValueError(
+                        "Direct mother event source count differs from its manifest")
+                if (all_cycles_once
+                        and [source.get("cycle") for source in sources[polarity]]
+                        != sorted(available)):
+                    raise ValueError(
+                        "All-cycle direct mother sources must contain the complete ordered pool")
                 for draw, source in enumerate(sources[polarity]):
                     if source.get("draw") != draw:
                         raise ValueError("Direct mother source draw indices are invalid")
@@ -246,6 +259,10 @@ def load_event(directory, split, event_id, construction):
             "analysis_split_used": manifest["analysis_split_used"],
             "classifier_ready": manifest["classifier_ready"],
             "hit_selection": manifest["hit_selection"],
+            "n_files_per_polarity": manifest["n_files_per_polarity"],
+            "file_normalization": manifest.get("file_normalization", 1),
+            "norm1_equivalents_per_polarity": manifest[
+                "norm1_equivalents_per_polarity"],
             "analysis_cycle_pools": manifest.get("analysis_cycle_pools"),
         }
         event["_raw_time_selection"] = report.get("raw_time_selection")
@@ -477,9 +494,10 @@ def write_input(args):
                 "hit_selection": direct["hit_selection"],
                 "source_cycle_pool": event["_source_cycle_pool"],
                 "analysis_cycle_pools": direct["analysis_cycle_pools"],
-                "n_files_per_polarity": 420,
-                "file_normalization": 1,
-                "norm1_equivalents_per_polarity": 420,
+                "n_files_per_polarity": direct["n_files_per_polarity"],
+                "file_normalization": direct["file_normalization"],
+                "norm1_equivalents_per_polarity": direct[
+                    "norm1_equivalents_per_polarity"],
             })
         else:
             report.update({
