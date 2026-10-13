@@ -18,15 +18,17 @@ from count_tracker_conditions import (
 )
 from count_tracker_manifest import POLARITIES, SPLITS, read_pools, select_events
 
+KNOWN_INVALID_CYCLES = {6291}
 
-def read_sim_root(root):
+
+def read_sim_root(root, minimum_files=1666):
     """Index the authoritative Norm42 banks without inventing a data split."""
     root = Path(root).resolve()
     pools = {
         split: {polarity: {} for polarity in POLARITIES}
         for split in SPLITS
     }
-    inventory = {}
+    raw_records = {}
     for polarity in POLARITIES:
         directory = root / polarity
         if not directory.is_dir():
@@ -37,16 +39,30 @@ def read_sim_root(root):
             if match is None or not path.is_file():
                 raise ValueError(f"unexpected Norm42 source path: {path}")
             cycle = int(match.group(1))
+            if cycle in KNOWN_INVALID_CYCLES:
+                continue
             if cycle in records:
                 raise ValueError(f"duplicate {polarity} cycle {cycle}")
             records[cycle] = {
                 "cycle": cycle, "path": str(path.resolve()), "entry": 0,
             }
-        if len(records) < 1666:
-            raise ValueError(
-                f"{polarity} has {len(records)} files; need at least 1666")
-        # Put the unsplit inventory in one internal bucket. source_pool=all
-        # below takes its union and records that no data split is claimed.
+        raw_records[polarity] = records
+
+    shared_cycles = set.intersection(*(
+        set(raw_records[polarity]) for polarity in POLARITIES))
+    if len(shared_cycles) < minimum_files:
+        raise ValueError(
+            f"only {len(shared_cycles)} valid cycles are shared by both polarities; "
+            f"need at least {minimum_files}")
+
+    inventory = {}
+    for polarity in POLARITIES:
+        records = {
+            cycle: raw_records[polarity][cycle]
+            for cycle in sorted(shared_cycles)
+        }
+        # Put the unsplit shared inventory in one internal bucket.
+        # source_pool=all below records that no data split is claimed.
         pools["test"][polarity] = records
         inventory[polarity] = [
             {"cycle": cycle, "path": records[cycle]["path"]}
@@ -58,6 +74,11 @@ def read_sim_root(root):
         "path": str(root),
         "inventory_sha256": hashlib.sha256(encoded).hexdigest(),
         "files": {polarity: len(inventory[polarity]) for polarity in POLARITIES},
+        "known_invalid_cycles_excluded": sorted(KNOWN_INVALID_CYCLES),
+        "unpaired_cycles_excluded": {
+            polarity: sorted(set(raw_records[polarity]) - shared_cycles)
+            for polarity in POLARITIES
+        },
     }
     return pools, provenance
 

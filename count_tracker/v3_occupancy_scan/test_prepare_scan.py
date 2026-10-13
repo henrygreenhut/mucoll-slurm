@@ -6,10 +6,28 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from prepare_scan import prepare
+from prepare_scan import prepare, read_sim_root
 
 
 class PrepareScanTests(unittest.TestCase):
+    def test_direct_bank_excludes_invalid_and_unpaired_cycles(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for polarity in ("MUPLUS", "MUMINUS"):
+                (root / polarity).mkdir()
+            for cycle in (0, 1, 2, 6291):
+                (root / "MUPLUS" / f"bib_sim_{cycle}.edm4hep.root").touch()
+            for cycle in (0, 1, 3, 6291):
+                (root / "MUMINUS" / f"bib_sim_{cycle}.edm4hep.root").touch()
+
+            pools, provenance = read_sim_root(root, minimum_files=2)
+            self.assertEqual(set(pools["test"]["MUPLUS"]), {0, 1})
+            self.assertEqual(set(pools["test"]["MUMINUS"]), {0, 1})
+            self.assertEqual(provenance["known_invalid_cycles_excluded"], [6291])
+            self.assertEqual(provenance["unpaired_cycles_excluded"], {
+                "MUPLUS": [2], "MUMINUS": [3],
+            })
+
     @patch("prepare_scan.read_sim_root")
     def test_each_replicate_is_a_nested_source_prefix(self, read_sim_root):
         pools = {}
