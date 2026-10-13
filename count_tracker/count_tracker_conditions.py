@@ -41,6 +41,7 @@ NORM42_FULL_BX = {
     "rounding": "floor",
     "selected_files_per_polarity": 1666,
 }
+NORM42_OCCUPANCY_SCAN_NAME = "norm42-occupancy-scan"
 
 # Inferred from the observed support of the COUNT training arrays and retained
 # only to reproduce the earlier direct cohorts. Producer provenance did not
@@ -143,10 +144,23 @@ def validate_manifest(manifest, base):
                 f"{construction} requires n_files_per_polarity={expected_files} "
                 "unless a supported overlay_normalization is declared"
             )
-    elif normalization != NORM42_FULL_BX:
+    elif normalization == NORM42_FULL_BX:
+        if (construction != "norm42"
+                or n_files != NORM42_FULL_BX["selected_files_per_polarity"]):
+            raise ValueError("norm42-full-bx requires norm42 with 1666 files per polarity")
+    elif isinstance(normalization, dict) and normalization.get("name") == NORM42_OCCUPANCY_SCAN_NAME:
+        if construction != "norm42":
+            raise ValueError("norm42 occupancy scans require construction=norm42")
+        if normalization.get("selected_files_per_polarity") != n_files:
+            raise ValueError(
+                "occupancy-scan selected_files_per_polarity must match the manifest")
+        if normalization.get("full_bx_reference_files_per_polarity") != 1666:
+            raise ValueError("occupancy scans must use the established 1666-file full-BX reference")
+        expected_fraction = n_files / 1666
+        if normalization.get("fraction_of_full_bx_reference") != expected_fraction:
+            raise ValueError("incorrect occupancy-scan fraction_of_full_bx_reference")
+    else:
         raise ValueError("Unsupported overlay_normalization")
-    elif construction != "norm42" or n_files != NORM42_FULL_BX["selected_files_per_polarity"]:
-        raise ValueError("norm42-full-bx requires norm42 with 1666 files per polarity")
     expected_equivalents = n_files * definition["file_normalization"]
     if manifest.get("norm1_equivalents_per_polarity") != expected_equivalents:
         raise ValueError(

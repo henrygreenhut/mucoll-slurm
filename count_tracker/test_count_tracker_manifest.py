@@ -103,6 +103,22 @@ class SelectionTests(unittest.TestCase):
             events[0]["sources"]["MUMINUS"],
         )
 
+    def test_prefix_stable_draws_are_nested_across_occupancies(self):
+        counts = {"train": 0, "val": 0, "test": 2}
+        small = select_events(
+            self.pools, counts, 17, "occupancy", "norm42",
+            source_pool="all", n_files_per_polarity=10, prefix_stable=True)
+        large = select_events(
+            self.pools, counts, 17, "occupancy", "norm42",
+            source_pool="all", n_files_per_polarity=100, prefix_stable=True)
+        for small_event, large_event in zip(small, large):
+            self.assertEqual(small_event["event_id"], large_event["event_id"])
+            for polarity in POLARITIES:
+                self.assertEqual(
+                    small_event["sources"][polarity],
+                    large_event["sources"][polarity][:10],
+                )
+
     def test_combined_pool_rejects_overlapping_declared_splits(self):
         self.pools["val"]["MUPLUS"][0] = self.pools["train"]["MUPLUS"][0]
         with self.assertRaisesRegex(ValueError, "multiple pool splits"):

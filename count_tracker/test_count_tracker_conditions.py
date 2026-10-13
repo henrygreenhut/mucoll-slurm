@@ -71,6 +71,35 @@ class ConditionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "supported overlay_normalization"):
             conditions.validate_manifest(missing_provenance, Path("/tmp"))
 
+    def test_norm42_occupancy_scan_normalization_is_explicit_and_consistent(self):
+        n_files = 129
+        data = manifest()
+        data.update(
+            construction="norm42",
+            file_normalization=42,
+            n_files_per_polarity=n_files,
+            norm1_equivalents_per_polarity=n_files * 42,
+            source_pool="all",
+            overlay_normalization={
+                "name": conditions.NORM42_OCCUPANCY_SCAN_NAME,
+                "selected_files_per_polarity": n_files,
+                "full_bx_reference_files_per_polarity": 1666,
+                "fraction_of_full_bx_reference": n_files / 1666,
+                "selection": "nested deterministic source-order prefix",
+            },
+        )
+        for polarity in conditions.POLARITIES:
+            data["events"][0]["sources"][polarity] = [
+                {"path": f"{polarity}/{cycle}.root", "cycle": cycle, "entry": 0}
+                for cycle in range(n_files)
+            ]
+        conditions.validate_manifest(data, Path("/tmp"))
+
+        inconsistent = copy.deepcopy(data)
+        inconsistent["overlay_normalization"]["fraction_of_full_bx_reference"] = 0.5
+        with self.assertRaisesRegex(ValueError, "incorrect occupancy-scan fraction"):
+            conditions.validate_manifest(inconsistent, Path("/tmp"))
+
     def test_ambiguous_old_manifest_is_rejected(self):
         data = manifest()
         data["schema_version"] = 1

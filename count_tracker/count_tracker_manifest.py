@@ -80,7 +80,7 @@ def combined_pool(pools):
 
 def select_events(
         pools, counts, seed, cohort, construction, source_pool="split",
-        n_files_per_polarity=None):
+        n_files_per_polarity=None, prefix_stable=False):
     """Use a separate deterministic stream for each event and polarity."""
     if type(seed) is not int or seed < 0:
         raise ValueError("Source seed must be a nonnegative integer")
@@ -113,7 +113,12 @@ def select_events(
                 if source_pool == "all":
                     stream_values.append("all-source-cycles")
                 stream = json.dumps(stream_values, separators=(",", ":"))
-                selected = random.Random(stream).sample(sorted(available), n_files)
+                if prefix_stable:
+                    selected = sorted(available)
+                    random.Random(stream).shuffle(selected)
+                    selected = selected[:n_files]
+                else:
+                    selected = random.Random(stream).sample(sorted(available), n_files)
                 sources[polarity] = [dict(available[cycle]) for cycle in selected]
             events.append({"event_id": event_id, "split": split, "sources": sources})
     return events
