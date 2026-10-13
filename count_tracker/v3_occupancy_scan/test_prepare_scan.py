@@ -10,8 +10,8 @@ from prepare_scan import prepare
 
 
 class PrepareScanTests(unittest.TestCase):
-    @patch("prepare_scan.read_pools")
-    def test_each_replicate_is_a_nested_source_prefix(self, read_pools):
+    @patch("prepare_scan.read_sim_root")
+    def test_each_replicate_is_a_nested_source_prefix(self, read_sim_root):
         pools = {}
         for split, start in (("train", 0), ("val", 2000), ("test", 4000)):
             pools[split] = {}
@@ -20,7 +20,8 @@ class PrepareScanTests(unittest.TestCase):
                     cycle: {"cycle": cycle, "path": f"/{polarity}/{cycle}.root", "entry": 0}
                     for cycle in range(start, start + 2000)
                 }
-        read_pools.return_value = (pools, {"path": "/pools", "manifest_sha256": "x"})
+        read_sim_root.return_value = (
+            pools, {"kind": "authoritative-unsplit-norm42-sim-bank", "path": "/sim"})
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "scan"
             prepare("/unused", output, [10, 100, 1666], 5, 12345, "scan")

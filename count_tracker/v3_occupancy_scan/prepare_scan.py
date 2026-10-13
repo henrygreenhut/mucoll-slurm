@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -15,10 +16,53 @@ from count_tracker_conditions import (
     NORM42_OCCUPANCY_SCAN_NAME,
     validate_manifest,
 )
-from count_tracker_manifest import POLARITIES, read_pools, select_events
+from count_tracker_manifest import POLARITIES, SPLITS, read_pools, select_events
 
 
-def prepare(pools_path, output, file_counts, events, seed, cohort):
+def read_sim_root(root):
+    """Index the authoritative Norm42 banks without inventing a data split."""
+    root = Path(root).resolve()
+    pools = {
+        split: {polarity: {} for polarity in POLARITIES}
+        for split in SPLITS
+    }
+    inventory = {}
+    for polarity in POLARITIES:
+        directory = root / polarity
+        if not directory.is_dir():
+            raise FileNotFoundError(directory)
+        records = {}
+        for path in sorted(directory.glob("bib_sim_*.edm4hep.root")):
+            match = re.fullmatch(r"bib_sim_(\d+)\.edm4hep\.root", path.name)
+            if match is None or not path.is_file():
+                raise ValueError(f"unexpected Norm42 source path: {path}")
+            cycle = int(match.group(1))
+            if cycle in records:
+                raise ValueError(f"duplicate {polarity} cycle {cycle}")
+            records[cycle] = {
+                "cycle": cycle, "path": str(path.resolve()), "entry": 0,
+            }
+        if len(records) < 1666:
+            raise ValueError(
+                f"{polarity} has {len(records)} files; need at least 1666")
+        # Put the unsplit inventory in one internal bucket. source_pool=all
+        # below takes its union and records that no data split is claimed.
+        pools["test"][polarity] = records
+        inventory[polarity] = [
+            {"cycle": cycle, "path": records[cycle]["path"]}
+            for cycle in sorted(records)
+        ]
+    encoded = json.dumps(inventory, sort_keys=True, separators=(",", ":")).encode()
+    provenance = {
+        "kind": "authoritative-unsplit-norm42-sim-bank",
+        "path": str(root),
+        "inventory_sha256": hashlib.sha256(encoded).hexdigest(),
+        "files": {polarity: len(inventory[polarity]) for polarity in POLARITIES},
+    }
+    return pools, provenance
+
+
+def prepare(source, output, file_counts, events, seed, cohort, source_kind="sim-root"):
     if len(file_counts) != len(set(file_counts)):
         raise ValueError("file counts must be unique")
     if file_counts != sorted(file_counts):
@@ -31,7 +75,12 @@ def prepare(pools_path, output, file_counts, events, seed, cohort):
     output = Path(output).resolve()
     if output.exists():
         raise FileExistsError(f"refusing to replace {output}")
-    pools, provenance = read_pools(pools_path, "norm42")
+    if source_kind == "sim-root":
+        pools, provenance = read_sim_root(source)
+    elif source_kind == "pools":
+        pools, provenance = read_pools(source, "norm42")
+    else:
+        raise ValueError(f"unknown source kind: {source_kind}")
     output.mkdir(parents=True)
 
     points = []
@@ -118,14 +167,24 @@ def prepare(pools_path, output, file_counts, events, seed, cohort):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--pools", required=True)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--sim-root")
+    source.add_argument("--pools")
     parser.add_argument("--output", required=True)
     parser.add_argument("--file-counts", required=True, nargs="+", type=int)
     parser.add_argument("--events", type=int, default=5)
     parser.add_argument("--seed", type=int, default=12345)
     parser.add_argument("--cohort", default="occupancy_scan")
     args = parser.parse_args()
-    prepare(args.pools, args.output, args.file_counts, args.events, args.seed, args.cohort)
+    prepare(
+        args.sim_root or args.pools,
+        args.output,
+        args.file_counts,
+        args.events,
+        args.seed,
+        args.cohort,
+        "sim-root" if args.sim_root else "pools",
+    )
 
 
 if __name__ == "__main__":
