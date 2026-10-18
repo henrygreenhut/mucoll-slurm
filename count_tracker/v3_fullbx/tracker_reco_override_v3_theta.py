@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Standard v3 tracker digitization and CKF for a theta-partitioned input.
+"""Standard v3 tracker digitization and CKF with optional theta partitioning.
 
 Digitization is identical to the GenBIB-ML v3 tracker override. Reconstruction
-is also identical except that ``--split-input`` makes the ordinary mergers read
-the collections materialized by the Paper-1 theta splitter.
+uses the ordinary v3 hit mergers by default.  ``--split-input`` changes only
+those mergers to read collections materialized by the Paper-1 theta splitter.
 """
 
 import sys

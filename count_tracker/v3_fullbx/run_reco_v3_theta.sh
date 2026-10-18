@@ -35,7 +35,6 @@ else
     [ -n "$DIGI_FILE" ] || { echo "Reconstruction needs DIGI_FILE" >&2; exit 1; }
     SOURCE_FILE="$DIGI_FILE"
     EXPECTED_OUTPUT=reco_output.edm4hep.root
-    [ "$SPLIT_INPUT" = 1 ] || { echo "Regional full-BX reco needs --split-input" >&2; exit 1; }
 fi
 
 for path in "$IMAGE" "$BENCHMARK_DIR/setup_config.sh" "$SOURCE_FILE" \
@@ -68,11 +67,15 @@ apptainer exec \
             ln -sfn "/work/input/$1" /work/output/bib_flow.edm4hep.root
             k4run /work/count-tracker-v3/tracker_reco_override_v3_theta.py \
                 --stage digi -n "$2"
-        else
+        elif [ "$4" = 1 ]; then
             ln -sfn "/work/input/$1" /work/output/digi_output.edm4hep.root
             k4run /work/count-tracker-v3/tracker_reco_override_v3_theta.py \
                 --stage reco --split-input -n "$2"
+        else
+            ln -sfn "/work/input/$1" /work/output/digi_output.edm4hep.root
+            k4run /work/count-tracker-v3/tracker_reco_override_v3_theta.py \
+                --stage reco -n "$2"
         fi
-    ' _ "$SOURCE_NAME" "$NUM_EVENTS" "$RUN_STAGE"
+    ' _ "$SOURCE_NAME" "$NUM_EVENTS" "$RUN_STAGE" "$SPLIT_INPUT"
 
 echo "$RUN_STAGE output: $OUTPUT_DIR/$EXPECTED_OUTPUT"
