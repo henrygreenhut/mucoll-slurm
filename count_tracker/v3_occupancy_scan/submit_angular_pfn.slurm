@@ -19,12 +19,10 @@ TRAIN_SITE="${TRAIN_SITE:-/oscar/scratch/$USER/mucoll/envs/reco-train-site-v1}"
 CONSTRUCTION="${CONSTRUCTION:-norm42_fullbx_theta_phi72}"
 LABEL="${LABEL:-fullbx_theta_phi72}"
 
-for package in energyflow tf_keras; do
-    [ -d "$TRAIN_SITE/$package" ] || {
-        echo "Missing $TRAIN_SITE/$package; recreate the established RECO PFN environment" >&2
-        exit 1
-    }
-done
+[ -d "$TRAIN_SITE" ] || {
+    echo "Missing RECO training extension directory: $TRAIN_SITE" >&2
+    exit 1
+}
 for split in train val test; do
     for sample in SIM COUNT; do
         [ -f "$PATCH_ROOT/${CONSTRUCTION}_${sample}_${split}.npz" ] || {
@@ -38,6 +36,26 @@ module load ngc-tensorflow-container/25.02-tf2-py3-j4zj
 export PYTHONPATH="$TRAIN_SITE"
 export MPLCONFIGDIR="${TMPDIR:-/tmp}/matplotlib-$SLURM_JOB_ID"
 mkdir -p "$MPLCONFIGDIR" "$PFN_OUT"
+
+apptainer exec --nv --bind /oscar:/oscar \
+    "$NGC_TENSORFLOW_CONTAINER" \
+    python -c '
+import energyflow
+import h5py
+import numpy
+import tensorflow as tf
+import tf_keras
+gpus = tf.config.list_physical_devices("GPU")
+if not gpus:
+    raise SystemExit("TensorFlow sees no GPU")
+print("environment OK")
+print("TensorFlow", tf.__version__)
+print("tf_keras", tf_keras.__version__)
+print("NumPy", numpy.__version__)
+print("h5py", h5py.__version__)
+print("EnergyFlow", getattr(energyflow, "__version__", "unknown"))
+print("GPUs", [gpu.name for gpu in gpus])
+'
 
 apptainer exec --nv --bind /oscar:/oscar \
     "$NGC_TENSORFLOW_CONTAINER" \
