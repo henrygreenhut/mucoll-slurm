@@ -16,6 +16,7 @@ POINT_INDEX=$((TASK / EVENTS_PER_POINT))
 EVENT_INDEX=$((TASK % EVENTS_PER_POINT))
 TAG="$(python3 "$CT_DIR/v3_occupancy_scan/scan_point.py" --scan "$SCAN_ROOT/scan.json" --index "$POINT_INDEX" --field tag)"
 EVENT_ID="$(python3 "$CT_DIR/v3_occupancy_scan/scan_point.py" --scan "$SCAN_ROOT/scan.json" --index "$POINT_INDEX" --field event_id --event-index "$EVENT_INDEX")"
+EVENT_SPLIT="$(python3 "$CT_DIR/v3_occupancy_scan/scan_point.py" --scan "$SCAN_ROOT/scan.json" --index "$POINT_INDEX" --field event_split --event-index "$EVENT_INDEX")"
 POINT="$SCAN_ROOT/$TAG"
 OUTPUT="$POINT/inputs/$EVENT_ID"
 
@@ -37,6 +38,6 @@ export EXTRACT_PYTHON="$(command -v python)"
 export IMAGE_V2_11="${IMAGE_V2_11:-/oscar/data/mleblan6/mucoll/mucoll-sim-ubuntu24_v2.11-amd64.sif}"
 bash "$CT_DIR/v2_11/run_count_tracker_event_v2_11.sh" \
     --conditions "$POINT/conditions" --construction norm42 \
-    --split test --event-id "$EVENT_ID" \
+    --split "$EVENT_SPLIT" --event-id "$EVENT_ID" \
     --count-samples "$POINT/count_samples" --geomap "$GEOMAP" \
     --stop-after input --output "$OUTPUT"

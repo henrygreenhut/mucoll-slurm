@@ -20,7 +20,7 @@ export PYTHONNOUSERSITE=1
 cd "$CT_DIR"
 
 python count_tracker_sample.py \
-    --conditions "$POINT/conditions" --split test \
+    --conditions "$POINT/conditions" --split "${SPLIT:-test}" \
     --model-root "$MODEL_ROOT" --paper1-root "$PAPER1_ROOT" \
     --seed-base "${SEED_BASE:-12345}" \
     --max-rounds "${MAX_ROUNDS:-100}" --unfilled-policy "${UNFILLED_POLICY:-drop}" \
