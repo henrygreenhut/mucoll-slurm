@@ -19,6 +19,8 @@ TRAIN_SITE="${TRAIN_SITE:-/oscar/scratch/$USER/mucoll/envs/reco-train-site-v1}"
 TF_MODULE="${TF_MODULE:-ngc-tensorflow-container/25.02-tf2-py3-azkb}"
 CONSTRUCTION="${CONSTRUCTION:-norm42_fullbx_theta_phi72}"
 LABEL="${LABEL:-fullbx_theta_phi72}"
+EPOCHS="${EPOCHS:-200}"
+PATIENCE="${PATIENCE:-100}"
 
 [ -d "$TRAIN_SITE" ] || {
     echo "Missing RECO training extension directory: $TRAIN_SITE" >&2
@@ -69,8 +71,8 @@ apptainer exec --nv --bind /oscar:/oscar \
         --label "$LABEL" \
         --outdir "$PFN_OUT" \
         --recipe fixed \
-        --epochs 150 \
+        --epochs "$EPOCHS" \
         --batch-size 32 \
-        --patience 20
+        --patience "$PATIENCE"
 
 echo "PFN result -> $PFN_OUT/$LABEL"
