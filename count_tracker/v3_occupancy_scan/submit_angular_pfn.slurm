@@ -19,7 +19,7 @@ TRAIN_SITE="${TRAIN_SITE:-/oscar/scratch/$USER/mucoll/envs/reco-train-site-v1}"
 TF_MODULE="${TF_MODULE:-ngc-tensorflow-container/25.02-tf2-py3-azkb}"
 CONSTRUCTION="${CONSTRUCTION:-norm42_fullbx_theta_phi72}"
 LABEL="${LABEL:-fullbx_theta_phi72}"
-EPOCHS="${EPOCHS:-200}"
+EPOCHS="${EPOCHS:-1000}"
 PATIENCE="${PATIENCE:-100}"
 
 [ -d "$TRAIN_SITE" ] || {
