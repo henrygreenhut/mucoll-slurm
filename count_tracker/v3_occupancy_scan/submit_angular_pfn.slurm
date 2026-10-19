@@ -16,6 +16,7 @@ set -euo pipefail
 : "${PFN_OUT:?export PFN_OUT or pass it with sbatch --export}"
 
 TRAIN_SITE="${TRAIN_SITE:-/oscar/scratch/$USER/mucoll/envs/reco-train-site-v1}"
+TF_MODULE="${TF_MODULE:-ngc-tensorflow-container/25.02-tf2-py3-azkb}"
 CONSTRUCTION="${CONSTRUCTION:-norm42_fullbx_theta_phi72}"
 LABEL="${LABEL:-fullbx_theta_phi72}"
 
@@ -32,7 +33,8 @@ for split in train val test; do
     done
 done
 
-module load ngc-tensorflow-container/25.02-tf2-py3-j4zj
+module load "$TF_MODULE"
+echo "TensorFlow module: $TF_MODULE"
 export PYTHONPATH="$TRAIN_SITE"
 export MPLCONFIGDIR="${TMPDIR:-/tmp}/matplotlib-$SLURM_JOB_ID"
 mkdir -p "$MPLCONFIGDIR" "$PFN_OUT"
