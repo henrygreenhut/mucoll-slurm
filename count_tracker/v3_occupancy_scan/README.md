@@ -223,21 +223,19 @@ sector centre, local-phi definition, ROOT source, and track count for every
 patch.  The builder verifies that partitioning preserves the complete summed
 five-region track count in each arm.
 
-Train the physical SIM-versus-COUNT PFN in the established TensorFlow,
+Submit the physical SIM-versus-COUNT PFN in the established TensorFlow,
 EnergyFlow, and `tf_keras` environment:
 
 ```bash
 export PFN_OUT="$SCAN_ROOT/n1666/angular_patch_pfn"
+mkdir -p "$PFN_OUT/logs"
 
-python "$CT_DIR/count_tracker_train.py" \
-  --store-dir "$PATCH_ROOT" \
-  --construction norm42_fullbx_theta_phi72 \
-  --unit event \
-  --sample-a SIM --sample-b COUNT \
-  --label fullbx_theta_phi72 \
-  --outdir "$PFN_OUT" \
-  --recipe fixed \
-  --epochs 150 --batch-size 32 --patience 20
+TRAIN_JOB=$(sbatch --parsable \
+  --export=ALL,CT_DIR="$CT_DIR",PATCH_ROOT="$PATCH_ROOT",PFN_OUT="$PFN_OUT" \
+  -o "$PFN_OUT/logs/train_%j.out" \
+  -e "$PFN_OUT/logs/train_%j.err" \
+  "$CT_DIR/v3_occupancy_scan/submit_angular_pfn.slurm")
+echo "training=$TRAIN_JOB"
 ```
 
 The trainer recognizes the patch-to-parent mapping.  It never splits patches
