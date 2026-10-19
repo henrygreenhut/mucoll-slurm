@@ -95,6 +95,27 @@ def combine(raw_a, counts_a, raw_b, counts_b, width):
     return x, y
 
 
+def paired_parent_groups(manifest_a, manifest_b):
+    """Group paired examples by parent event when a store supplies that relation."""
+    parents_a = manifest_a.get("example_parent_ids")
+    parents_b = manifest_b.get("example_parent_ids")
+    if parents_a is None and parents_b is None:
+        n_examples = manifest_a["n_events"]
+        return np.arange(2 * n_examples, dtype=np.int64), n_examples
+    if parents_a is None or parents_b is None or parents_a != parents_b:
+        raise SystemExit("paired stores have inconsistent example_parent_ids")
+    if len(parents_a) != manifest_a["n_events"]:
+        raise SystemExit("example_parent_ids does not match the number of examples")
+    parent_index = {}
+    encoded = []
+    for parent in parents_a:
+        if parent not in parent_index:
+            parent_index[parent] = len(parent_index)
+        encoded.append(parent_index[parent])
+    encoded = np.asarray(encoded, dtype=np.int64)
+    return np.concatenate([encoded, encoded + len(parent_index)]), len(parent_index)
+
+
 def single_track_examples(raw_a, counts_a, raw_b, counts_b):
     """One-track PFN inputs with equal total weight per nonempty source event."""
     if len(counts_a) != len(counts_b):
@@ -209,6 +230,13 @@ def main():
     raw = {split: {sample: load_store(store_dir, args.construction, sample, split)
                    for sample in (args.sample_a, args.sample_b)}
            for split in SPLITS}
+    is_patch_store = bool(raw["test"][args.sample_a][2].get("example_unit"))
+    if is_patch_store and args.unit != "event":
+        raise SystemExit("angular patch stores require --unit event")
+    if is_patch_store and args.permute_labels:
+        raise SystemExit(
+            "independent patch-label permutation is invalid for shared parent events; "
+            "construct a grouped physical null instead")
     width = max(raw[s][sample][0].shape[1] for s in SPLITS
                 for sample in (args.sample_a, args.sample_b))
     if width == 0:
@@ -224,16 +252,19 @@ def main():
         if args.unit == "event":
             x, y = combine(tracks_a, counts_a, tracks_b, counts_b, width)
             weights = None
-            groups = np.arange(len(y), dtype=np.int64)
+            groups, n_parent_events = paired_parent_groups(
+                raw[split][args.sample_a][2], raw[split][args.sample_b][2])
         else:
             x, y, weights, groups = single_track_examples(
                 tracks_a, counts_a, tracks_b, counts_b)
+            n_parent_events = len(counts_a)
         if args.permute_labels:
             y = (permuted_labels(y, split) if args.unit == "event"
                  else grouped_permuted_labels(y, groups, split))
         data[split] = (x, y, weights, groups)
         split_sizes[split] = {
             "events_per_sample": int(len(counts_a)),
+            "parent_events_per_sample": int(n_parent_events),
             "nonempty_events": {args.sample_a: int(np.count_nonzero(counts_a)),
                                 args.sample_b: int(np.count_nonzero(counts_b))},
             "tracks": {args.sample_a: int(counts_a.sum()),
@@ -287,7 +318,7 @@ def main():
     test_auc = weighted_auc(y_test, test_scores, test_weights)
     test_interval = (paired_event_bootstrap(
         y_test, test_scores, test_weights, groups_test,
-        split_sizes["test"]["events_per_sample"], args.bootstrap_draws,
+        split_sizes["test"]["parent_events_per_sample"], args.bootstrap_draws,
         TRAINING_SEED + 90000) if args.bootstrap_draws else None)
     np.savez(result_dir / "test_predictions.npz", scores=test_scores,
              labels=y_test, groups=groups_test,
@@ -307,10 +338,16 @@ def main():
         "unit": args.unit,
         "label_mode": "permuted null" if args.permute_labels else "physical",
         "features": list(FEATURES),
-        "physical_observables": ["pt", "eta", "phi", "d0", "z0"],
+        "physical_observables": (["pt", "eta", "delta_phi", "d0", "z0"]
+                                 if raw["test"][args.sample_a][2].get("phi_coordinate")
+                                 else ["pt", "eta", "phi", "d0", "z0"]),
         "track_collection": "SiTracks",
         "track_state": "AtIP",
-        "feature_definitions": FEATURE_DEFINITIONS,
+        "feature_definitions": ({
+            **FEATURE_DEFINITIONS,
+            "sin_phi": "sin(delta phi from fixed global sector centre) at AtIP",
+            "cos_phi": "cos(delta phi from fixed global sector centre) at AtIP",
+        } if raw["test"][args.sample_a][2].get("phi_coordinate") else FEATURE_DEFINITIONS),
         "architecture": {"Phi": list(PHI_SIZES), "F": list(F_SIZES),
                          "aggregation": "sum", "F_dropout": config["f_dropout"]},
         "training": {"recipe": args.recipe, "epochs_requested": args.epochs,
@@ -326,8 +363,10 @@ def main():
                                          args.sample_a, args.sample_b),
         "split_sizes": split_sizes,
         "weighting": ("equal total weight per nonempty event within each class"
-                      if args.unit == "track" else "one example per event"),
-        "estimand": ("distinguish one fitted track drawn from a uniformly chosen "
+                      if args.unit == "track" else "one example per stored patch/event"),
+        "estimand": ("distinguish a fixed theta-region/AtIP-phi angular track patch"
+                     if is_patch_store else
+                     "distinguish one fitted track drawn from a uniformly chosen "
                      "nonempty source event" if args.unit == "track" else
                      "distinguish the complete reconstructed track set of one source event"),
         "source_domain": raw["test"][args.sample_a][2].get("source_domain"),
@@ -335,6 +374,7 @@ def main():
             "generator_training_holdout"),
         "physical_event_boundaries": raw["test"][args.sample_a][2].get(
             "physical_event_boundaries"),
+        "patch_definition": raw["test"][args.sample_a][2].get("patch_definition"),
         "code": git_provenance(),
         "implementation": {"class": "energyflow.archs.PFN",
                            "energyflow": __import__("energyflow").__version__,
@@ -344,6 +384,10 @@ def main():
         "results": {"test": {"auc": test_auc, "examples": int(len(y_test)),
                              "auc_interval_95": test_interval}},
         "uncertainty_note": (
+            "Angular patches share parent reconstructions. Splits are grouped by "
+            "parent event, and uncertainty resamples parent-event pairs. With one "
+            "test parent, no bootstrap interval is reported."
+            if raw["test"][args.sample_a][2].get("example_unit") else
             "The paired-event interval is conditional on the source reservoir. "
             "For norm42_reservoir, SIM rows come from the one-event model training "
             "input; classifier splits are separate draws, not unseen physical BIB."

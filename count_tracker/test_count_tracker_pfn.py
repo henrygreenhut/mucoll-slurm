@@ -125,6 +125,19 @@ class TrainDataTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             train.combine(a, counts, b[:2], counts[:2], width=2)
 
+    def test_patch_parent_groups_keep_patches_clustered(self):
+        a = {"n_events": 6, "example_parent_ids": ["a", "a", "a", "b", "b", "b"]}
+        b = dict(a)
+        groups, parents = train.paired_parent_groups(a, b)
+        self.assertEqual(parents, 2)
+        np.testing.assert_array_equal(groups, [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3])
+
+    def test_patch_parent_groups_reject_mismatched_arms(self):
+        a = {"n_events": 2, "example_parent_ids": ["a", "a"]}
+        b = {"n_events": 2, "example_parent_ids": ["a", "b"]}
+        with self.assertRaises(SystemExit):
+            train.paired_parent_groups(a, b)
+
     def test_single_track_examples_weight_events_equally(self):
         a = np.zeros((3, 2, 6), np.float32)
         b = np.zeros((3, 2, 6), np.float32)

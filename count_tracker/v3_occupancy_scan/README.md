@@ -186,3 +186,63 @@ python "$CT_DIR/v3_occupancy_scan/report_unsplit.py" \
   --scan-root "$SCAN_ROOT" --point-indices 0 1 \
   --output "$SCAN_ROOT/unsplit_comparison_10_36.json"
 ```
+
+## Full-BX angular-patch PFN
+
+The preliminary full-BX classifier uses the completed `n1666` five-region
+reconstruction.  It does not rerun reconstruction.  Every regional `SiTrack`
+is assigned exactly once to one of 72 fixed five-degree sectors using its
+fitted AtIP momentum phi.  The stored angular input is delta-phi from the
+sector centre.  Empty sectors are retained.  The first three parent event
+pairs are training, the fourth is validation, and the fifth is test; every
+patch from a parent remains in the same split.
+
+Build the stores on a compute node in `count-hdf`:
+
+```bash
+export REPO="$(git rev-parse --show-toplevel)"
+export CT_DIR="$REPO/count_tracker"
+export SCAN_ROOT="/oscar/scratch/$USER/mucoll/count_tracker_cmp/norm42_v3_occupancy_scan_03"
+export PATCH_ROOT="$SCAN_ROOT/n1666/angular_patches_phi72"
+
+module load miniforge3/25.3.0-3-a6hh
+eval "$(conda shell.bash hook)"
+conda activate count-hdf
+
+python "$CT_DIR/v3_occupancy_scan/build_angular_patches.py" \
+  --scan-root "$SCAN_ROOT" \
+  --point n1666 \
+  --phi-sectors 72 \
+  --split-counts 3 1 1 \
+  --output "$PATCH_ROOT"
+```
+
+This writes 1,080/360/360 patches per arm in train/validation/test.  The
+manifests record the parent event, theta region, global phi-sector boundary,
+sector centre, local-phi definition, ROOT source, and track count for every
+patch.  The builder verifies that partitioning preserves the complete summed
+five-region track count in each arm.
+
+Train the physical SIM-versus-COUNT PFN in the established TensorFlow,
+EnergyFlow, and `tf_keras` environment:
+
+```bash
+export PFN_OUT="$SCAN_ROOT/n1666/angular_patch_pfn"
+
+python "$CT_DIR/count_tracker_train.py" \
+  --store-dir "$PATCH_ROOT" \
+  --construction norm42_fullbx_theta_phi72 \
+  --unit event \
+  --sample-a SIM --sample-b COUNT \
+  --label fullbx_theta_phi72 \
+  --outdir "$PFN_OUT" \
+  --recipe fixed \
+  --epochs 150 --batch-size 32 --patience 20
+```
+
+The trainer recognizes the patch-to-parent mapping.  It never splits patches
+from one parent across datasets, and its bootstrap grouping uses parent event
+pairs rather than treating patches as independent events.  Because this fixed
+split has only one test parent, no bootstrap interval is produced.  Independent
+patch-label permutation is rejected; a null must be built from paired physical
+SIM/SIM or COUNT/COUNT samples with the same patch procedure.
