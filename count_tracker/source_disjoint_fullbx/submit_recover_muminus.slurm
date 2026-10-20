@@ -17,7 +17,8 @@ mkdir -p "$RECOVERY_ROOT/MUMINUS" "$RECOVERY_ROOT/metadata"
 
 validate_output() {
     apptainer exec --bind /oscar:/oscar "$IMAGE" \
-        bash -c 'source /opt/setup_mucoll.sh; python - "$1"' bash "$1" <<'PY'
+        bash -c 'set +u; source /opt/setup_mucoll.sh; set -u; python - "$1"' \
+        bash "$1" <<'PY'
 import ROOT
 import sys
 
@@ -48,9 +49,11 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/count-n42-recover-${CYCLE}.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 OUTPUT="$WORK/bib_sim_${CYCLE}.edm4hep.root"
 cat > "$WORK/run.sh" <<EOF
-set -euo pipefail
+set -eo pipefail
+set +u
 source /opt/setup_mucoll.sh
 source '$BENCHMARK_DIR/setup_config.sh' '$BENCHMARK_DIR' MAIA_v0
+set -u
 cd '$WORK'
 ddsim --steeringFile '$BENCHMARK_DIR/simulation/steer_baseline.py' \\
     --numberOfEvents 1 \\
