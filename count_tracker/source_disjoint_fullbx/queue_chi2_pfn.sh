@@ -8,8 +8,9 @@ set -euo pipefail
 
 PATCH_ROOT_CHI2="${PATCH_ROOT_CHI2:-$SCAN_ROOT/n1666/angular_patches_phi72_chi2ndf}"
 PFN_OUT_CHI2="${PFN_OUT_CHI2:-$SCAN_ROOT/n1666/angular_patch_pfn_source_disjoint_chi2ndf}"
+PATCH_LOG_CHI2="${PATCH_LOG_CHI2:-$SCAN_ROOT/n1666/angular_patches_phi72_chi2ndf_logs}"
 
-if [ -e "$PATCH_ROOT_CHI2/angular_patch_summary.json" ]; then
+if [ -e "$PATCH_ROOT_CHI2" ]; then
     echo "Refusing existing chi2 patch store: $PATCH_ROOT_CHI2" >&2
     exit 1
 fi
@@ -18,12 +19,12 @@ if [ -d "$PFN_OUT_CHI2/source_disjoint_fullbx_theta_phi72_chi2ndf" ]; then
     exit 1
 fi
 
-mkdir -p "$PATCH_ROOT_CHI2/logs" "$PFN_OUT_CHI2/logs"
+mkdir -p "$PATCH_LOG_CHI2" "$PFN_OUT_CHI2/logs"
 
 patch_job=$(sbatch --parsable \
     --export=ALL,CT_DIR="$CT_DIR",SCAN_ROOT="$SCAN_ROOT",PATCH_ROOT="$PATCH_ROOT_CHI2",POINT=n1666,PHI_SECTORS=72,INCLUDE_CHI2_NDF=1,SPLIT_COUNTS='2 1 1' \
-    -o "$PATCH_ROOT_CHI2/logs/build_%j.out" \
-    -e "$PATCH_ROOT_CHI2/logs/build_%j.err" \
+    -o "$PATCH_LOG_CHI2/build_%j.out" \
+    -e "$PATCH_LOG_CHI2/build_%j.err" \
     "$CT_DIR/v3_occupancy_scan/submit_angular_patches.slurm")
 
 train_job=$(sbatch --parsable \
