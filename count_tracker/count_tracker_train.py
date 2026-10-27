@@ -24,7 +24,8 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # for libtest_common
 from count_tracker_track_features import (  # noqa: E402
-    FEATURES, FEATURE_DEFINITIONS, RAW_FEATURES, pfn_features,
+    FEATURE_DEFINITIONS, RAW_FEATURES, SUPPORTED_RAW_FEATURES,
+    pfn_feature_names, pfn_features,
 )
 from count_tracker_metrics import paired_event_bootstrap, weighted_auc  # noqa: E402
 
@@ -57,12 +58,13 @@ def load_store(store_dir, construction, sample, split):
     for key, value in expected.items():
         if manifest.get(key) != value:
             raise SystemExit(f"{prefix}.json has {key}={manifest.get(key)!r}, expected {value!r}")
-    if tuple(manifest["features"]) != RAW_FEATURES:
+    raw_features = tuple(manifest["features"])
+    if raw_features not in SUPPORTED_RAW_FEATURES:
         raise SystemExit(f"{prefix}.json has unexpected features {manifest['features']}")
     with np.load(prefix.with_suffix(".npz")) as data:
         tracks = data["tracks"].astype(np.float32)
         counts = data["n_tracks"].astype(np.int64)
-    if tracks.ndim != 3 or tracks.shape[2] != len(RAW_FEATURES):
+    if tracks.ndim != 3 or tracks.shape[2] != len(raw_features):
         raise SystemExit(f"{prefix}.npz has an unexpected track shape")
     if counts.shape != (len(tracks),) or np.any(counts < 0) or np.any(counts > tracks.shape[1]):
         raise SystemExit(f"{prefix}.npz has invalid n_tracks")
@@ -85,9 +87,9 @@ def one_hot(labels):
     return out
 
 
-def combine(raw_a, counts_a, raw_b, counts_b, width):
-    xa = pfn_features(pad_width(raw_a, width), counts_a)
-    xb = pfn_features(pad_width(raw_b, width), counts_b)
+def combine(raw_a, counts_a, raw_b, counts_b, width, raw_features=RAW_FEATURES):
+    xa = pfn_features(pad_width(raw_a, width), counts_a, raw_features)
+    xb = pfn_features(pad_width(raw_b, width), counts_b, raw_features)
     if len(xa) != len(xb):
         raise SystemExit(f"class counts differ: {len(xa)} vs {len(xb)}")
     x = np.concatenate([xa, xb])
@@ -116,13 +118,14 @@ def paired_parent_groups(manifest_a, manifest_b):
     return np.concatenate([encoded, encoded + len(parent_index)]), len(parent_index)
 
 
-def single_track_examples(raw_a, counts_a, raw_b, counts_b):
+def single_track_examples(raw_a, counts_a, raw_b, counts_b,
+                          raw_features=RAW_FEATURES):
     """One-track PFN inputs with equal total weight per nonempty source event."""
     if len(counts_a) != len(counts_b):
         raise SystemExit("single-track comparison requires the same number of events per class")
     samples = []
     for label, (raw, counts) in enumerate(((raw_a, counts_a), (raw_b, counts_b))):
-        features = pfn_features(raw, counts)
+        features = pfn_features(raw, counts, raw_features)
         n_nonempty = int(np.count_nonzero(counts))
         if n_nonempty == 0:
             raise SystemExit(f"class {label} has no reconstructed tracks")
@@ -230,6 +233,14 @@ def main():
     raw = {split: {sample: load_store(store_dir, args.construction, sample, split)
                    for sample in (args.sample_a, args.sample_b)}
            for split in SPLITS}
+    raw_schemas = {
+        tuple(raw[split][sample][2]["features"])
+        for split in SPLITS for sample in (args.sample_a, args.sample_b)
+    }
+    if len(raw_schemas) != 1:
+        raise SystemExit(f"track stores use inconsistent feature schemas: {raw_schemas}")
+    raw_features = raw_schemas.pop()
+    network_features = pfn_feature_names(raw_features)
     is_patch_store = bool(raw["test"][args.sample_a][2].get("example_unit"))
     if is_patch_store and args.unit != "event":
         raise SystemExit("angular patch stores require --unit event")
@@ -250,13 +261,14 @@ def main():
             validate_sim_count_pair(raw[split][args.sample_a][2],
                                     raw[split][args.sample_b][2], split)
         if args.unit == "event":
-            x, y = combine(tracks_a, counts_a, tracks_b, counts_b, width)
+            x, y = combine(
+                tracks_a, counts_a, tracks_b, counts_b, width, raw_features)
             weights = None
             groups, n_parent_events = paired_parent_groups(
                 raw[split][args.sample_a][2], raw[split][args.sample_b][2])
         else:
             x, y, weights, groups = single_track_examples(
-                tracks_a, counts_a, tracks_b, counts_b)
+                tracks_a, counts_a, tracks_b, counts_b, raw_features)
             n_parent_events = len(counts_a)
         if args.permute_labels:
             y = (permuted_labels(y, split) if args.unit == "event"
@@ -287,7 +299,7 @@ def main():
     steps_per_epoch = int(math.ceil(len(y_train) / args.batch_size))
     config = recipe_config(args.recipe, steps_per_epoch)
     model = build_pfn_energyflow(
-        input_dim=len(FEATURES), phi_sizes=PHI_SIZES, f_sizes=F_SIZES,
+        input_dim=len(network_features), phi_sizes=PHI_SIZES, f_sizes=F_SIZES,
         jit_compile=False, lr=config["learning_rate"],
         warmup_steps=config["warmup_steps"], decay_steps=config["decay_steps"],
         min_lr=config["min_learning_rate"], f_dropouts=config["f_dropout"])
@@ -331,23 +343,32 @@ def main():
         for epoch in range(len(history.history[keys[0]])):
             writer.writerow([epoch + 1] + [history.history[k][epoch] for k in keys])
 
+    is_angular_patch = bool(raw["test"][args.sample_a][2].get("phi_coordinate"))
+    physical_observables = [
+        "pt", "eta", "delta_phi" if is_angular_patch else "phi", "d0", "z0"
+    ]
+    if "chi2_ndf" in network_features:
+        physical_observables.append("chi2_ndf")
+    feature_definitions = {
+        name: FEATURE_DEFINITIONS[name] for name in network_features
+    }
+    if is_angular_patch:
+        feature_definitions.update({
+            "sin_phi": "sin(delta phi from fixed global sector centre) at AtIP",
+            "cos_phi": "cos(delta phi from fixed global sector centre) at AtIP",
+        })
+
     summary = {
         "label": args.label,
         "construction": args.construction,
         "samples": [args.sample_a, args.sample_b],
         "unit": args.unit,
         "label_mode": "permuted null" if args.permute_labels else "physical",
-        "features": list(FEATURES),
-        "physical_observables": (["pt", "eta", "delta_phi", "d0", "z0"]
-                                 if raw["test"][args.sample_a][2].get("phi_coordinate")
-                                 else ["pt", "eta", "phi", "d0", "z0"]),
+        "features": list(network_features),
+        "physical_observables": physical_observables,
         "track_collection": "SiTracks",
         "track_state": "AtIP",
-        "feature_definitions": ({
-            **FEATURE_DEFINITIONS,
-            "sin_phi": "sin(delta phi from fixed global sector centre) at AtIP",
-            "cos_phi": "cos(delta phi from fixed global sector centre) at AtIP",
-        } if raw["test"][args.sample_a][2].get("phi_coordinate") else FEATURE_DEFINITIONS),
+        "feature_definitions": feature_definitions,
         "architecture": {"Phi": list(PHI_SIZES), "F": list(F_SIZES),
                          "aggregation": "sum", "F_dropout": config["f_dropout"]},
         "training": {"recipe": args.recipe, "epochs_requested": args.epochs,

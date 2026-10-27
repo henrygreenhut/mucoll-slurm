@@ -39,6 +39,15 @@ class FeatureTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             feat.pfn_features(raw, np.array([2]))  # zero-pT row cannot become a valid track
 
+    def test_pfn_features_can_append_reduced_chi2(self):
+        raw = np.array([[[0.5, 0.88, 0.5, 0.1, 2.0, 0.003, 1.75],
+                         [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]], dtype=np.float32)
+        out = feat.pfn_features(
+            raw, np.array([1]), feat.RAW_FEATURES_WITH_CHI2_NDF)
+        self.assertEqual(out.shape, (1, 2, 7))
+        self.assertEqual(out[0, 0, -1], 1.75)
+        np.testing.assert_array_equal(out[0, 1], np.zeros(7))
+
 
 class StoreTests(unittest.TestCase):
     def test_choose_state_requires_atip(self):

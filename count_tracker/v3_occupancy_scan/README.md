@@ -238,6 +238,39 @@ TRAIN_JOB=$(sbatch --parsable \
 echo "training=$TRAIN_JOB"
 ```
 
+## Reduced-chi-squared PFN variant
+
+To isolate the value of fitted-track quality, rebuild the same angular patches
+with the untransformed `AllTracks.chi2 / AllTracks.ndf` value appended to every
+track.  This preserves the five parent events, 3/1/1 parent split, 72 phi
+sectors, features, PFN architecture, optimizer, and training seed used above.
+The baseline stores and results are not modified.
+
+```bash
+export PATCH_ROOT_CHI2="$SCAN_ROOT/n1666/angular_patches_phi72_chi2ndf"
+export PFN_OUT="$SCAN_ROOT/n1666/angular_patch_pfn"
+mkdir -p "$PATCH_ROOT_CHI2/logs" "$PFN_OUT/logs"
+
+PATCH_JOB=$(sbatch --parsable \
+  --export=ALL,CT_DIR="$CT_DIR",SCAN_ROOT="$SCAN_ROOT",PATCH_ROOT="$PATCH_ROOT_CHI2",POINT=n1666,PHI_SECTORS=72,INCLUDE_CHI2_NDF=1 \
+  -o "$PATCH_ROOT_CHI2/logs/build_%j.out" \
+  -e "$PATCH_ROOT_CHI2/logs/build_%j.err" \
+  "$CT_DIR/v3_occupancy_scan/submit_angular_patches.slurm")
+
+TRAIN_CHI2=$(sbatch --parsable \
+  --dependency="afterok:$PATCH_JOB" \
+  --export=ALL,CT_DIR="$CT_DIR",PATCH_ROOT="$PATCH_ROOT_CHI2",PFN_OUT="$PFN_OUT",CONSTRUCTION=norm42_fullbx_theta_phi72_chi2ndf,LABEL=fullbx_theta_phi72_chi2ndf_ceiling1000,EPOCHS=1000,PATIENCE=100 \
+  -o "$PFN_OUT/logs/train_chi2_%j.out" \
+  -e "$PFN_OUT/logs/train_chi2_%j.err" \
+  "$CT_DIR/v3_occupancy_scan/submit_angular_pfn.slurm")
+
+printf 'patches=%s training=%s\n' "$PATCH_JOB" "$TRAIN_CHI2"
+```
+
+The chi-squared input remains zero only in padding.  Valid tracks must have a
+finite, nonnegative reduced chi-squared.  The new construction name and result
+label prevent accidental mixing with the six-feature baseline.
+
 The trainer recognizes the patch-to-parent mapping.  It never splits patches
 from one parent across datasets, and its bootstrap grouping uses parent event
 pairs rather than treating patches as independent events.  Because this fixed

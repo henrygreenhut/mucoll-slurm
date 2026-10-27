@@ -19,8 +19,10 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from count_tracker_features import pack_store, read_tracks
-from count_tracker_track_features import RAW, RAW_FEATURES
+from count_tracker_features import pack_store, read_track_data
+from count_tracker_track_features import (
+    RAW_FEATURES, RAW_FEATURES_WITH_CHI2_NDF,
+)
 
 
 REGIONS = (
@@ -60,17 +62,20 @@ def sector_indices_and_local_phi(phi, n_sectors):
     return sectors, local
 
 
-def partition_tracks(tracks, n_sectors):
+def partition_tracks(tracks, n_sectors, raw_features=RAW_FEATURES):
     """Partition tracks exactly once and replace global phi with local delta-phi."""
     tracks = np.asarray(tracks, dtype=np.float32)
-    if tracks.ndim != 2 or tracks.shape[1] != len(RAW_FEATURES):
+    raw_features = tuple(raw_features)
+    if tracks.ndim != 2 or tracks.shape[1] != len(raw_features):
         raise ValueError("tracks must have shape (n_tracks, n_raw_features)")
-    sectors, local_phi = sector_indices_and_local_phi(tracks[:, RAW["phi"]], n_sectors)
+    raw_index = {name: index for index, name in enumerate(raw_features)}
+    sectors, local_phi = sector_indices_and_local_phi(
+        tracks[:, raw_index["phi"]], n_sectors)
     patches = []
     for sector in range(n_sectors):
         selected = np.flatnonzero(sectors == sector)
         patch = tracks[selected].copy()
-        patch[:, RAW["phi"]] = local_phi[selected]
+        patch[:, raw_index["phi"]] = local_phi[selected]
         patches.append(patch)
     if sum(map(len, patches)) != len(tracks):
         raise AssertionError("phi partition did not preserve the track count")
@@ -95,16 +100,21 @@ def assign_splits(events, counts):
     return assignment
 
 
-def read_regional_tracks(path):
+def read_regional_track_data(path):
     import uproot
 
     if not path.is_file():
         raise FileNotFoundError(path)
     with uproot.open(path) as root:
-        per_event = read_tracks(root["events"])
-    if len(per_event) != 1:
+        per_event, per_event_chi2_ndf = read_track_data(root["events"])
+    if len(per_event) != 1 or len(per_event_chi2_ndf) != 1:
         raise ValueError(f"{path}: expected one event, found {len(per_event)}")
-    return per_event[0]
+    return per_event[0], per_event_chi2_ndf[0]
+
+
+def read_regional_tracks(path):
+    """Backward-compatible six-feature reader used by the baseline stores."""
+    return read_regional_track_data(path)[0]
 
 
 def build(args):
@@ -120,7 +130,11 @@ def build(args):
         raise FileExistsError(f"refusing to replace {output}")
     output.mkdir(parents=True)
 
-    construction = f"norm42_fullbx_theta_phi{args.phi_sectors}"
+    include_chi2_ndf = bool(getattr(args, "include_chi2_ndf", False))
+    raw_features = (RAW_FEATURES_WITH_CHI2_NDF
+                    if include_chi2_ndf else RAW_FEATURES)
+    feature_suffix = "_chi2ndf" if include_chi2_ndf else ""
+    construction = f"norm42_fullbx_theta_phi{args.phi_sectors}{feature_suffix}"
     condition_digest = sha256_file(conditions_path)
     sector_width = 2 * np.pi / args.phi_sectors
     stores = {split: {sample: [] for sample in SAMPLES} for split in SPLITS}
@@ -133,9 +147,14 @@ def build(args):
         for region, theta_min, theta_max in REGIONS:
             for sample in SAMPLES:
                 path = regional_reco(point, event_id, sample, region)
-                regional_tracks = read_regional_tracks(path)
+                if include_chi2_ndf:
+                    regional_tracks, chi2_ndf = read_regional_track_data(path)
+                    regional_tracks = np.column_stack((regional_tracks, chi2_ndf))
+                else:
+                    regional_tracks = read_regional_tracks(path)
                 parent_totals[sample] += len(regional_tracks)
-                patches = partition_tracks(regional_tracks, args.phi_sectors)
+                patches = partition_tracks(
+                    regional_tracks, args.phi_sectors, raw_features)
                 for sector, patch in enumerate(patches):
                     lower = -np.pi + sector * sector_width
                     upper = lower + sector_width
@@ -163,7 +182,7 @@ def build(args):
             rows = records[split][sample]
             if len(examples) != expected_examples:
                 raise AssertionError(f"{sample}/{split}: wrong number of patches")
-            tracks, counts = pack_store(examples)
+            tracks, counts = pack_store(examples, len(raw_features))
             prefix = output / f"{construction}_{sample}_{split}"
             np.savez(prefix.with_suffix(".npz"), tracks=tracks, n_tracks=counts)
             manifest = {
@@ -174,7 +193,7 @@ def build(args):
                 "split": split,
                 "track_collection": "SiTracks",
                 "track_state": "AtIP",
-                "features": list(RAW_FEATURES),
+                "features": list(raw_features),
                 "phi_coordinate": "delta_phi_from_fixed_global_sector_center",
                 "patch_definition": {
                     "theta_assignment": "pre-reconstruction digitized-hit position theta",
@@ -226,6 +245,7 @@ def build(args):
         "scan_root": str(scan_root),
         "scan_point": args.point,
         "phi_sectors": args.phi_sectors,
+        "include_chi2_ndf": include_chi2_ndf,
         "patches_per_parent": expected_per_parent,
         "split_counts": dict(zip(SPLITS, args.split_counts)),
         "assignment": assignment,
@@ -242,6 +262,9 @@ def main():
     parser.add_argument("--phi-sectors", type=int, default=72)
     parser.add_argument("--split-counts", type=int, nargs=3, default=[3, 1, 1],
                         metavar=("TRAIN", "VAL", "TEST"))
+    parser.add_argument(
+        "--include-chi2-ndf", action="store_true",
+        help="append the untransformed fitted-track chi2/ndf to every track")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     build(args)

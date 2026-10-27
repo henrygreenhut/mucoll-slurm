@@ -80,12 +80,15 @@ def read_tracks(events):
     return read_track_data(events)[0]
 
 
-def pack_store(per_event):
+def pack_store(per_event, n_features=None):
     """Zero-pad variable-length per-event track arrays into one dense block."""
+    n_features = len(RAW_FEATURES) if n_features is None else int(n_features)
     counts = np.asarray([len(tracks) for tracks in per_event], dtype=np.int64)
     width = int(counts.max()) if len(counts) else 0
-    tracks = np.zeros((len(per_event), width, len(RAW_FEATURES)), dtype=np.float32)
+    tracks = np.zeros((len(per_event), width, n_features), dtype=np.float32)
     for index, event_tracks in enumerate(per_event):
+        if event_tracks.ndim != 2 or event_tracks.shape[1] != n_features:
+            raise ValueError("event track array does not match the requested feature schema")
         if len(event_tracks):
             tracks[index, :len(event_tracks)] = event_tracks
     return tracks, counts
