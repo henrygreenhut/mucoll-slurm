@@ -10,6 +10,7 @@ import numpy as np
 import audit_subset
 import build_datasets
 import prepare_sources
+import train_collection
 
 
 class WorkflowTests(unittest.TestCase):
@@ -133,6 +134,41 @@ class WorkflowTests(unittest.TestCase):
             lookup,
             np.array([[0, 1, 2, 3], [0, 1, 4, 5]], dtype=np.int64),
         )
+
+    def test_training_input_validation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            collection = root / "VBC"
+            dataset = collection / "dataset"
+            dataset.mkdir(parents=True)
+            x_train = np.arange(30, dtype=np.float32).reshape(6, 5)
+            x_val = np.arange(10, dtype=np.float32).reshape(2, 5)
+            y_train = np.array([0, 0, 1, 1, 2, 2], dtype=np.int64)
+            y_val = np.array([0, 1], dtype=np.int64)
+            for name, values in (
+                ("X_num_train.npy", x_train),
+                ("X_num_val.npy", x_val),
+                ("X_num_test.npy", x_val),
+                ("y_train.npy", y_train),
+                ("y_val.npy", y_val),
+                ("y_test.npy", y_val),
+            ):
+                np.save(dataset / name, values)
+            np.save(collection / "y_lookup.npy", np.zeros((3, 4), dtype=np.int64))
+            (dataset / "info.json").write_text(json.dumps({
+                "train_size": 6,
+                "val_size": 2,
+                "test_size": 2,
+                "n_classes": 3,
+                "n_num_features": 5,
+            }))
+            (collection / "split_manifest.json").write_text(json.dumps({
+                "checks": {"training_covers_all_conditions": True}
+            }))
+            validated = train_collection.validate_dataset(root, "VBC")
+            self.assertEqual(validated[0], collection.resolve())
+            self.assertEqual(validated[2]["n_classes"], 3)
+            self.assertIn("norm42_10pct", train_collection.model_name("VBC"))
 
 
 if __name__ == "__main__":

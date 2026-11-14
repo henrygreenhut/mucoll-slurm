@@ -121,6 +121,42 @@ python -m json.tool "$DATASET_OUTPUT/dataset_manifest.json"
 python -m json.tool "$DATASET_OUTPUT/OTBC/split_manifest.json" | less
 ```
 
+## Train the six collection models
+
+Training uses the exact archived Paper1 trainer and the baseline hyperparameters:
+200,000 steps, batch size 4096, learning rate `5e-4` with the trainer's linear
+decay, 1,000 diffusion timesteps, five 2048-wide hidden layers, timestep
+dimension 1024, quantile normalization, cosine diffusion scheduler, and seed
+42.  The array requests one GPU per collection and caps concurrency at two.
+
+```bash
+export DATASET_ROOT="$STUDY_ROOT/datasets"
+export MODEL_OUTPUT="$STUDY_ROOT/models"
+
+mkdir -p "$STUDY_ROOT/logs"
+
+TRAIN_JOB=$(sbatch --parsable \
+  --export=ALL,CT_DIR="$CT_DIR",DATASET_ROOT="$DATASET_ROOT",PAPER1_10PCT="$PAPER1_10PCT",MODEL_OUTPUT="$MODEL_OUTPUT" \
+  -o "$STUDY_ROOT/logs/train_%A_%a.out" \
+  -e "$STUDY_ROOT/logs/train_%A_%a.err" \
+  "$CT_DIR/norm42_train_10pct/submit_training.slurm")
+
+echo "training=$TRAIN_JOB"
+```
+
+The exact trainer saves final and EMA weights but does not use validation for
+early stopping or checkpoint selection.  Each task writes to a `.partial`
+directory and publishes the final model directory only after reaching step
+200,000 and validating all required outputs.
+
+Check status with:
+
+```bash
+squeue -j "$TRAIN_JOB"
+python "$CT_DIR/norm42_train_10pct/training_status.py" \
+  --model-root "$MODEL_OUTPUT"
+```
+
 ## Local tests
 
 ```bash
