@@ -8,6 +8,7 @@ import unittest
 import numpy as np
 
 import audit_subset
+import build_datasets
 import prepare_sources
 
 
@@ -91,6 +92,47 @@ class WorkflowTests(unittest.TestCase):
             self.assertEqual(
                 report["collections"]["VBC"]["missing_sensor_conditions"], 1
             )
+
+    def test_reference_split_forces_only_singletons_into_training(self):
+        y = np.array([0] * 5 + [1] * 6 + [2], dtype=np.int64)
+        train, validation, singleton_classes, forced = (
+            build_datasets.split_indices(y, seed=42)
+        )
+        self.assertEqual(singleton_classes.tolist(), [2])
+        self.assertEqual(forced.tolist(), [11])
+        self.assertIn(11, train)
+        self.assertNotIn(11, validation)
+        self.assertEqual(set(train) | set(validation), set(range(len(y))))
+        self.assertFalse(set(train) & set(validation))
+        self.assertEqual(set(y[train]), {0, 1, 2})
+
+    def test_model_feature_order_and_condition_lookup(self):
+        raw = np.array([
+            [np.e, 3, 4, 7, 11, 5, 0, 1, 2, 3],
+            [1, 5, 12, 8, 13, 5, 0, 1, 4, 5],
+        ], dtype=np.float32)
+
+        def mark_local_phi(values, **kwargs):
+            result = values.copy()
+            result[:, 2] = np.array([0.1, -0.1], dtype=np.float32)
+            return result
+
+        x_num, y, lookup = build_datasets.transform_rows(
+            raw, "OuterTrackerBarrelCollection", mark_local_phi
+        )
+        np.testing.assert_allclose(
+            x_num,
+            np.array([
+                [1, 11, 5, 0.1, 7],
+                [0, 13, 13, -0.1, 8],
+            ], dtype=np.float32),
+            rtol=1e-6,
+        )
+        np.testing.assert_array_equal(y, [0, 1])
+        np.testing.assert_array_equal(
+            lookup,
+            np.array([[0, 1, 2, 3], [0, 1, 4, 5]], dtype=np.int64),
+        )
 
 
 if __name__ == "__main__":
