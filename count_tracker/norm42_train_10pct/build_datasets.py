@@ -11,6 +11,7 @@ import subprocess
 import sys
 
 import numpy as np
+import sklearn
 from sklearn.model_selection import train_test_split
 
 
@@ -346,6 +347,11 @@ def build(
         "data_root": str(data_root),
         "source_id_root": str(source_id_root),
         "split_seed": split_seed,
+        "runtime": {
+            "python": sys.version,
+            "numpy": np.__version__,
+            "scikit_learn": sklearn.__version__,
+        },
         "collections": collection_reports,
     }
     (output / "dataset_manifest.json").write_text(

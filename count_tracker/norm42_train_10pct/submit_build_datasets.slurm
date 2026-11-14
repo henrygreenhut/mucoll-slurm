@@ -20,7 +20,9 @@ set -euo pipefail
 
 module load miniforge3/25.3.0-3-a6hh
 eval "$(conda shell.bash hook)"
-conda activate count-hdf
+# This is the established Paper1/GenBIB environment.  Unlike count-hdf, it
+# includes scikit-learn (1.0.2), which implements the reference split.
+conda activate genbib
 
 python "$CT_DIR/norm42_train_10pct/build_datasets.py" \
   --manifest "$MANIFEST" \
