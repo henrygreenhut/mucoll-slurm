@@ -196,6 +196,106 @@ python "$CT_DIR/norm42_train_10pct/summarize_validation.py" \
   --output-csv "$VALIDATION_OUTPUT/summary.csv"
 ```
 
+## Source-disjoint three-arm track checkpoint
+
+The first reconstruction test is one 167-file-per-polarity event, corresponding
+to `167/1666 = 10.024%` of the established full-BX reference. It compares the
+same requested sensor occupancy in three arms:
+
+- empirical `SIM`;
+- `COUNT_FULL`, from Shiyu's existing full-corpus Norm42 model;
+- `COUNT_10PCT`, from the new 10%-corpus model.
+
+MUPLUS and MUMINUS are drawn independently, without replacement within each
+polarity. Because MUMINUS is the flipped MUPLUS source, a cycle is excluded
+from both evaluation pools if either polarity appeared in the 10%-model
+training corpus. Thus the event is physically source-disjoint from the new
+model's training sources. The two COUNT arms use the same conditions, sampler,
+Paper1 commit, rejection policy, input construction, v3 digitization, and
+five-theta-region CKF reconstruction.
+
+Prepare the immutable checkpoint manifest interactively in `count-hdf`:
+
+```bash
+export TRACK_ROOT="$STUDY_ROOT/track_checkpoint_10pct"
+export TRAINING_SOURCES="$STUDY_ROOT/source_selection/sources.json"
+
+module load miniforge3/25.3.0-3-a6hh
+eval "$(conda shell.bash hook)"
+conda activate count-hdf
+
+python "$CT_DIR/norm42_train_10pct/prepare_track_checkpoint.py" \
+  --training-sources "$TRAINING_SOURCES" \
+  --seed 12345 --cohort train10pct_checkpoint \
+  --output "$TRACK_ROOT"
+```
+
+Then define the established model and reconstruction inputs:
+
+```bash
+export MODEL_FULL="/oscar/data/mleblan6/mucoll/speng44/bib_gen_mother_muon/new_diffusion_norm42"
+export MODEL_10PCT="$STUDY_ROOT/models"
+export PAPER1_ROOT="$STUDY_ROOT/paper1_90bd576c"
+export GENBIB_DIR="/oscar/data/mleblan6/mucoll/hgreenhu/mucoll/GenBIB-ML"
+export GEOMAP="/oscar/scratch/$USER/mucoll/count_tracker_cmp/v2_11_input_rebuild/maia_v2_11_sensor_geometry.npz"
+export IMAGE_V2_11="/oscar/data/mleblan6/mucoll/mucoll-sim-ubuntu24_v2.11-amd64.sif"
+export IMAGE="/oscar/data/mleblan6/mucoll/mucoll-sim-ubuntu24:v3.0.sif"
+export BENCHMARK_DIR="/oscar/data/mleblan6/mucoll/hgreenhu/mucoll/mucoll-benchmarks"
+mkdir -p "$TRACK_ROOT/logs"
+```
+
+Queue the dependency chain:
+
+```bash
+CONDITIONS=$(sbatch --parsable --array=0-0 \
+  --export=ALL,CT_DIR="$CT_DIR",SCAN_ROOT="$TRACK_ROOT" \
+  -o "$TRACK_ROOT/logs/conditions_%A_%a.out" \
+  -e "$TRACK_ROOT/logs/conditions_%A_%a.err" \
+  "$CT_DIR/v3_occupancy_scan/submit_conditions.slurm")
+
+SAMPLE=$(sbatch --parsable --dependency="afterok:$CONDITIONS" \
+  --export=ALL,CT_DIR="$CT_DIR",SCAN_ROOT="$TRACK_ROOT",MODEL_FULL="$MODEL_FULL",MODEL_10PCT="$MODEL_10PCT",PAPER1_ROOT="$PAPER1_ROOT",SEED_BASE=12345,MAX_ROUNDS=100 \
+  -o "$TRACK_ROOT/logs/sample_%A_%a.out" \
+  -e "$TRACK_ROOT/logs/sample_%A_%a.err" \
+  "$CT_DIR/norm42_train_10pct/submit_track_sampling.slurm")
+
+INPUT=$(sbatch --parsable --dependency="afterok:$SAMPLE" \
+  --export=ALL,CT_DIR="$CT_DIR",SCAN_ROOT="$TRACK_ROOT",GENBIB_DIR="$GENBIB_DIR",GEOMAP="$GEOMAP",IMAGE_V2_11="$IMAGE_V2_11" \
+  -o "$TRACK_ROOT/logs/input_%j.out" \
+  -e "$TRACK_ROOT/logs/input_%j.err" \
+  "$CT_DIR/norm42_train_10pct/submit_track_inputs.slurm")
+
+DIGI=$(sbatch --parsable --dependency="afterok:$INPUT" \
+  --export=ALL,CT_DIR="$CT_DIR",SCAN_ROOT="$TRACK_ROOT",IMAGE="$IMAGE",BENCHMARK_DIR="$BENCHMARK_DIR" \
+  -o "$TRACK_ROOT/logs/digi_%A_%a.out" \
+  -e "$TRACK_ROOT/logs/digi_%A_%a.err" \
+  "$CT_DIR/norm42_train_10pct/submit_track_digi.slurm")
+
+SPLIT=$(sbatch --parsable --dependency="afterok:$DIGI" \
+  --export=ALL,CT_DIR="$CT_DIR",SCAN_ROOT="$TRACK_ROOT",IMAGE="$IMAGE" \
+  -o "$TRACK_ROOT/logs/split_%A_%a.out" \
+  -e "$TRACK_ROOT/logs/split_%A_%a.err" \
+  "$CT_DIR/norm42_train_10pct/submit_track_split.slurm")
+
+RECO=$(sbatch --parsable --dependency="afterok:$SPLIT" \
+  --export=ALL,CT_DIR="$CT_DIR",SCAN_ROOT="$TRACK_ROOT",IMAGE="$IMAGE",BENCHMARK_DIR="$BENCHMARK_DIR" \
+  -o "$TRACK_ROOT/logs/reco_%A_%a.out" \
+  -e "$TRACK_ROOT/logs/reco_%A_%a.err" \
+  "$CT_DIR/norm42_train_10pct/submit_track_reco.slurm")
+
+printf 'conditions=%s sampling=%s input=%s digi=%s split=%s reco=%s\n' \
+  "$CONDITIONS" "$SAMPLE" "$INPUT" "$DIGI" "$SPLIT" "$RECO"
+```
+
+After reconstruction completes:
+
+```bash
+conda activate count-hdf
+python "$CT_DIR/norm42_train_10pct/track_checkpoint_report.py" \
+  --scan-root "$TRACK_ROOT" \
+  --output "$TRACK_ROOT/track_checkpoint_report.json"
+```
+
 ## Local tests
 
 ```bash
