@@ -1,10 +1,10 @@
 # Norm42 10%-BX retraining study
 
-This directory isolates the first, read-only preparation stage of the study.
-It selects one immutable development corpus containing 167 Norm42 files per
-polarity and audits whether that corpus covers the sensor conditions in the
-complete flattened Norm42 arrays.  It does not create training arrays, train a
-model, submit reconstruction, or choose a policy for unsupported sensors.
+This directory isolates the 10%-BX retraining and validation study. It selects
+one immutable development corpus containing 167 Norm42 files per polarity,
+audits sensor-condition coverage, constructs provenance-preserving training
+arrays, trains the six collection models, and validates them against held-out
+rows. Reconstruction remains a separate downstream stage.
 
 The source selection matches the principal SIM-versus-COUNT studies:
 
@@ -155,6 +155,45 @@ Check status with:
 squeue -j "$TRAIN_JOB"
 python "$CT_DIR/norm42_train_10pct/training_status.py" \
   --model-root "$MODEL_OUTPUT"
+```
+
+## Validate the trained models on held-out rows
+
+The reconstruction sampler explicitly loads `model.pt`; it does not load
+`model_ema.pt`.  Validation therefore uses `model.pt` as well.  Each array task
+selects 20,000 rows uniformly without replacement from one collection's
+held-out validation rows and requests generated hits with exactly the same
+sensor-condition multiplicities.  It then applies the production sampler's
+inverse geometry, endcap z snapping, material-map rejection, and retry path.
+
+The output records rejected/unfilled conditions, one-dimensional physical
+feature summaries, and a fixed hit-level classifier two-sample diagnostic.
+The classifier is a validation diagnostic, not the reconstruction-level PFN.
+Its inputs and hyperparameters are fully recorded in each JSON report.
+
+```bash
+export VALIDATION_OUTPUT="$STUDY_ROOT/heldout_validation_20k"
+
+VALIDATION_JOB=$(sbatch --parsable \
+  --export=ALL,CT_DIR="$CT_DIR",MODEL_ROOT="$MODEL_OUTPUT",PAPER1_ROOT="$PAPER1_10PCT",VALIDATION_OUTPUT="$VALIDATION_OUTPUT",HITS=20000,SEED=42,MAX_ROUNDS=100 \
+  -o "$STUDY_ROOT/logs/validation_%A_%a.out" \
+  -e "$STUDY_ROOT/logs/validation_%A_%a.err" \
+  "$CT_DIR/norm42_train_10pct/submit_validation.slurm")
+
+echo "validation=$VALIDATION_JOB"
+```
+
+The array runs at most two collections concurrently. It refuses to replace an
+existing per-collection output, so a partial or failed result must be inspected
+before any targeted retry.
+
+After all six tasks complete:
+
+```bash
+python "$CT_DIR/norm42_train_10pct/summarize_validation.py" \
+  --validation-root "$VALIDATION_OUTPUT" \
+  --output-json "$VALIDATION_OUTPUT/summary.json" \
+  --output-csv "$VALIDATION_OUTPUT/summary.csv"
 ```
 
 ## Local tests

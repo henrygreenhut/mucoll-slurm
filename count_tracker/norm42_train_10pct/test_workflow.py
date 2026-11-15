@@ -11,6 +11,7 @@ import audit_subset
 import build_datasets
 import prepare_sources
 import train_collection
+import validate_collection
 
 
 class WorkflowTests(unittest.TestCase):
@@ -169,6 +170,33 @@ class WorkflowTests(unittest.TestCase):
             self.assertEqual(validated[0], collection.resolve())
             self.assertEqual(validated[2]["n_classes"], 3)
             self.assertIn("norm42_10pct", train_collection.model_name("VBC"))
+
+    def test_validation_metrics_and_classifier_representation(self):
+        reference = np.array([
+            [0, 1, 2, 0, 3, 0, 1, 2, 3],
+            [1, 2, 4, np.pi / 2, 5, 1, 2, 3, 4],
+            [2, 3, 6, np.pi, 7, 0, 3, 4, 5],
+        ], dtype=np.float32)
+        generated = reference.copy()
+        report = validate_collection.feature_report(reference, generated)
+        self.assertEqual(report["time"]["comparison"]["ks_distance"], 0.0)
+        self.assertEqual(
+            report["phi"]["comparison"]["linear_ks_distance"], 0.0
+        )
+        matrix = validate_collection.classifier_matrix(reference)
+        self.assertEqual(matrix.shape, (3, 10))
+        np.testing.assert_allclose(matrix[:, 3], np.sin(reference[:, 3]))
+        np.testing.assert_allclose(matrix[:, 4], np.cos(reference[:, 3]))
+
+    def test_collection_validation_seed_is_stable_and_collection_specific(self):
+        self.assertEqual(
+            validate_collection.collection_seed(42, "VBC"),
+            validate_collection.collection_seed(42, "VBC"),
+        )
+        self.assertNotEqual(
+            validate_collection.collection_seed(42, "VBC"),
+            validate_collection.collection_seed(42, "VEC"),
+        )
 
 
 if __name__ == "__main__":
