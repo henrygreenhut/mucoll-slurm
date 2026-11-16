@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare one source-disjoint 10%-BX three-arm reconstruction checkpoint."""
+"""Prepare source-disjoint 10%-BX three-arm reconstruction events."""
 
 import argparse
 import hashlib
@@ -74,24 +74,68 @@ def load_inventory(training_manifest, document):
     return path, inventory, records
 
 
-def select_evaluation_sources(records, excluded, seed, cohort):
+def select_evaluation_sources(records, excluded, seed, cohort, event_index=0):
+    """Draw one event independently; different events may reuse source files."""
     selected = {}
     for polarity in POLARITIES:
         available = sorted(set(records[polarity]) - excluded)
         if len(available) < FILES_PER_POLARITY:
             raise ValueError(f"only {len(available)} source-disjoint {polarity} cycles")
-        stream = json.dumps(
-            [seed, "norm42", cohort, "source-disjoint-track-checkpoint", polarity],
-            separators=(",", ":"),
-        )
+        stream_values = [
+            seed, "norm42", cohort, "source-disjoint-track-checkpoint", polarity
+        ]
+        # Preserve the original one-event checkpoint selection exactly.
+        if event_index:
+            stream_values.append(event_index)
+        stream = json.dumps(stream_values, separators=(",", ":"))
         cycles = random.Random(stream).sample(available, FILES_PER_POLARITY)
         selected[polarity] = [dict(records[polarity][cycle]) for cycle in cycles]
     return selected
 
 
-def prepare(training_sources, output, seed, cohort):
+def overlap_report(events):
+    """Record source reuse without changing the independent event draws."""
+    cycles = {
+        polarity: [
+            {int(row["cycle"]) for row in event["sources"][polarity]}
+            for event in events
+        ]
+        for polarity in POLARITIES
+    }
+    physical = [
+        cycles["MUPLUS"][index] | cycles["MUMINUS"][index]
+        for index in range(len(events))
+    ]
+
+    def matrix(groups):
+        return [
+            [len(left & right) for right in groups]
+            for left in groups
+        ]
+
+    return {
+        "event_ids": [event["event_id"] for event in events],
+        "within_event_shared_cycle_between_polarities": [
+            len(cycles["MUPLUS"][index] & cycles["MUMINUS"][index])
+            for index in range(len(events))
+        ],
+        "pairwise_overlap_by_polarity": {
+            polarity: matrix(cycles[polarity]) for polarity in POLARITIES
+        },
+        "pairwise_overlap_physical_cycle_union": matrix(physical),
+        "unique_cycles_by_polarity": {
+            polarity: len(set().union(*groups))
+            for polarity, groups in cycles.items()
+        },
+        "unique_physical_cycles": len(set().union(*physical)),
+    }
+
+
+def prepare(training_sources, output, seed, cohort, events=1):
     if seed < 0:
         raise ValueError("seed must be nonnegative")
+    if events < 1:
+        raise ValueError("events must be positive")
     if not re.fullmatch(r"[A-Za-z0-9_-]+", cohort):
         raise ValueError("cohort must contain letters, digits, '_' or '-'")
     output = Path(output).resolve()
@@ -103,15 +147,24 @@ def prepare(training_sources, output, seed, cohort):
     # MUMINUS is a flipped MUPLUS source. Exclude a cycle if either polarity
     # appeared in training, so the evaluation event is physically source-disjoint.
     excluded = set().union(*training_cycles.values())
-    selected = select_evaluation_sources(records, excluded, seed, cohort)
-    evaluation_cycles = {
-        polarity: {row["cycle"] for row in selected[polarity]}
-        for polarity in POLARITIES
-    }
-    if any(values & excluded for values in evaluation_cycles.values()):
-        raise AssertionError("evaluation sources overlap the training-cycle union")
-
-    event_id = f"norm42_{cohort}_test_000000"
+    selected_events = []
+    for event_index in range(events):
+        selected = select_evaluation_sources(
+            records, excluded, seed, cohort, event_index
+        )
+        evaluation_cycles = {
+            polarity: {row["cycle"] for row in selected[polarity]}
+            for polarity in POLARITIES
+        }
+        if any(values & excluded for values in evaluation_cycles.values()):
+            raise AssertionError(
+                "evaluation sources overlap the training-cycle union"
+            )
+        selected_events.append({
+            "event_id": f"norm42_{cohort}_test_{event_index:06d}",
+            "split": "test",
+            "sources": selected,
+        })
     normalization = {
         "name": NORM42_OCCUPANCY_SCAN_NAME,
         "selected_files_per_polarity": FILES_PER_POLARITY,
@@ -151,15 +204,13 @@ def prepare(training_sources, output, seed, cohort):
             "seed": seed,
             "cohort": cohort,
             "within_event": "without replacement, independently by polarity",
-            "across_events": "not applicable; one checkpoint event",
+            "across_events": (
+                "independent draws; source reuse between events is allowed"
+            ),
             "classifier_split": "not applicable; reconstruction checkpoint",
             "training_overlap": "zero against union of training cycle IDs",
         },
-        "events": [{
-            "event_id": event_id,
-            "split": "test",
-            "sources": selected,
-        }],
+        "events": selected_events,
     }
 
     point = output / "n0167"
@@ -171,7 +222,7 @@ def prepare(training_sources, output, seed, cohort):
         "kind": "norm42_10pct_training_scale_track_checkpoint",
         "seed": seed,
         "cohort": cohort,
-        "events_per_point": 1,
+        "events_per_point": events,
         "arms": ["SIM", "COUNT_FULL", "COUNT_10PCT"],
         "source_selection": (
             "independent per-polarity draws after excluding the union of cycles "
@@ -191,10 +242,12 @@ def prepare(training_sources, output, seed, cohort):
         }],
     }
     (output / "scan.json").write_text(json.dumps(scan, indent=2) + "\n")
-    print(f"Prepared {event_id}")
+    (output / "source_overlap.json").write_text(
+        json.dumps(overlap_report(selected_events), indent=2) + "\n"
+    )
+    print(f"Prepared {events} event(s)")
     print(f"excluded physical training cycles: {len(excluded)}")
-    for polarity in POLARITIES:
-        print(f"{polarity}: {len(evaluation_cycles[polarity])} selected; overlap=0")
+    print("training overlap: 0 for every event and polarity")
 
 
 def main():
@@ -203,8 +256,11 @@ def main():
     parser.add_argument("--output", required=True)
     parser.add_argument("--seed", type=int, default=12345)
     parser.add_argument("--cohort", default="train10pct_checkpoint")
+    parser.add_argument("--events", type=int, default=1)
     args = parser.parse_args()
-    prepare(args.training_sources, args.output, args.seed, args.cohort)
+    prepare(
+        args.training_sources, args.output, args.seed, args.cohort, args.events
+    )
 
 
 if __name__ == "__main__":

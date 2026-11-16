@@ -2,17 +2,12 @@
 """Audit paper UltraTight thresholds on v3 tracker reconstruction outputs.
 
 The v3 tracker workflow stores duplicate-removed CKF tracks as the ``SiTracks``
-subset of ``AllTracks``.  All tracker hits are two-dimensional because the
-digitizers are run with ``IsStrip = False``.  ACTS therefore contributes two
-degrees of freedom for each fitted measurement.  ``AllTracks.trackerHits``
-contains both fitted measurements and hits flagged as outliers, so
-
-    n_outliers = n_tracker_hits - ndf / 2.
-
-Holes are stored directly as ``AllTracks.Nholes``.  This provides a useful
-threshold audit of existing files.  It is not identical to the paper's full
-selection chain, which preselects, refits with an outlier limit, and then
-selects the refitted tracks.
+subset of ``AllTracks``.  EDM4hep's ``trackerHits`` relation contains the hits
+used to create a track, while ``Nholes`` is stored directly.  These files do not
+store the number of outliers, so the paper's ``n_outliers < 4`` requirement
+cannot be reconstructed from ``trackerHits`` and ``ndf``.  This script reports
+the reproducible four-cut subset and states that limitation explicitly.  It is
+also not identical to the paper's preselection-and-refit sequence.
 """
 
 import argparse
@@ -40,6 +35,19 @@ def ultratight_mask(pt, n_hits, n_holes, n_outliers, reduced_chi2):
         mask for name, mask in cuts.items()
         if name not in ("n_outliers_lt_4", "ultratight")
     ))
+    return cuts
+
+
+def ultratight_observable_mask(pt, n_hits, n_holes, reduced_chi2):
+    """Return the reproducible UltraTight criteria and their conjunction."""
+    cuts = {
+        "pt_gt_0p5_GeV": np.asarray(pt) > 0.5,
+        "n_hits_ge_9": np.asarray(n_hits) >= 9,
+        "n_holes_lt_3": np.asarray(n_holes) < 3,
+        "reduced_chi2_lt_3": np.asarray(reduced_chi2) < 3.0,
+    }
+    cuts["ultratight_observable_subset"] = np.logical_and.reduce(
+        tuple(cuts.values()))
     return cuts
 
 
@@ -71,16 +79,9 @@ def read_events(events):
         loc = np.asarray(locations[event_index], dtype=np.int64)
         omega = np.asarray(omegas[event_index], dtype=np.float64)
 
-        if np.any(nd <= 0) or np.any(nd % 2):
-            raise ValueError(
-                f"event {event_index}: expected positive, even ndf for 2D tracker hits"
-            )
+        if np.any(nd <= 0):
+            raise ValueError(f"event {event_index}: expected positive track-fit ndf")
         n_hits = he - hb
-        n_outliers = n_hits - nd // 2
-        if np.any(n_outliers < 0):
-            raise ValueError(
-                f"event {event_index}: inferred a negative outlier count"
-            )
 
         pt = np.empty(len(indices), dtype=np.float64)
         for output_index, track_index in enumerate(indices):
@@ -92,15 +93,15 @@ def read_events(events):
             pt[output_index] = CURVATURE_TO_PT / abs(omega[state])
 
         reduced_chi2 = c2 / nd
-        cuts = ultratight_mask(pt, n_hits, holes, n_outliers, reduced_chi2)
+        cuts = ultratight_observable_mask(pt, n_hits, holes, reduced_chi2)
         records.append({
             "loose": int(len(indices)),
-            "ultratight": int(np.count_nonzero(cuts["ultratight"])),
-            "all_except_outliers": int(np.count_nonzero(cuts["all_except_outliers"])),
+            "ultratight_observable_subset": int(np.count_nonzero(
+                cuts["ultratight_observable_subset"])),
             "cutflow": {
                 name: int(np.count_nonzero(mask))
                 for name, mask in cuts.items()
-                if name not in ("ultratight", "all_except_outliers")
+                if name != "ultratight_observable_subset"
             },
         })
     return records
@@ -145,10 +146,11 @@ def main():
             "pt_GeV": "> 0.5",
             "n_hits": ">= 9",
             "n_holes": "< 3",
-            "n_outliers": "< 4",
+            "n_outliers": "< 4 (not reproducible from these EDM4hep files)",
             "reduced_chi2": "< 3",
-            "outlier_derivation": "n_tracker_hits - ndf / 2 (2D hits)",
-            "scope": "raw-v3-CKF threshold audit; paper workflow refits before final selection",
+            "scope": (
+                "existing-v3-CKF four-cut subset; paper workflow also requires "
+                "<4 outliers and refits before final selection"),
         },
         "samples": {},
     }
@@ -164,17 +166,17 @@ def main():
                 record["path"] = str(filename)
                 event_records.append(record)
         loose = np.asarray([event["loose"] for event in event_records])
-        tight = np.asarray([event["ultratight"] for event in event_records])
-        no_outlier = np.asarray([event["all_except_outliers"] for event in event_records])
+        tight = np.asarray([
+            event["ultratight_observable_subset"] for event in event_records])
         report["samples"][label] = {
             "n_files": len(files),
             "n_events": len(event_records),
             "loose_total": int(loose.sum()),
             "loose_mean": float(loose.mean()),
-            "ultratight_total": int(tight.sum()),
-            "ultratight_mean": float(tight.mean()),
-            "ultratight_std": float(tight.std(ddof=1)) if len(tight) > 1 else 0.0,
-            "all_except_outliers_total": int(no_outlier.sum()),
+            "ultratight_observable_subset_total": int(tight.sum()),
+            "ultratight_observable_subset_mean": float(tight.mean()),
+            "ultratight_observable_subset_std": (
+                float(tight.std(ddof=1)) if len(tight) > 1 else 0.0),
             "events": event_records,
         }
         if args.summary_only:

@@ -821,12 +821,15 @@ def draw_envelope_projection(ax, envelope, color, x_key, y_key):
                 ))
 
 
-def draw_projection(points, x_key, y_key, xlabel, ylabel, title, outpath, geometry=True):
+def draw_projection(points, x_key, y_key, xlabel, ylabel, title, outpath,
+                    geometry=True, limits=None, compact=False, density=False):
     selected = [item for item in points if item["plotted_hits"]]
     if not selected:
         return False
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    if density and len(selected) != 1:
+        raise ValueError("A density projection requires one particle collection")
+    fig, ax = plt.subplots(figsize=(7, 6) if compact else (10, 6))
     all_x = []
     all_y = []
     total_hits = 0
@@ -854,31 +857,42 @@ def draw_projection(points, x_key, y_key, xlabel, ylabel, title, outpath, geomet
         all_y.append(y)
         total_hits += item["n_hits"]
         plotted_hits += item["plotted_hits"]
-        ax.scatter(
-            x,
-            y,
-            s=18 if is_signal else 4,
-            alpha=0.95 if is_signal else 0.45,
-            linewidths=0.35 if is_signal else 0,
-            edgecolors="#111111" if is_signal else "none",
-            color=color,
-            zorder=4 if is_signal else 2,
-            label=f"{item['name']} ({item['n_hits']})",
-        )
+        if density:
+            extent = (*limits, *limits) if limits is not None else None
+            if limits is not None:
+                visible = ((x >= limits[0]) & (x <= limits[1])
+                           & (y >= limits[0]) & (y <= limits[1]))
+                x, y = x[visible], y[visible]
+            image = ax.hexbin(x, y, gridsize=180, extent=extent, bins="log",
+                              mincnt=1, cmap="Blues", rasterized=True)
+            fig.colorbar(image, ax=ax, label="Photons / bin")
+        else:
+            ax.scatter(
+                x,
+                y,
+                s=18 if is_signal else 4,
+                alpha=0.95 if is_signal else 0.45,
+                linewidths=0.35 if is_signal else 0,
+                edgecolors="#111111" if is_signal else "none",
+                color=color,
+                zorder=4 if is_signal else 2,
+                label=f"{item['name']} ({item['n_hits']})",
+            )
 
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
-    ax.set_title(f"{title}\nplotted {plotted_hits:,} of {total_hits:,} hits")
+    ax.set_title(title if compact else f"{title}\nplotted {plotted_hits:,} of {total_hits:,} hits")
     ax.grid(True, alpha=0.25)
-    ax.legend(
-        loc="upper left",
-        bbox_to_anchor=(1.02, 1.0),
-        borderaxespad=0,
-        fontsize=7,
-        frameon=False,
-    )
+    if not compact:
+        ax.legend(
+            loc="upper left",
+            bbox_to_anchor=(1.02, 1.0),
+            borderaxespad=0,
+            fontsize=7,
+            frameon=False,
+        )
 
-    xlim = axis_limits(np.concatenate(all_x), np.concatenate(all_y))
+    xlim = limits if limits is not None else axis_limits(np.concatenate(all_x), np.concatenate(all_y))
     if xlim is not None and x_key in {"x", "y"} and y_key in {"x", "y"}:
         ax.set_xlim(*xlim)
         ax.set_ylim(*xlim)
@@ -886,7 +900,7 @@ def draw_projection(points, x_key, y_key, xlabel, ylabel, title, outpath, geomet
     else:
         ax.set_aspect("auto")
 
-    plt.tight_layout(rect=(0, 0, 0.72, 1))
+    plt.tight_layout(rect=(0, 0, 1 if compact else 0.72, 1))
     plt.savefig(outpath)
     plt.close(fig)
     return True

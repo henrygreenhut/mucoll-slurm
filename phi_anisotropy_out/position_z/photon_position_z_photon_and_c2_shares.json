@@ -1,0 +1,29 @@
+{
+  "source_profiles": [
+    "photon_c2_vs_position_z_simple_1m",
+    "photon_c2_vs_position_z_near_ip_50mm"
+  ],
+  "coordinate": "Signed photon entry/handoff z; NOT original beam-muon decay z",
+  "phi": "Momentum atan2(py, px), NOT position phi",
+  "bin_width_cm": 5,
+  "range_cm": [
+    -50,
+    50
+  ],
+  "full_bank_photons": 9415611,
+  "full_bank_cosine_sum": -15494.902030545649,
+  "photon_fraction": "Bin photon count divided by ALL bank photons",
+  "c2_share": "Bin sum(cos(2 phi)) divided by FULL BANK sum(cos(2 phi)); signed, not absolute",
+  "highlight": {
+    "range_cm": [
+      10,
+      15
+    ],
+    "photons": 2503122,
+    "photon_fraction": 0.2658480687020736,
+    "net_c2_share": 0.7254851226746032
+  },
+  "displayed_photon_fraction": 0.8468037815071163,
+  "displayed_net_c2_share": 0.9951463618798033,
+  "uncertainty": "Point estimates only; no error bars. Signed shares can be negative or exceed 100% when contributions cancel. Not a fraction of PFN importance or a causal fraction."
+}

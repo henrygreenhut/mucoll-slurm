@@ -16,6 +16,15 @@ MODULATION = 0.0032945
 DISPLAY_SCALE = 60
 
 
+def configure_phi_axis(axis):
+    axis.set_theta_zero_location("E")
+    axis.set_theta_direction(1)
+    axis.set_thetagrids(
+        np.arange(0, 360, 45),
+        [r"$0$", r"$\pi/4$", r"$\pi/2$", r"$3\pi/4$", r"$\pi$", r"$-3\pi/4$", r"$-\pi/2$", r"$-\pi/4$"],
+    )
+
+
 def main():
     plt.rcParams["font.family"] = "serif"
     figure, axis = plt.subplots(figsize=(7.2, 7.2), subplot_kw={"projection": "polar"})
@@ -45,12 +54,7 @@ def main():
 
     axis.text(PHASE, 1.47, "preferred photon axis", ha="center", va="center", color="#0072B2")
 
-    axis.set_theta_zero_location("E")
-    axis.set_theta_direction(1)
-    axis.set_thetagrids(
-        np.arange(0, 360, 45),
-        [r"$0$", r"$\pi/4$", r"$\pi/2$", r"$3\pi/4$", r"$\pi$", r"$-3\pi/4$", r"$-\pi/2$", r"$-\pi/4$"],
-    )
+    configure_phi_axis(axis)
     axis.set_ylim(0, 1.55)
     axis.set_yticks([])
     axis.grid(alpha=0.2)

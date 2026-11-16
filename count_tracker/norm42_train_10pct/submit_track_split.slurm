@@ -10,10 +10,13 @@ set -euo pipefail
 
 : "${CT_DIR:?}"; : "${SCAN_ROOT:?}"; : "${IMAGE:?}"
 ARMS=(SIM COUNT_FULL COUNT_10PCT); LOWER=(0 30 70 110 150); UPPER=(30 70 110 150 180)
-TASK="${SLURM_ARRAY_TASK_ID:?}"; ARM="${ARMS[$((TASK / 5))]}"; REGION=$((TASK % 5))
+TASK="${SLURM_ARRAY_TASK_ID:?}"; EVENTS_PER_POINT="${EVENTS_PER_POINT:-1}"
+(( TASK < EVENTS_PER_POINT * 15 )) || { echo "task $TASK outside cohort" >&2; exit 1; }
+EVENT_INDEX=$((TASK / 15)); LOCAL_TASK=$((TASK % 15))
+ARM="${ARMS[$((LOCAL_TASK / 5))]}"; REGION=$((LOCAL_TASK % 5))
 MIN="${LOWER[$REGION]}"; MAX="${UPPER[$REGION]}"; REGION_TAG="theta_$(printf '%03d' "$MIN")_$(printf '%03d' "$MAX")"
 POINT="$SCAN_ROOT/n0167"
-EVENT_ID="$(python3 "$CT_DIR/v3_occupancy_scan/scan_point.py" --scan "$SCAN_ROOT/scan.json" --index 0 --field event_id --event-index 0)"
+EVENT_ID="$(python3 "$CT_DIR/v3_occupancy_scan/scan_point.py" --scan "$SCAN_ROOT/scan.json" --index 0 --field event_id --event-index "$EVENT_INDEX")"
 DIGI_FILE="$POINT/digi/$EVENT_ID/$ARM/digi/digi_output.edm4hep.root"
 OUTPUT_DIR="$POINT/events/$EVENT_ID/$ARM/theta_split/$REGION_TAG"
 [ -f "$DIGI_FILE" ] || { echo "missing $DIGI_FILE" >&2; exit 1; }

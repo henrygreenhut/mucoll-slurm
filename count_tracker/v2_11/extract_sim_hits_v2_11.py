@@ -30,22 +30,28 @@ from count_tracker_input import load_event  # noqa: E402
 FIELDS = ("eDep", "position.x", "position.y", "position.z", "time", "cellID")
 
 
-def read_entry(path, entry, collection):
+def read_entry(path, entry):
+    """Read all tracker collections while the source ROOT file is open once."""
     import uproot
 
     with uproot.open(path) as root:
         events = root["events"]
         if entry < 0 or entry >= events.num_entries:
             raise ValueError(f"Entry {entry} does not exist in {path}")
-        values = []
-        for field in FIELDS:
-            branch = events[collection][f"{collection}.{field}"].array(
-                entry_start=entry, entry_stop=entry + 1, library="ak"
-            )
-            values.append(np.asarray(branch[0]))
-    if len({len(value) for value in values}) != 1:
-        raise ValueError(f"Tracker-hit branch lengths differ in {path}/{collection}")
-    return values
+        collections = {}
+        for _short, (_system, collection) in COLLECTIONS.items():
+            values = []
+            for field in FIELDS:
+                branch = events[collection][f"{collection}.{field}"].array(
+                    entry_start=entry, entry_stop=entry + 1, library="ak"
+                )
+                values.append(np.asarray(branch[0]))
+            if len({len(value) for value in values}) != 1:
+                raise ValueError(
+                    f"Tracker-hit branch lengths differ in {path}/{collection}"
+                )
+            collections[collection] = values
+    return collections
 
 
 def selected_rows(values, system, hit_selection):
@@ -80,9 +86,10 @@ def extract(args):
     totals = {short: [] for short in COLLECTIONS}
     for polarity in POLARITIES:
         for source in event["sources"][polarity]:
+            source_values = read_entry(source["path"], source["entry"])
             for short, (system, collection) in COLLECTIONS.items():
                 rows = selected_rows(
-                    read_entry(source["path"], source["entry"], collection),
+                    source_values[collection],
                     system,
                     hit_selection,
                 )

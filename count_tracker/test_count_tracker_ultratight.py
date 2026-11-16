@@ -1,6 +1,6 @@
 import numpy as np
 
-from count_tracker_ultratight import ultratight_mask
+from count_tracker_ultratight import ultratight_mask, ultratight_observable_mask
 
 
 def test_ultratight_boundaries_are_applied_as_published():
@@ -19,4 +19,17 @@ def test_ultratight_boundaries_are_applied_as_published():
     assert np.array_equal(
         masks["all_except_outliers"],
         np.array([True, False, False, False, True, False]),
+    )
+
+
+def test_observable_subset_does_not_claim_an_outlier_cut():
+    masks = ultratight_observable_mask(
+        pt=[0.6, 0.5, 0.6, 0.6, 0.6],
+        n_hits=[9, 9, 8, 9, 9],
+        n_holes=[2, 2, 2, 3, 2],
+        reduced_chi2=[2.9, 2.9, 2.9, 2.9, 3.0],
+    )
+    assert np.array_equal(
+        masks["ultratight_observable_subset"],
+        np.array([True, False, False, False, False]),
     )

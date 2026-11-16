@@ -34,8 +34,10 @@ def plot(results, output_prefix):
         raise ValueError("selected epoch lies outside the saved training history")
 
     fig, ax = plt.subplots(figsize=(7.2, 4.5), constrained_layout=True)
-    ax.plot(epochs, train_loss, color="#2369a8", linewidth=1.8,
-            label="Training loss")
+    is_patch_fit = bool(summary.get("patch_definition"))
+    if not is_patch_fit:
+        ax.plot(epochs, train_loss, color="#2369a8", linewidth=1.8,
+                label="Training loss")
     ax.plot(epochs, val_loss, color="#c95b2c", linewidth=2.2,
             label="Validation loss")
     ax.axhline(math.log(2), color="0.55", linestyle=":", linewidth=1.4,
@@ -44,9 +46,15 @@ def plot(results, output_prefix):
                label=f"Selected epoch {best_epoch}")
     ax.scatter([best_epoch], [val_loss[best_epoch - 1]], color="#c95b2c",
                edgecolor="white", linewidth=0.8, zorder=3)
-    ax.set(xlim=(1, len(epochs)), xlabel="Epoch", ylabel="Cross-entropy loss")
+    ylabel = "Validation cross-entropy loss" if is_patch_fit else "Cross-entropy loss"
+    ax.set(xlim=(1, len(epochs)), xlabel="Epoch", ylabel=ylabel)
     f_dropout = float(summary["architecture"]["F_dropout"])
-    ax.set_title(f"Reservoir preliminary: single-track PFN (F dropout = {f_dropout:g})")
+    if is_patch_fit:
+        title = "Full-BX angular-patch PFN"
+        ax.set_yscale("log")
+    else:
+        title = f"Reservoir preliminary: single-track PFN (F dropout = {f_dropout:g})"
+    ax.set_title(title)
     ax.grid(axis="y", color="0.88", linewidth=0.7)
     ax.legend(frameon=False, loc="upper right", fontsize=9)
 

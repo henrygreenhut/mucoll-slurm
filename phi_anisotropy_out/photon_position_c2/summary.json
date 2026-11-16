@@ -1,0 +1,54 @@
+{
+  "unrotated": "/oscar/data/mleblan6/mucoll/hgreenhu/mucoll/libtest/stores/gen_split_mothers_MUPLUS.h5",
+  "rotated": "/oscar/data/mleblan6/mucoll/hgreenhu/mucoll/libtest/stores/gen_fixed_k1_MUPLUS.h5",
+  "seed": 1701,
+  "source_split": [
+    0.5,
+    0.25,
+    0.25
+  ],
+  "test_cycles": 1667,
+  "cycles_per_construction": 420,
+  "constructions_per_class": 300,
+  "selection": "PDG == 22; exclude undefined azimuth (on axis or nonfinite)",
+  "score": "mean cos(2 phi); rotated is the positive class",
+  "uncertainty": "Point estimates only; constructions reuse held-out cycles",
+  "momentum": {
+    "auc_rotated_positive_score_C2": 0.9796666666666666,
+    "auc_rotated_positive_score_minus_C2": 0.02033333333333333,
+    "null_auc_score_C2": 0.44830000000000003,
+    "unrotated_mean_C2": -0.0021246243669811263,
+    "rotated_mean_C2": 0.00028970778429356255,
+    "unrotated_std_C2": 0.0008490945505570092,
+    "rotated_std_C2": 0.0008258673800753411,
+    "excluded_photons": {
+      "unrotated": {
+        "excluded_on_axis": 0,
+        "excluded_nonfinite": 0
+      },
+      "rotated": {
+        "excluded_on_axis": 0,
+        "excluded_nonfinite": 0
+      }
+    }
+  },
+  "position": {
+    "auc_rotated_positive_score_C2": 0.9994333333333333,
+    "auc_rotated_positive_score_minus_C2": 0.0005666666666666667,
+    "null_auc_score_C2": 0.44102222222222226,
+    "unrotated_mean_C2": -0.004760242371693798,
+    "rotated_mean_C2": 0.00035803048986325495,
+    "unrotated_std_C2": 0.001227618963695012,
+    "rotated_std_C2": 0.001164243877162837,
+    "excluded_photons": {
+      "unrotated": {
+        "excluded_on_axis": 0,
+        "excluded_nonfinite": 0
+      },
+      "rotated": {
+        "excluded_on_axis": 0,
+        "excluded_nonfinite": 0
+      }
+    }
+  }
+}

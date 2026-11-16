@@ -296,6 +296,72 @@ python "$CT_DIR/norm42_train_10pct/track_checkpoint_report.py" \
   --output "$TRACK_ROOT/track_checkpoint_report.json"
 ```
 
+## Nine-event regional follow-up cohort
+
+The completed checkpoint supplies one event.  This follow-up prepares nine
+new events under a different cohort label, giving ten events in total without
+duplicating the checkpoint's deterministic draw.  Every event independently
+draws 167 MUPLUS and 167 MUMINUS files without replacement within a polarity.
+Sources may be reused between events, matching the established event-building
+procedure.  All events remain disjoint from the union of physical cycles used
+to train the 10%-corpus model.  `source_overlap.json` records every pairwise
+overlap rather than treating the events as source-disjoint from one another.
+
+Input construction is parallelized by event and arm.  Each task still invokes
+the same chunked CellID assignment and v2.11 EDM4hep writer; this changes only
+scheduling.  SIM extraction also opens each source ROOT file once for all six
+tracker collections instead of reopening it once per collection.  Neither
+optimization changes hit selection, ordering, CellID decisions, or output
+values.
+
+Prepare the follow-up manifest in `count-hdf`:
+
+```bash
+export TRACK_COHORT_ROOT="$STUDY_ROOT/track_cohort_10pct_additional9"
+
+python "$CT_DIR/norm42_train_10pct/prepare_track_checkpoint.py" \
+  --training-sources "$TRAINING_SOURCES" \
+  --seed 12345 --cohort train10pct_regions \
+  --events 9 \
+  --output "$TRACK_COHORT_ROOT"
+
+python -m json.tool "$TRACK_COHORT_ROOT/source_overlap.json" | less
+```
+
+With the model, image, geometry, and benchmark variables from the checkpoint
+section still exported, queue the complete dependency chain:
+
+```bash
+export SCAN_ROOT="$TRACK_COHORT_ROOT"
+bash "$CT_DIR/norm42_train_10pct/queue_track_cohort.sh"
+```
+
+The default limits run at most six input arms concurrently and ten theta-region
+reconstruction tasks concurrently.  Override only the scheduling limits, not
+the physics, with `INPUT_CONCURRENCY`, `DIGI_CONCURRENCY`,
+`SPLIT_CONCURRENCY`, or `RECO_CONCURRENCY` before invoking the queue script.
+
+After completion, summarize the nine new events:
+
+```bash
+conda activate count-hdf
+python "$CT_DIR/norm42_train_10pct/track_checkpoint_report.py" \
+  --scan-root "$TRACK_COHORT_ROOT" \
+  --output "$TRACK_COHORT_ROOT/track_cohort_report.json"
+```
+
+The report contains per-event counts, aggregate counts, and the mean, sample
+standard deviation, range, and individual COUNT/SIM ratios in every theta
+region.  Combine the original checkpoint as the tenth event without rerunning
+it by repeating `--scan-root`:
+
+```bash
+python "$CT_DIR/norm42_train_10pct/track_checkpoint_report.py" \
+  --scan-root "$STUDY_ROOT/track_checkpoint_10pct" \
+  --scan-root "$TRACK_COHORT_ROOT" \
+  --output "$TRACK_COHORT_ROOT/combined_10_event_report.json"
+```
+
 ## Local tests
 
 ```bash

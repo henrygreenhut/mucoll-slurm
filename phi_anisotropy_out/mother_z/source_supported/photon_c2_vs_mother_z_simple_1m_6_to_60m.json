@@ -1,0 +1,55 @@
+{
+  "source": "photon_c2_vs_mother_z_simple_1m.csv",
+  "bin_width_m": 1,
+  "distance_range_m": [
+    6,
+    60
+  ],
+  "axis_range_m": [
+    6,
+    60
+  ],
+  "unplotted_range_m": null,
+  "bin_merging": false,
+  "bootstrap": false,
+  "optical_overlay": true,
+  "quadrupole_intervals_m": [
+    [
+      6.0,
+      8.0,
+      "Q1"
+    ],
+    [
+      8.3,
+      10.3,
+      "Q2"
+    ],
+    [
+      10.6,
+      12.6,
+      "Q3"
+    ],
+    [
+      12.9,
+      26.5,
+      "Q4"
+    ],
+    [
+      26.8,
+      32.8,
+      "Q5"
+    ]
+  ],
+  "quadrupole_boundaries": "Visual estimates from the v0.4 final-focus diagram, not verified lattice coordinates; shading only, no bin reassignment",
+  "minimum_count_cut": null,
+  "displayed_photons": 7203448,
+  "full_bank_photons": 9415611,
+  "contribution_normalization": "Full-bank photon count, not displayed-range count",
+  "coordinate": "Absolute original beam-muon decay z; photon momentum phi",
+  "panels": [
+    "Photons per 1 m bin",
+    "Local C2 (dimensionless)",
+    "Contribution to full-bank C2 in percent"
+  ],
+  "view": "6\u201360 m crop with y axes autoscaled to visible bins; full-bank normalization unchanged"
+}

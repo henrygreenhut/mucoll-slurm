@@ -10,9 +10,12 @@ set -euo pipefail
 
 : "${CT_DIR:?}"; : "${SCAN_ROOT:?}"; : "${IMAGE:?}"; : "${BENCHMARK_DIR:?}"
 ARMS=(SIM COUNT_FULL COUNT_10PCT)
-ARM="${ARMS[${SLURM_ARRAY_TASK_ID:?}]}"
+TASK="${SLURM_ARRAY_TASK_ID:?}"
+EVENTS_PER_POINT="${EVENTS_PER_POINT:-1}"
+(( TASK < EVENTS_PER_POINT * 3 )) || { echo "task $TASK outside cohort" >&2; exit 1; }
+EVENT_INDEX=$((TASK / 3)); ARM_INDEX=$((TASK % 3)); ARM="${ARMS[$ARM_INDEX]}"
 POINT="$SCAN_ROOT/n0167"
-EVENT_ID="$(python3 "$CT_DIR/v3_occupancy_scan/scan_point.py" --scan "$SCAN_ROOT/scan.json" --index 0 --field event_id --event-index 0)"
+EVENT_ID="$(python3 "$CT_DIR/v3_occupancy_scan/scan_point.py" --scan "$SCAN_ROOT/scan.json" --index 0 --field event_id --event-index "$EVENT_INDEX")"
 INPUT_FILE="$POINT/inputs/$EVENT_ID/$ARM/input/input.edm4hep.root"
 OUTPUT_DIR="$POINT/digi/$EVENT_ID/$ARM/digi"
 [ -f "$INPUT_FILE" ] || { echo "missing $INPUT_FILE" >&2; exit 1; }

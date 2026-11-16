@@ -1,0 +1,22 @@
+{
+  "source": "/Users/henrygreenhut/Developer/LeBlanc/mucoll/mucoll-slurm/phi_anisotropy_out/photon_provenance/aggregates.npz",
+  "source_cycles": 6665,
+  "photons": 9415611,
+  "sample": "Full unrotated MUPLUS source library, not one N=420 construction",
+  "angle": "Photon entry-position atan2(vy, vx), NOT momentum phi",
+  "histogram": "Position marginal of position_momentum_histogram; equal 7.5-degree bins",
+  "radius": "Photon count per angular bin divided by mean angular-bin count; not position radius",
+  "c2": -0.0036681911355682362,
+  "s2": -0.0006208837215477159,
+  "second_harmonic": "1 + 2*C2*cos(2*phi) + 2*S2*sin(2*phi); reconstructed from unbinned moments, not a fitted full distribution",
+  "preferred_axis_degrees": 94.80345935856025,
+  "opposite_axis_degrees": 274.80345935856025,
+  "fractional_second_harmonic_modulation": 0.007440731900221732,
+  "second_harmonic_overlay": false,
+  "preferred_axis_arrows": false,
+  "radial_display_limits": [
+    0.98,
+    1.02
+  ],
+  "uncertainty": "Not shown"
+}
