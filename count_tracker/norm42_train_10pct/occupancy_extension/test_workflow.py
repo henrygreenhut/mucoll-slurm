@@ -9,9 +9,59 @@ import unittest
 
 import merge_reports
 import plan_task
+import prepare_reuse
+import prepare_priority2_partition
 
 
 class TestOccupancyExtension(unittest.TestCase):
+    def test_priority2_partition_is_disjoint_and_reuses_inputs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            source.mkdir()
+            points = []
+            for tag, count in (("n0010", 5), ("n0464", 5)):
+                point_root = source / tag
+                point_root.mkdir()
+                (point_root / "sources.json").write_text("{}\n")
+                (point_root / "conditions").mkdir()
+                (point_root / "count_samples").mkdir()
+                points.append({
+                    "tag": tag, "reconstruction": "five-region",
+                    "events": [
+                        {"event_id": f"{tag}_{index}", "split": "test"}
+                        for index in range(count)
+                    ],
+                    "training_overlap": [{"event_id": f"{tag}_{index}"}
+                                         for index in range(count)],
+                })
+            (source / "plan.json").write_text(json.dumps({"points": points}))
+            args = type("Args", (), {
+                "source_root": source,
+                "fast_root": root / "fast",
+                "remaining_root": root / "remaining",
+            })
+            prepare_priority2_partition.prepare(args)
+            fast = json.loads((root / "fast" / "plan.json").read_text())
+            remaining = json.loads(
+                (root / "remaining" / "plan.json").read_text())
+            fast_ids = {event["event_id"] for event in fast["points"][-1]["events"]}
+            remaining_ids = {
+                event["event_id"]
+                for event in remaining["points"][0]["events"]
+            }
+            self.assertEqual(fast_ids, {"n0464_0", "n0464_1"})
+            self.assertEqual(remaining_ids, {"n0464_2", "n0464_3", "n0464_4"})
+            self.assertTrue(fast_ids.isdisjoint(remaining_ids))
+            self.assertTrue((root / "fast" / "n0464" / "conditions").is_symlink())
+
+    def test_high_checkpoint_and_completion_are_disjoint(self):
+        first = prepare_reuse.POINTS["high_first"][0]
+        remaining = prepare_reuse.POINTS["high_remaining"][0]
+        self.assertEqual(first[5], (0,))
+        self.assertEqual(remaining[5], (1,))
+        self.assertTrue(set(first[5]).isdisjoint(remaining[5]))
+
     def test_task_expansion(self):
         plan = {
             "points": [

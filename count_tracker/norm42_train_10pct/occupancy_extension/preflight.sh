@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-for name in CT_DIR STUDY_ROOT WAVE1_ROOT LOW_ROOT WAVE3_ROOT HIGH_ROOT \
+for name in CT_DIR STUDY_ROOT WAVE1_ROOT LOW_ROOT ONE100_ROOT WAVE3_ROOT HIGH_ROOT \
             MODEL_10PCT PAPER1_ROOT GENBIB_DIR GEOMAP IMAGE_V2_11 IMAGE \
             BENCHMARK_DIR; do
   [ -n "${!name:-}" ] || { echo "preflight: export $name" >&2; exit 1; }
@@ -15,6 +15,7 @@ done
 required_files=(
   "$WAVE1_ROOT/scan.json"
   "$LOW_ROOT/plan.json"
+  "$ONE100_ROOT/plan.json"
   "$WAVE3_ROOT/scan.json"
   "$HIGH_ROOT/plan.json"
   "$PAPER1_ROOT/diffusion/tabddpm_official/scripts/sample.py"

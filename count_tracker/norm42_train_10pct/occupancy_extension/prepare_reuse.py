@@ -37,6 +37,19 @@ POINTS = {
         # Event 000001 is the completed 200% event already used in the plot.
         ("n3332", "high200", "n3332", 3332, 1, (1,), "five-region"),
     ),
+    # Fast high-occupancy checkpoint inserted ahead of the remaining study.
+    # This reuses the first already reconstructed 100%-BX SIM event and only
+    # regenerates/reconstructs its 10%-trained COUNT counterpart.
+    "high_first": (
+        ("n1666", "occupancy_scan", "n1666", 1666, 1, (0,), "five-region"),
+    ),
+    # Completion wave after high_first: one additional 100%-BX event plus the
+    # one completed 200%-BX SIM event. This yields two total 100%-BX events
+    # without paying to process the other three existing SIM events.
+    "high_remaining": (
+        ("n1666", "occupancy_scan", "n1666", 1666, 1, (1,), "five-region"),
+        ("n3332", "high200", "n3332", 3332, 1, (1,), "five-region"),
+    ),
 }
 REGION_TAGS = (
     "theta_000_030", "theta_030_070", "theta_070_110",
